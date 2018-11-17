@@ -31,14 +31,22 @@
 
 namespace GG {
 
-    TextBlock::TextBlock(X x, Y y, X w, const std::string& str, const std::shared_ptr<Font>& font,
-                         Clr color, Flags<TextFormat> format, Flags<WndFlag> flags) :
+    TextBlock::TextBlock(X x, Y y, X w, const std::string& str,
+                         const std::shared_ptr<Font>& font,
+                         Clr color, Flags<TextFormat> format,
+                         Flags<WndFlag> flags) :
         BlockControl(x, y, w, flags)
     {
-        // Construct the text control. Activatee full text wrapping features, and make it stick to the top.
+        // Construct the text control. Activate full text wrapping features,
+        // and make it stick to the top.
         // With these setting the height is largely ignored, so we set it to one.
-        m_text = new TextControl(GG::X0, GG::Y0, w, Y1, str, font, color,
-                                 format | FORMAT_WORDBREAK | FORMAT_LINEWRAP | FORMAT_TOP, flags);
+        m_text = Wnd::Create<TextControl>(GG::X0, GG::Y0, w, Y1, str, font, color,
+                                          format | FORMAT_WORDBREAK | FORMAT_LINEWRAP | FORMAT_TOP, flags);
+    }
+
+    void TextBlock::CompleteConstruction()
+    {
+        BlockControl::CompleteConstruction();
         AttachChild(m_text);
     }
 
@@ -57,18 +65,18 @@ namespace GG {
     class TextBlockFactory: public RichText::IBlockControlFactory {
     public:
         //! Create a Text block from a plain text tag.
-        BlockControl* CreateFromTag(const std::string& tag,
-                                    const RichText::TAG_PARAMS& params,
-                                    const std::string& content,
-                                    const std::shared_ptr<Font>& font,
-                                    const Clr& color,
-                                    Flags<TextFormat> format) override
+        std::shared_ptr<BlockControl> CreateFromTag(const std::string& tag,
+                                                    const RichText::TAG_PARAMS& params,
+                                                    const std::string& content,
+                                                    const std::shared_ptr<Font>& font,
+                                                    const Clr& color,
+                                                    Flags<TextFormat> format) override
         {
-            return new TextBlock(X0, Y0, X1, content, font, color, format, NO_WND_FLAGS);
+            return Wnd::Create<TextBlock>(X0, Y0, X1, content, font, color, format, NO_WND_FLAGS);
         }
     };
 
     // Register text block as the default plaintext handler.
     static int dummy =
-        RichText::RegisterDefaultBlock(RichText::PLAINTEXT_TAG, new TextBlockFactory());
+        RichText::RegisterDefaultBlock(RichText::PLAINTEXT_TAG, std::make_shared<TextBlockFactory>());
 }

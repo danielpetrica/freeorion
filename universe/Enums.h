@@ -4,6 +4,8 @@
 #include <GG/Enum.h>
 
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include "../util/Export.h"
 
@@ -99,6 +101,7 @@ GG_ENUM(MeterType,
     METER_MAX_STRUCTURE,
     METER_MAX_DEFENSE,
     METER_MAX_SUPPLY,
+    METER_MAX_STOCKPILE,
     METER_MAX_TROOPS,
 
     METER_POPULATION,
@@ -116,6 +119,7 @@ GG_ENUM(MeterType,
     METER_STRUCTURE,
     METER_DEFENSE,
     METER_SUPPLY,
+    METER_STOCKPILE,
     METER_TROOPS,
 
     METER_REBEL_TROOPS,
@@ -217,6 +221,7 @@ GG_ENUM(BuildType,
     BT_BUILDING,            ///< a Building object is being built
     BT_SHIP,                ///< a Ship object is being built
     BT_PROJECT,             ///< a project may produce effects while on the queue, may or may not ever complete, and does not result in a ship or building being produced
+    BT_STOCKPILE,
     NUM_BUILD_TYPES
 )
 
@@ -226,6 +231,7 @@ GG_ENUM(ResourceType,
     RE_INDUSTRY,
     RE_TRADE,
     RE_RESEARCH,
+    RE_STOCKPILE,
     NUM_RESOURCE_TYPES
 )
 
@@ -270,6 +276,10 @@ FO_COMMON_API MeterType ResourceToTargetMeter(ResourceType type);
 /** Returns the equivalent resource type for the given meter type; if no such
   * resource type exists, returns INVALID_RESOURCE_TYPE. */
 FO_COMMON_API ResourceType MeterToResource(MeterType type);
+
+/** Returns mapping from active to target or max meter types that correspond.
+  * eg. METER_RESEARCH -> METER_TARGET_RESEARCH */
+FO_COMMON_API const std::map<MeterType, MeterType>& AssociatedMeterTypes();
 
 /** Returns the target or max meter type that is associated with the given
   * active meter type.  If no associated meter type exists, INVALID_METER_TYPE
@@ -325,6 +335,25 @@ GG_ENUM(ModeratorActionSetting,
     MAS_CreateSystem,
     MAS_CreatePlanet
 )
+
+/** Types of root directories */
+GG_ENUM(PathType,
+    PATH_BINARY,
+    PATH_RESOURCE,
+    PATH_PYTHON,
+    PATH_DATA_ROOT,
+    PATH_DATA_USER,
+    PATH_CONFIG,
+    PATH_SAVE,
+    PATH_TEMP,
+    PATH_INVALID
+)
+
+/** Returns a string representation of PathType */
+FO_COMMON_API const std::string& PathTypeToString(PathType path_type);
+
+/** Returns a vector of strings for all PathTypes */
+FO_COMMON_API const std::vector<std::string>& PathTypeStrings();
 
 
 #endif // _Enums_h_

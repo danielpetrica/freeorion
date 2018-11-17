@@ -6,7 +6,7 @@
 #include <GG/ListBox.h>
 
 class TechTreeWnd;
-class ProductionInfoPanel;
+class ResourceInfoPanel;
 class ResearchQueueWnd;
 
 /** Contains a TechTreeWnd, some stats on the empire-wide research queue, and the queue itself. */
@@ -16,6 +16,7 @@ public:
     ResearchWnd(GG::X w, GG::Y h, bool initially_hidden = true);
     ~ResearchWnd();
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ //@{
     int     ShownEmpireID() const;
@@ -34,8 +35,11 @@ public:
     void    Update();
 
     void    CenterOnTech(const std::string& tech_name);
-    void    ShowTech(const std::string& tech_name);
-    void    QueueItemMoved(GG::ListBox::Row* row, std::size_t position);
+    /** Set encyclopedia entry to tech article for @p tech_name
+     *  Selects and centers tech @p tech_name if tech is initially visible
+     *  or if @p force is true(default). */
+    void    ShowTech(const std::string& tech_name, bool force = true);
+    void    QueueItemMoved(const GG::ListBox::iterator& row_it, const GG::ListBox::iterator& original_position_it);
     void    Sanitize();
 
     void    ShowPedia();
@@ -47,7 +51,7 @@ public:
     //@}
 
 private:
-    void    DoLayout();
+    void    DoLayout(bool init = false);
     void    ResearchQueueChangedSlot();
     void    UpdateQueue();
     void    UpdateInfoPanel();     ///< Updates research summary at top left of production screen, and signals that the empire's minerals research pool has changed (propagates to the mapwnd to update indicator)
@@ -57,11 +61,11 @@ private:
     void    QueueItemDoubleClickedSlot(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
     void    QueueItemPaused(GG::ListBox::iterator it, bool pause);
 
-    ProductionInfoPanel*        m_research_info_panel;
-    ResearchQueueWnd*           m_queue_wnd;
-    TechTreeWnd*                m_tech_tree_wnd;
-    bool                        m_enabled;
+    std::shared_ptr<ResourceInfoPanel>  m_research_info_panel;
+    std::shared_ptr<ResearchQueueWnd>   m_queue_wnd;
+    std::shared_ptr<TechTreeWnd>        m_tech_tree_wnd;
 
+    bool                        m_enabled;
     int                         m_empire_shown_id;
     boost::signals2::connection m_empire_connection;
 };

@@ -63,11 +63,12 @@ public:
     /** \name Structors */ ///@{
     /** Ctor. */
     MultiEdit(const std::string& str, const std::shared_ptr<Font>& font,
-              Clr color, Flags<MultiEditStyle> style = MULTI_LINEWRAP, Clr text_color = CLR_BLACK,
-              Clr interior = CLR_ZERO);
+              Clr color, Flags<MultiEditStyle> style = MULTI_LINEWRAP,
+              Clr text_color = CLR_BLACK, Clr interior = CLR_ZERO);
 
     virtual ~MultiEdit();
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ ///@{
     Pt MinUsableSize() const override;
@@ -99,18 +100,18 @@ public:
     void SetText(const std::string& str) override;
 
     /** Sets the style flags for this MultiEdit to \a style. */
-    void           SetStyle(Flags<MultiEditStyle> style);
+    void SetStyle(Flags<MultiEditStyle> style);
 
     /** Sets the maximum number of rows of text that the control will keep.
         ALL_LINES indicates no limit. */
-    void           SetMaxLinesOfHistory(std::size_t max);
+    void SetMaxLinesOfHistory(std::size_t max);
 
     /** Sets scroll position, bound by valid range of scrolls of this MultiEdit. */
-    void           SetScrollPosition(Pt pt);
+    void SetScrollPosition(Pt pt);
 
     /** Sets how much to scroll when scrolled using the mousewheel. */
-    void           SetVScrollWheelIncrement(unsigned int increment);
-    void           SetHScrollWheelIncrement(unsigned int increment);
+    void SetVScrollWheelIncrement(unsigned int increment);
+    void SetHScrollWheelIncrement(unsigned int increment);
 
     void AcceptPastedText(const std::string& text) override;
     //@}
@@ -224,7 +225,6 @@ protected:
     static const unsigned int SCROLL_WIDTH;
 
 private:
-    void    Init();
     void    ValidateStyle();
     void    ClearSelected();   ///< Clears (deletes) selected characters, as when a del, backspace, or character is entered
     void    AdjustView();      ///< Makes sure the caret ends up in view after an arbitrary move or SetText()
@@ -245,8 +245,8 @@ private:
 
     std::size_t     m_max_lines_history;
 
-    Scroll*         m_vscroll;
-    Scroll*         m_hscroll;
+    std::shared_ptr<Scroll>         m_vscroll;
+    std::shared_ptr<Scroll>         m_hscroll;
     unsigned int    m_vscroll_wheel_scroll_increment;
     unsigned int    m_hscroll_wheel_scroll_increment;
 

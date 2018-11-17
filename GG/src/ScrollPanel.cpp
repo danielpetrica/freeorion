@@ -25,13 +25,13 @@
 
 #include "../GG/ScrollPanel.h"
 
+#include <GG/ClrConstants.h>
+#include <GG/Clr.h>
 #include <GG/DrawUtil.h>
 #include <GG/Flags.h>
 #include <GG/Scroll.h>
-#include <GG/Clr.h>
-#include <GG/ClrConstants.h>
-#include <GG/WndEvent.h>
 #include <GG/StyleFactory.h>
+#include <GG/WndEvent.h>
 
 #include <algorithm>
 
@@ -68,18 +68,21 @@ namespace GG {
         m_background_color(CLR_ZERO)
     {}
 
-    ScrollPanel::ScrollPanel(X x, Y y, X w, Y h, Wnd* content):
+    ScrollPanel::ScrollPanel(X x, Y y, X w, Y h, std::shared_ptr<Wnd> content):
         Wnd(x, y, w, h, INTERACTIVE),
         m_vscroll(nullptr),
         m_content(content),
         m_background_color(CLR_ZERO)
+    {}
+
+    void ScrollPanel::CompleteConstruction()
     {
         // Very important to clip the content of this panel,
         // to actually only show the currently viewed part.
         SetChildClippingMode(ClipToClient);
 
         // Get the scroll bar from the current style factory.
-        std::shared_ptr<StyleFactory> style = GetStyleFactory();
+        const auto& style = GetStyleFactory();
         m_vscroll = style->NewMultiEditVScroll(CLR_WHITE, CLR_BLACK);
 
         // Don't accept less than MIN_SCROLL_WIDTH pixels wide scrolls.
@@ -88,12 +91,15 @@ namespace GG {
         }
 
         AttachChild(m_vscroll);
-        AttachChild(content);
+        AttachChild(m_content);
 
-        Connect(m_vscroll->ScrolledSignal, &ScrollPanel::OnScrolled, this);
+        m_vscroll->ScrolledSignal.connect(boost::bind(&ScrollPanel::OnScrolled, this, _1, _2, _3, _4));
 
         DoLayout();
     }
+
+    ScrollPanel::~ScrollPanel()
+    {}
 
     void ScrollPanel::ScrollTo(Y pos)
     {
@@ -114,7 +120,7 @@ namespace GG {
 
     void ScrollPanel::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_keys)
     {
-        bool shift_down = mod_keys & (MOD_KEY_LSHIFT | MOD_KEY_RSHIFT);
+        // unused variable bool shift_down = mod_keys & (MOD_KEY_LSHIFT | MOD_KEY_RSHIFT);
         bool ctrl_down = mod_keys & (MOD_KEY_CTRL | MOD_KEY_RCTRL);
         bool numlock_on = mod_keys & MOD_KEY_NUM;
 

@@ -79,7 +79,7 @@ const unsigned int Layout::INVALID_CELL_MARGIN = std::numeric_limits<unsigned in
 Layout::Layout(X x, Y y, X w, Y h, std::size_t rows, std::size_t columns,
                unsigned int border_margin/* = 0*/, unsigned int cell_margin/* = INVALID_CELL_MARGIN*/) :
     Wnd(x, y, w, h, NO_WND_FLAGS),
-    m_cells(rows, std::vector<Wnd*>(columns)),
+    m_cells(rows, std::vector<std::weak_ptr<Wnd>>(columns)),
     m_border_margin(border_margin),
     m_cell_margin(cell_margin == INVALID_CELL_MARGIN ? border_margin : cell_margin),
     m_row_params(rows),
@@ -104,7 +104,7 @@ std::size_t Layout::Columns() const
 
 Flags<Alignment> Layout::ChildAlignment(const Wnd* wnd) const
 {
-    std::map<Wnd*, WndPosition>::const_iterator it = m_wnd_positions.find(const_cast<Wnd*>(wnd));
+    auto it = m_wnd_positions.find(const_cast<Wnd*>(wnd));
     if (it == m_wnd_positions.end())
         throw NoSuchChild("Layout::ChildAlignment() : Alignment of a nonexistent child was requested");
     return it->second.alignment;
@@ -134,7 +134,7 @@ std::vector<std::vector<const Wnd*>> Layout::Cells() const
     for (std::size_t i = 0; i < m_cells.size(); ++i) {
         retval[i].resize(m_cells[i].size());
         for (std::size_t j = 0; j < m_cells[i].size(); ++j) {
-            retval[i][j] = m_cells[i][j];
+            retval[i][j] = m_cells[i][j].lock().get();
         }
     }    
     return retval;
@@ -184,20 +184,20 @@ Clr Layout::OutlineColor() const
 
 void Layout::StartingChildDragDrop(const Wnd* wnd, const Pt& offset)
 {
-    if (Parent())
-        Parent()->StartingChildDragDrop(wnd, offset);
+    if (auto&& parent = Parent())
+        parent->StartingChildDragDrop(wnd, offset);
 }
 
 void Layout::CancellingChildDragDrop(const std::vector<const Wnd*>& wnds)
 {
-    if (Parent())
-        Parent()->CancellingChildDragDrop(wnds);
+    if (auto&& parent = Parent())
+        parent->CancellingChildDragDrop(wnds);
 }
 
 void Layout::ChildrenDraggedAway(const std::vector<Wnd*>& wnds, const Wnd* destination)
 {
-    if (Parent())
-        Parent()->ChildrenDraggedAway(wnds, destination);
+    if (auto&& parent = Parent())
+        parent->ChildrenDraggedAway(wnds, destination);
 }
 
 void Layout::SizeMove(const Pt& ul, const Pt& lr)
@@ -226,7 +226,7 @@ void Layout::DoLayout(Pt ul, Pt lr)
     }
 
     // adjust effective minimums based on cell contents
-    for (const std::map<Wnd*, WndPosition>::value_type& wnd_position : m_wnd_positions) {
+    for (const auto& wnd_position : m_wnd_positions) {
         Pt margin;
         if (0 < wnd_position.second.first_row && wnd_position.second.last_row < m_row_params.size())
             margin.y = Y(m_cell_margin);
@@ -244,7 +244,7 @@ void Layout::DoLayout(Pt ul, Pt lr)
         // only height-for-width Wnd type, doesn't get vertically squashed
         // down to 0-height cells.  Note that they can still get horizontally
         // squashed.
-        if (TextControl *text_control = dynamic_cast<TextControl*>(wnd_position.first)) {
+        if (TextControl* text_control = dynamic_cast<TextControl*>(wnd_position.first)) {
             min_space_needed.y = (text_control->MinUsableSize(Width()) + margin).y;
             min_usable_size.y = min_space_needed.y;
         }
@@ -353,8 +353,8 @@ void Layout::DoLayout(Pt ul, Pt lr)
         size_or_min_size_changed = true;
 
     // if this is the layout object for some Wnd, propogate the minimum size up to the owning Wnd
-    if (Wnd* parent = Parent()) {
-        if (const_cast<const Wnd*>(parent)->GetLayout() == this) {
+    if (auto&& parent = Parent()) {
+        if (parent->GetLayout().get() == this) {
             Pt new_parent_min_size = MinSize() + parent->Size() - parent->ClientSize();
             ScopedAssign<bool> assignment(m_stop_resize_recursion, true);
             parent->SetMinSize(Pt(new_parent_min_size.x, new_parent_min_size.y));
@@ -432,11 +432,13 @@ void Layout::DoLayout(Pt ul, Pt lr)
 
     // resize cells and their contents
     m_ignore_child_resize = true;
-    for (std::map<Wnd*, WndPosition>::value_type& wnd_position : m_wnd_positions) {
-        Pt ul(X(m_column_params[wnd_position.second.first_column].current_origin),
-              Y(m_row_params[wnd_position.second.first_row].current_origin));
-        Pt lr(X(m_column_params[wnd_position.second.last_column - 1].current_origin + m_column_params[wnd_position.second.last_column - 1].current_width),
-              Y(m_row_params[wnd_position.second.last_row - 1].current_origin + m_row_params[wnd_position.second.last_row - 1].current_width));
+    for (auto& wnd_position : m_wnd_positions) {
+        Pt wnd_ul(X(m_column_params[wnd_position.second.first_column].current_origin),
+                  Y(m_row_params[wnd_position.second.first_row].current_origin));
+        Pt wnd_lr(X(m_column_params[wnd_position.second.last_column - 1].current_origin +
+                    m_column_params[wnd_position.second.last_column - 1].current_width),
+                  Y(m_row_params[wnd_position.second.last_row - 1].current_origin +
+                    m_row_params[wnd_position.second.last_row - 1].current_width));
         Pt ul_margin(X0, Y0);
         Pt lr_margin(X0, Y0);
         if (0 < wnd_position.second.first_row)
@@ -448,13 +450,13 @@ void Layout::DoLayout(Pt ul, Pt lr)
         if (wnd_position.second.last_column < m_column_params.size())
             lr_margin.x += static_cast<int>(m_cell_margin / 2.0 + 0.5);
 
-        ul += ul_margin;
-        lr -= lr_margin;
+        wnd_ul += ul_margin;
+        wnd_lr -= lr_margin;
 
         if (wnd_position.second.alignment == ALIGN_NONE) { // expand to fill available space
-            wnd_position.first->SizeMove(ul, lr);
+            wnd_position.first->SizeMove(wnd_ul, wnd_lr);
         } else { // align as appropriate
-            Pt available_space = lr - ul;
+            Pt available_space = wnd_lr - wnd_ul;
             Pt min_usable_size = wnd_position.first->MinUsableSize();
             Pt min_size = wnd_position.first->MinSize();
 
@@ -462,8 +464,8 @@ void Layout::DoLayout(Pt ul, Pt lr)
             // only height-for-width Wnd type, doesn't get vertically squashed
             // down to 0-height cells.  Note that they can still get horizontally
             // squashed.
-            if (TextControl *text_control = dynamic_cast<TextControl*>(wnd_position.first)) {
-                X text_width = (lr.x - ul.x);
+            if (TextControl* text_control = dynamic_cast<TextControl*>(wnd_position.first)) {
+                X text_width = (wnd_lr.x - wnd_ul.x);
                 min_usable_size = text_control->MinUsableSize(text_width);
                 min_size = min_usable_size;
             }
@@ -472,30 +474,30 @@ void Layout::DoLayout(Pt ul, Pt lr)
                            std::min(available_space.y, std::max(wnd_position.second.original_size.y, std::max(min_size.y, min_usable_size.y))));
             Pt resize_ul, resize_lr;
             if (wnd_position.second.alignment & ALIGN_LEFT) {
-                resize_ul.x = ul.x;
+                resize_ul.x = wnd_ul.x;
                 resize_lr.x = resize_ul.x + window_size.x;
             } else if (wnd_position.second.alignment & ALIGN_CENTER) {
-                resize_ul.x = ul.x + (available_space.x - window_size.x) / 2;
+                resize_ul.x = wnd_ul.x + (available_space.x - window_size.x) / 2;
                 resize_lr.x = resize_ul.x + window_size.x;
             } else if (wnd_position.second.alignment & ALIGN_RIGHT) {
-                resize_lr.x = lr.x;
+                resize_lr.x = wnd_lr.x;
                 resize_ul.x = resize_lr.x - window_size.x;
             } else {
-                resize_ul.x = ul.x;
-                resize_lr.x = lr.x;
+                resize_ul.x = wnd_ul.x;
+                resize_lr.x = wnd_lr.x;
             }
             if (wnd_position.second.alignment & ALIGN_TOP) {
-                resize_ul.y = ul.y;
+                resize_ul.y = wnd_ul.y;
                 resize_lr.y = resize_ul.y + window_size.y;
             } else if (wnd_position.second.alignment & ALIGN_VCENTER) {
-                resize_ul.y = ul.y + (available_space.y - window_size.y) / 2;
+                resize_ul.y = wnd_ul.y + (available_space.y - window_size.y) / 2;
                 resize_lr.y = resize_ul.y + window_size.y;
             } else if (wnd_position.second.alignment & ALIGN_BOTTOM) {
-                resize_lr.y = lr.y;
+                resize_lr.y = wnd_lr.y;
                 resize_ul.y = resize_lr.y - window_size.y;
             } else {
-                resize_ul.y = ul.y;
-                resize_lr.y = lr.y;
+                resize_ul.y = wnd_ul.y;
+                resize_lr.y = wnd_lr.y;
             }
             wnd_position.first->SizeMove(resize_ul, resize_lr);
         }
@@ -519,10 +521,10 @@ void Layout::Render()
     }
 }
 
-void Layout::Add(Wnd* wnd, std::size_t row, std::size_t column, Flags<Alignment> alignment/* = ALIGN_NONE*/)
-{ Add(wnd, row, column, 1, 1, alignment); }
+void Layout::Add(std::shared_ptr<Wnd> wnd, std::size_t row, std::size_t column, Flags<Alignment> alignment/* = ALIGN_NONE*/)
+{ Add(std::forward<std::shared_ptr<Wnd>>(wnd), row, column, 1, 1, alignment); }
 
-void Layout::Add(Wnd* wnd, std::size_t row, std::size_t column, std::size_t num_rows, std::size_t num_columns,
+void Layout::Add(std::shared_ptr<Wnd> wnd, std::size_t row, std::size_t column, std::size_t num_rows, std::size_t num_columns,
                  Flags<Alignment> alignment/* = ALIGN_NONE*/)
 {
     std::size_t last_row = row + num_rows;
@@ -535,43 +537,43 @@ void Layout::Add(Wnd* wnd, std::size_t row, std::size_t column, std::size_t num_
     }
     for (std::size_t i = row; i < last_row; ++i) {
         for (std::size_t j = column; j < last_column; ++j) {
-            if (m_cells[i][j])
+            if (m_cells[i][j].lock())
                 throw AttemptedOverwrite("Layout::Add() : Attempted to add a Wnd to a layout cell that is already occupied");
             m_cells[i][j] = wnd;
         }
     }
     if (wnd) {
-        m_wnd_positions[wnd] = WndPosition(row, column, last_row, last_column, alignment, wnd->RelativeUpperLeft(), wnd->Size());
-        AttachChild(wnd);
+        m_wnd_positions[wnd.get()] = WndPosition(row, column, last_row, last_column, alignment, wnd->RelativeUpperLeft(), wnd->Size());
+        AttachChild(std::forward<std::shared_ptr<Wnd>>(wnd));
     }
     RedoLayout();
 }
 
 void Layout::Remove(Wnd* wnd)
 {
-    std::map<Wnd*, WndPosition>::const_iterator it = m_wnd_positions.find(wnd);
+    auto it = m_wnd_positions.find(wnd);
     if (it == m_wnd_positions.end())
         return;
 
     const WndPosition& wnd_position = it->second;
     for (std::size_t i = wnd_position.first_row; i < wnd_position.last_row; ++i) {
         for (std::size_t j = wnd_position.first_column; j < wnd_position.last_column; ++j) {
-            m_cells[i][j] = nullptr;
+            m_cells[i][j] = std::weak_ptr<Wnd>();
         }
     }
     Pt original_ul = it->second.original_ul;
     Pt original_size = it->second.original_size;
     m_wnd_positions.erase(wnd);
     RedoLayout();
-    DetachChild(wnd);
     wnd->SizeMove(original_ul, original_ul + original_size);
+    DetachChild(wnd);
 }
 
 void Layout::DetachAndResetChildren()
 {
     std::map<Wnd*, WndPosition> wnd_positions = m_wnd_positions;
     DetachChildren();
-    for (std::map<Wnd*, WndPosition>::value_type& wnd_position : wnd_positions) {
+    for (auto& wnd_position : wnd_positions) {
         wnd_position.first->SizeMove(wnd_position.second.original_ul, wnd_position.second.original_ul + wnd_position.second.original_size);
     }
     m_wnd_positions.clear();
@@ -583,18 +585,22 @@ void Layout::ResizeLayout(std::size_t rows, std::size_t columns)
     assert(0 < columns);
     if (static_cast<std::size_t>(rows) < m_cells.size()) {
         for (std::size_t i = static_cast<std::size_t>(rows); i < m_cells.size(); ++i) {
-            for (Wnd* cell : m_cells[i]) {
-                DeleteChild(cell);
-                m_wnd_positions.erase(cell);
+            for (auto& cell : m_cells[i]) {
+                auto locked = cell.lock();
+                cell.reset();
+                DetachChild(locked.get());
+                m_wnd_positions.erase(locked.get());
             }
         }
     }
     m_cells.resize(rows);
-    for (std::vector<Wnd*>& row : m_cells) {
+    for (auto& row : m_cells) {
         if (static_cast<std::size_t>(columns) < row.size()) {
             for (std::size_t j = static_cast<std::size_t>(columns); j < row.size(); ++j) {
-                DeleteChild(row[j]);
-                m_wnd_positions.erase(row[j]);
+                auto locked = row[j].lock();
+                row[j].reset();
+                DetachChild(locked.get());
+                m_wnd_positions.erase(locked.get());
             }
         }
         row.resize(columns);

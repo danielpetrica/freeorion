@@ -2,21 +2,17 @@
 
 #include "Predicates.h"
 #include "Enums.h"
+#include "../Empire/EmpireManager.h"
+#include "../util/AppInterface.h"
 #include "../util/Logger.h"
 
 
-Fighter::Fighter() :
-    UniverseObject(),
-    m_damage(0.0f),
-    m_destroyed(false),
-    m_launched_from_id(INVALID_OBJECT_ID),
-    m_species_name()
+Fighter::Fighter()
 {}
 
 Fighter::Fighter(int empire_id, int launched_from_id, const std::string& species_name, float damage) :
     UniverseObject(),
     m_damage(damage),
-    m_destroyed(false),
     m_launched_from_id(launched_from_id),
     m_species_name(species_name)
 {
@@ -26,6 +22,14 @@ Fighter::Fighter(int empire_id, int launched_from_id, const std::string& species
 
 Fighter::~Fighter()
 {}
+
+bool Fighter::HostileToEmpire(int empire_id) const
+{
+    if (OwnedBy(empire_id))
+        return false;
+    return empire_id == ALL_EMPIRES || Unowned() ||
+           Empires().GetDiplomaticStatus(Owner(), empire_id) == DIPLO_WAR;
+}
 
 UniverseObjectType Fighter::ObjectType() const
 { return OBJ_FIGHTER; }
@@ -45,9 +49,9 @@ const std::string& Fighter::SpeciesName() const
 void Fighter::SetDestroyed(bool destroyed)
 { m_destroyed = destroyed; }
 
-std::string Fighter::Dump() const {
+std::string Fighter::Dump(unsigned short ntabs) const {
     std::stringstream os;
-    os << UniverseObject::Dump();
+    os << UniverseObject::Dump(ntabs);
     os << " (Combat Fighter) damage: " << m_damage;
     if (m_destroyed)
         os << "  (DESTROYED)";

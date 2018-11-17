@@ -1,9 +1,11 @@
-import sys
+from logging import error, debug
 
 import freeOrionAIInterface as fo  # pylint: disable=import-error
 import ColonisationAI
-from freeorion_tools import print_error
 from AIDependencies import INVALID_ID
+
+from freeorion_tools import ppstring
+
 
 def safe_name(univ_object):
     return (univ_object and univ_object.name) or "?"
@@ -11,22 +13,32 @@ def safe_name(univ_object):
 
 def sys_name_ids(sys_ids):
     """
-    Get list of text representing pairs system name and system id.
-    :param sys_ids: list if system ids
-    :return: list of string <name>:<id>
+    Get a string representation of a list with system_ids.
+
+    The returned string is of the form "[S_id<name>, ...]"
+
+    :param sys_ids: list of system ids
+    :rtype: string
+    :return: string representation of the systems in the list
     """
     universe = fo.getUniverse()
-    return [str(universe.getSystem(sys_id)) for sys_id in sys_ids]
+    return ppstring([str(universe.getSystem(sys_id)) for sys_id in sys_ids])
 
 
-def planet_name_ids(planet_ids):
+def planet_string(planet_ids):
     """
-    Get list of text representing pairs planet name and system id.
-    :param planet_ids: list if planet ids
-    :return: list of string <name>:<id>
+    Get a string representation of the passed planets
+    :param planet_ids: list of planet ids or single id
+    :rtype: str
     """
-    universe = fo.getUniverse()
-    return [fo.to_str('P', planet_id, safe_name(universe.getPlanet(planet_id))) for planet_id in planet_ids]
+
+    def _safe_planet_name(planet_id):
+        planet = fo.getUniverse().getPlanet(planet_id)
+        return fo.to_str('P', planet_id, (planet and planet.name) or "?")
+
+    if isinstance(planet_ids, int):
+        return _safe_planet_name(planet_ids)
+    return ppstring([_safe_planet_name(pid) for pid in planet_ids])
 
 
 def get_capital():
@@ -38,9 +50,6 @@ def get_capital():
     """
     universe = fo.getUniverse()
     empire = fo.getEmpire()
-    if empire is None:
-        print >> sys.stderr, "Danger Danger! FO can't find an empire for me!!!!"
-        return INVALID_ID
     empire_id = empire.empireID
     capital_id = empire.capitalID
     homeworld = universe.getPlanet(capital_id)
@@ -48,8 +57,8 @@ def get_capital():
         if homeworld.owner == empire_id:
             return capital_id
         else:
-            print "Nominal Capitol %s does not appear to be owned by empire %d %s" % (
-                homeworld.name, empire_id, empire.name)
+            debug("Nominal Capitol %s does not appear to be owned by empire %d %s" % (
+                homeworld.name, empire_id, empire.name))
     empire_owned_planet_ids = get_owned_planets_by_empire(universe.planetIDs)
     peopled_planets = get_populated_planet_ids(empire_owned_planet_ids)
     if not peopled_planets:
@@ -63,11 +72,11 @@ def get_capital():
             for planet_id in peopled_planets:
                 planet = universe.getPlanet(planet_id)
                 if spec_list is None or planet.speciesName in spec_list:
-                    population_id_pairs.append((planet.currentMeterValue(fo.meterType.population), planet_id))
+                    population_id_pairs.append((planet.initialMeterValue(fo.meterType.population), planet_id))
             if population_id_pairs:
                 return max(population_id_pairs)[-1]
     except Exception as e:
-        print_error(e)
+        error(e, exc_info=True)
     return INVALID_ID  # shouldn't ever reach here
 
 
@@ -130,7 +139,7 @@ def get_all_owned_planet_ids(planet_ids):
     for pid in planet_ids:
         planet = universe.getPlanet(pid)
         if planet:
-            population = planet.currentMeterValue(fo.meterType.population)
+            population = planet.initialMeterValue(fo.meterType.population)
             if not planet.unowned or population > 0:
                 result.append(pid)
     return result
@@ -143,7 +152,7 @@ def get_populated_planet_ids(planet_ids):
     :return: list of planets ids
     """
     universe = fo.getUniverse()
-    return [pid for pid in planet_ids if universe.getPlanet(pid).currentMeterValue(fo.meterType.population) > 0]
+    return [pid for pid in planet_ids if universe.getPlanet(pid).initialMeterValue(fo.meterType.population) > 0]
 
 
 def get_systems(planet_ids):

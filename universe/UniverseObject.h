@@ -20,6 +20,7 @@ class System;
 class SitRepEntry;
 struct UniverseObjectVisitor;
 FO_COMMON_API extern const int ALL_EMPIRES;
+FO_COMMON_API extern const int INVALID_GAME_TURN;
 
 // The ID number assigned to a UniverseObject upon construction;
 // It is assigned an ID later when it is placed in the universe
@@ -62,6 +63,8 @@ public:
     virtual int                 Owner() const;                      ///< returns the ID of the empire that owns this object, or ALL_EMPIRES if there is no owner
     bool                        Unowned() const;                    ///< returns true iff there are no owners of this object
     bool                        OwnedBy(int empire) const;          ///< returns true iff the empire with id \a empire owns this object; unowned objects always return false;
+    /** Object owner is at war with empire @p empire_id */
+    virtual bool                HostileToEmpire(int empire_id) const;
 
     virtual int                 SystemID() const;                   ///< returns the ID number of the system in which this object can be found, or INVALID_OBJECT_ID if the object is not within any system
 
@@ -78,8 +81,9 @@ public:
 
     virtual UniverseObjectType  ObjectType() const;
 
-    /** Outputs textual description of object to logger. */
-    virtual std::string         Dump() const;
+    /** Return human readable string description of object offset \p ntabs from
+        margin. */
+    virtual std::string         Dump(unsigned short ntabs = 0) const;
 
     /** Returns id of the object that directly contains this object, if any, or
         INVALID_OBJECT_ID if this object is not contained by any other. */
@@ -102,10 +106,6 @@ public:
     const Meter*                GetMeter(MeterType type) const;                 ///< returns the requested Meter, or 0 if no such Meter of that type is found in this object
     float                       CurrentMeterValue(MeterType type) const;        ///< returns current value of the specified meter \a type
     float                       InitialMeterValue(MeterType type) const;        ///< returns this turn's initial value for the speicified meter \a type
-
-    /** Returns an estimate of the next turn's current value of the specified
-        meter \a type. */
-    virtual float               NextTurnCurrentMeterValue(MeterType type) const;
 
     Visibility                  GetVisibility(int empire_id) const; ///< returns the visibility status of this universe object relative to the input empire.
 
@@ -186,9 +186,9 @@ public:
     {};
     //@}
 
-    static const double         INVALID_POSITION;       ///< the position in x and y at which default-constructed objects are placed
-    static const int            INVALID_OBJECT_AGE;     ///< the age returned by UniverseObject::AgeInTurns() if the current turn is INVALID_GAME_TURN, or if the turn on which an object was created is INVALID_GAME_TURN
-    static const int            SINCE_BEFORE_TIME_AGE;  ///< the age returned by UniverseObject::AgeInTurns() if an object was created on turn BEFORE_FIRST_TURN
+    static const double INVALID_POSITION;       ///< the position in x and y at which default-constructed objects are placed
+    static const int    INVALID_OBJECT_AGE;     ///< the age returned by UniverseObject::AgeInTurns() if the current turn is INVALID_GAME_TURN, or if the turn on which an object was created is INVALID_GAME_TURN
+    static const int    SINCE_BEFORE_TIME_AGE;  ///< the age returned by UniverseObject::AgeInTurns() if an object was created on turn BEFORE_FIRST_TURN
 
 protected:
     friend class Universe;
@@ -198,7 +198,6 @@ protected:
     UniverseObject();
     UniverseObject(const std::string name, double x, double y);
 
-    template <typename T> friend void UniverseObjectDeleter(T*);
     template <class T> friend void boost::python::detail::value_destroyer<false>::execute(T const volatile* p);
 
 public:
@@ -225,18 +224,23 @@ protected:
 private:
     std::map<MeterType, Meter>  CensoredMeters(Visibility vis) const;   ///< returns set of meters of this object that are censored based on the specified Visibility \a vis
 
-    int                                             m_id;
+    int                                             m_id = INVALID_OBJECT_ID;
     double                                          m_x;
     double                                          m_y;
-    int                                             m_owner_empire_id;
-    int                                             m_system_id;
+    int                                             m_owner_empire_id = ALL_EMPIRES;
+    int                                             m_system_id = INVALID_OBJECT_ID;
     std::map<std::string, std::pair<int, float>>    m_specials; // map from special name to pair of (turn added, capacity)
     std::map<MeterType, Meter>                      m_meters;
-    int                                             m_created_on_turn;
+    int                                             m_created_on_turn = INVALID_GAME_TURN;
 
     friend class boost::serialization::access;
     template <class Archive>
     void serialize(Archive& ar, const unsigned int version);
 };
+
+/** A function that returns the correct amount of spacing for an indentation of
+  * \p ntabs during a dump. */
+inline std::string DumpIndent(unsigned short ntabs = 1)
+{ return std::string(ntabs * 4 /* conversion to size_t is safe */, ' '); }
 
 #endif // _UniverseObject_h_

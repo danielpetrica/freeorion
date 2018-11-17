@@ -416,12 +416,6 @@ Ustala, którego poziomu lub wyższego wiadomości będą logowane (poziomy w ko
 OPTIONS_DB_STRINGTABLE_FILENAME
 Ustala nazwę pliku językowego.
 
-OPTIONS_DB_AUTOSAVE_SINGLE_PLAYER
-Jeśli włączone, gra będzie automatycznie zapisywana podczas gry jednoosobowej.
-
-OPTIONS_DB_AUTOSAVE_MULTIPLAYER
-Jeśli włączone, gra będzie automatycznie zapisywana podczas gry wieloosobowej.
-
 OPTIONS_DB_AUTOSAVE_TURNS
 Ustala ilość tur, które powinny minąć pomiędzy autozapisami gry.
 
@@ -682,10 +676,6 @@ Pliki zapisanych gier
 
 OPTIONS_TITLE
 Opcje
-
-OPTIONS_MULTIPLAYER
-Mulitplayer
-
 
 ##
 ## Main map window
@@ -951,6 +941,17 @@ Czym jest "teraz", "przyszłość", "przeszłość"? Paradoks bliźniąt w szcze
 ## Technology application
 ##
 
+SHP_DEUTERIUM_TANK
+Zbiornik deuterium
+
+SHP_DEUTERIUM_TANK_DESC
+Nieznacznie zwiększa zasięg okrętu powiększając jego zasoby paliwa.
+
+SHP_ANTIMATTER_TANK
+Zbiornik antymaterii
+
+SHP_ANTIMATTER_TANK_DESC
+Zwiększa zasięg okrętu powiększając jego zasoby paliwa.
 
 ##
 ## Technology refinement
@@ -997,18 +998,6 @@ Radar aktywny
 
 DT_DETECTOR_2_DESC
 Średnia skuteczność wykrywania, niestety bardzo ułatwia też wykrycie okręty, na którym jest zamontowany.
-
-FU_DEUTERIUM_TANK
-Zbiornik deuterium
-
-FU_DEUTERIUM_TANK_DESC
-Nieznacznie zwiększa zasięg okrętu powiększając jego zasoby paliwa. Masywny i wrażliwy na ogień przeciwnika.
-
-FU_ANTIMATTER_TANK
-Zbiornik antymaterii
-
-FU_ANTIMATTER_TANK_DESC
-Zwiększa zasięg okrętu powiększając jego zasoby paliwa. Zwarty, o niewielkiem masie.
 
 ST_CLOAK_1
 Tłumik elektromagnetyczny
@@ -1095,6 +1084,5 @@ W trakcie podróży kolonizacyjnej osadnicy utrzymywani są w stanie obniżonego
 ## Name lists
 ##
 
-#include "../global_settings.txt"
 #include "../content_specific_parameters.txt"
 #include "../customizations/common_user_customizations.txt"

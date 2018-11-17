@@ -30,16 +30,16 @@ namespace {
 
     // How much space to leave for the y axis
     GG::X AXIS_WIDTH(10);
-    // How much space to leave for the axis
-    // at the bottom of a SideBar
+    // How much space to leave for the x axis
+    // at the top of a SideBar
     GG::Y AXIS_HEIGHT(10);
 
-    // Space arounf the labels of the axes
+    // Space around the labels of the axes
     GG::X Y_AXIS_LABEL_MARGIN(3);
     GG::Y X_AXIS_LABEL_MARGIN(8);
 
-    // Margin between participant bars and whatever is above the side bars top
-    GG::Y PARTICIPANT_BAR_UP_MARGIN(5);
+    // Margin between x-axis label and whatever is above the side bars top
+    GG::Y SIDE_BAR_UP_MARGIN(5);
 
     // Space between side boxes
     GG::Y SIDE_BOX_MARGIN(8);
@@ -52,16 +52,16 @@ namespace {
     int MIN_PARTICIPANT_BAR_HEIGHT = MIN_SIDE_BAR_HEIGHT -
                                      Value(AXIS_HEIGHT) -
                                      Value(X_AXIS_LABEL_MARGIN) -
-                                     Value(PARTICIPANT_BAR_UP_MARGIN);
+                                     Value(SIDE_BAR_UP_MARGIN);
 
     const float EPSILON = 0.00001f;
 
-    const std::string OPTIONS_ROOT = "UI.combat.summary.graph.";
+    const std::string OPTIONS_ROOT = "ui.combat.summary.graph.";
 
-    const std::string TOGGLE_BAR_HEIGHT_PROPORTIONAL = "bar_height_proportional";
-    const std::string TOGGLE_BAR_WIDTH_PROPORTIONAL = "bar_width_proportional";
-    const std::string TOGGLE_BAR_HEALTH_SMOOTH = "bar_health_smooth";
-    const std::string TOGGLE_GRAPH_HEIGHT_PROPORTIONAL = "graph_height_proportional";
+    const std::string TOGGLE_BAR_HEIGHT_PROPORTIONAL = "bar.proportional.height.enabled";
+    const std::string TOGGLE_BAR_WIDTH_PROPORTIONAL = "bar.proportional.width.enabled";
+    const std::string TOGGLE_BAR_HEALTH_SMOOTH = "bar.health.smooth.enabled";
+    const std::string TOGGLE_GRAPH_HEIGHT_PROPORTIONAL = "height.proportional.enabled";
 
     // command-line options
     void AddOptions(OptionsDB& db) {
@@ -78,13 +78,13 @@ namespace {
                      UserStringNop("OPTIONS_DB_UI_COMBAT_SUMMARY_GRAPH_HEIGHT_PROPORTIONAL"),
                      false);
 
-        db.Add<GG::Clr>("UI.combat.summary.dead-color",
+        db.Add<GG::Clr>("ui.combat.summary.dead.color",
                         UserStringNop("OPTIONS_DB_UI_COMBAT_SUMMARY_DEAD_COLOR"),
                         GG::Clr(128, 0, 0, 255));
-        db.Add<GG::Clr>("UI.combat.summary.wound-color",
+        db.Add<GG::Clr>("ui.combat.summary.damaged.color",
                         UserStringNop("OPTIONS_DB_UI_COMBAT_SUMMARY_WOUND_COLOR"),
                         GG::CLR_RED);
-        db.Add<GG::Clr>("UI.combat.summary.health-color",
+        db.Add<GG::Clr>("ui.combat.summary.undamaged.color",
                         UserStringNop("OPTIONS_DB_UI_COMBAT_SUMMARY_HEALTH_COLOR"),
                         GG::CLR_GREEN);
     }
@@ -94,7 +94,7 @@ namespace {
     GG::Pt AdjustForAxes(const GG::Pt& size) {
         GG::Pt adjusted(size);
         adjusted.x = std::max( GG::X0, size.x - AXIS_WIDTH - Y_AXIS_LABEL_MARGIN);
-        adjusted.y = std::max( GG::Y0, size.y - AXIS_HEIGHT - X_AXIS_LABEL_MARGIN - PARTICIPANT_BAR_UP_MARGIN);
+        adjusted.y = std::max( GG::Y0, size.y - 2 * (SIDE_BAR_UP_MARGIN + AXIS_HEIGHT + X_AXIS_LABEL_MARGIN));
         return adjusted;
     }
 
@@ -119,7 +119,7 @@ public:
         // We want to measure health on a single scale that shows as much as possible
         // while fitting the data of both sides.
         // Therefore we make the side with more health fill the window
-        for (const std::map<int, CombatSummary>::value_type& combat_summary : combat_summaries) {
+        for (const auto& combat_summary : combat_summaries) {
             m_max_total_max_health = std::max(combat_summary.second.total_max_health, m_max_total_max_health);
             m_max_units_on_a_side = std::max(static_cast<int>(combat_summary.second.unit_summaries.size()), m_max_units_on_a_side);
             m_sum_of_max_max_healths += combat_summary.second.max_max_health;
@@ -145,7 +145,7 @@ public:
         // Take into account the size of the y-axis label.
         total_space.x -= label_margin;
 
-        CombatSummaryMap::const_iterator side_summary_it = m_summaries.find(participant.empire_id);
+        auto side_summary_it = m_summaries.find(participant.empire_id);
 
         if ( side_summary_it == m_summaries.end() ) {
             ErrorLogger() << "The empire of the object " << participant.object_id
@@ -201,7 +201,7 @@ public:
         m_available_participant_bar_height =
             std::max( GG::Y0,
                       m_available_side_bar_space.y -
-                          (AXIS_HEIGHT + X_AXIS_LABEL_MARGIN + PARTICIPANT_BAR_UP_MARGIN) *
+                          (AXIS_HEIGHT + X_AXIS_LABEL_MARGIN + SIDE_BAR_UP_MARGIN) *
                           static_cast<int>(m_summaries.size()) );
     }
 
@@ -224,7 +224,7 @@ public:
             reqd_available_client_height = GG::Y(static_cast<int>(m_summaries.size()) * MIN_PARTICIPANT_BAR_HEIGHT);
         }
 
-        GG::Y reqd_available_total_height(reqd_available_client_height + (SIDE_BOX_MARGIN + AXIS_HEIGHT + X_AXIS_LABEL_MARGIN + PARTICIPANT_BAR_UP_MARGIN) * static_cast<int>(m_summaries.size()) + SIDE_BOX_MARGIN);
+        GG::Y reqd_available_total_height(reqd_available_client_height + (SIDE_BOX_MARGIN + AXIS_HEIGHT + X_AXIS_LABEL_MARGIN + SIDE_BAR_UP_MARGIN) * static_cast<int>(m_summaries.size()) + SIDE_BOX_MARGIN);
 
         return GG::Pt(GG::X(MIN_SIDE_BAR_WIDTH), reqd_available_total_height);
     }
@@ -244,7 +244,7 @@ private:
         // The client (participant bar) height of this side bar.
         GG::Y calculated_height(GG::Y0);
 
-        CombatSummaryMap::const_iterator summary_it = m_summaries.find(empire_id);
+        auto summary_it = m_summaries.find(empire_id);
 
         if ( Get(TOGGLE_GRAPH_HEIGHT_PROPORTIONAL) && summary_it != m_summaries.end() ) {
             calculated_height = m_available_participant_bar_height * summary_it->second.max_max_health / m_sum_of_max_max_healths;
@@ -256,7 +256,7 @@ private:
         // total width and the calculated client height (which is converted to
         // the total height here).
         return GG::Pt( std::max(GG::X(MIN_SIDE_BAR_WIDTH), m_available_side_bar_space.x),
-                       std::max(GG::Y(MIN_SIDE_BAR_HEIGHT), calculated_height + (AXIS_HEIGHT + X_AXIS_LABEL_MARGIN + PARTICIPANT_BAR_UP_MARGIN)) );
+                       std::max(GG::Y(MIN_SIDE_BAR_HEIGHT), calculated_height + (AXIS_HEIGHT + X_AXIS_LABEL_MARGIN + SIDE_BAR_UP_MARGIN)) );
     }
 };
 
@@ -269,19 +269,19 @@ public:
         m_sizer(sizer),
         m_hovered(false)
     {
-        std::shared_ptr<UniverseObject> object = Objects().Object(participant.object_id);
+        auto object = Objects().Object(participant.object_id);
         if (object) {
             SetBrowseText(object->PublicName(ClientApp::GetApp()->EmpireID()) + " " +
                           DoubleToString(participant.current_health, 3, false) + "/" +
                           DoubleToString(participant.max_health, 3, false)
             );
         }
-        SetBrowseModeTime(GetOptionsDB().Get<int>("UI.tooltip-delay"));
+        SetBrowseModeTime(GetOptionsDB().Get<int>("ui.tooltip.delay"));
 
         OptionsDB& options = GetOptionsDB();
-        m_dead_color = options.Get<GG::Clr>("UI.combat.summary.dead-color");
-        m_wound_color = options.Get<GG::Clr>("UI.combat.summary.wound-color");
-        m_health_color = options.Get<GG::Clr>("UI.combat.summary.health-color");
+        m_dead_color = options.Get<GG::Clr>("ui.combat.summary.dead.color");
+        m_wound_color = options.Get<GG::Clr>("ui.combat.summary.damaged.color");
+        m_health_color = options.Get<GG::Clr>("ui.combat.summary.undamaged.color");
     }
 
     void Render() override {
@@ -290,7 +290,7 @@ public:
         // Always draw the red background, health will cover it
         GG::FlatRectangle(ClientUpperLeft(), ClientLowerRight(), base_color, m_hovered ? GG::CLR_WHITE : GG::CLR_BLACK, 1);
 
-        if ( m_sizer.Get( TOGGLE_BAR_HEALTH_SMOOTH ) ) {
+        if (m_sizer.Get(TOGGLE_BAR_HEALTH_SMOOTH)) {
             // Use a smooth colour change based health display.
             if (Alive()) {
                 double health_percentage = 1.0 * m_participant.current_health / m_participant.max_health;
@@ -304,12 +304,13 @@ public:
         } else {
             if (Alive()) {
                 GG::Y health_height( (m_participant.current_health / m_participant.max_health) * Value(ClientHeight()) );
-                GG::FlatRectangle(GG::Pt(ClientUpperLeft().x, ClientLowerRight().y - health_height), ClientLowerRight(), m_health_color, GG::CLR_ZERO, 1);
+                GG::FlatRectangle(GG::Pt(ClientUpperLeft().x, ClientLowerRight().y - health_height),
+                                         ClientLowerRight(), m_health_color, GG::CLR_ZERO, 1);
             }
         }
     }
 
-    void MouseEnter(const GG::Pt& pt, GG::Flags< GG::ModKey > mod_keys) override
+    void MouseEnter(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override
     { m_hovered = true; }
 
     void MouseLeave() override
@@ -348,32 +349,36 @@ public:
         m_side_summary(combat_summary),
         m_x_axis_label(nullptr),
         m_sizer(sizer)
-    {
+    {}
 
-        GG::Clr axis_label_color = combat_summary.SideColor();
+    void CompleteConstruction() override {
+        GG::Clr axis_label_color = m_side_summary.SideColor();
 
-        m_x_axis_label = new CUILabel( (boost::format( UserString("COMBAT_FLEET_HEALTH_AXIS_LABEL") )
-                                      % combat_summary.SideName()
-                                      % static_cast<int>(combat_summary.total_current_health)
-                                      % static_cast<int>(combat_summary.total_max_health)).str(), GG::FORMAT_LEFT);
+        m_x_axis_label = GG::Wnd::Create<CUILabel>(
+            (boost::format( UserString("COMBAT_FLEET_HEALTH_AXIS_LABEL") )
+             % m_side_summary.SideName()
+             % static_cast<int>(m_side_summary.total_current_health)
+             % static_cast<int>(m_side_summary.total_max_health)).str(),
+            GG::FORMAT_LEFT);
         m_x_axis_label->SetColor(axis_label_color);
         AttachChild(m_x_axis_label);
 
-        m_y_axis_label = new CUILabel(UserString("COMBAT_UNIT_HEALTH_AXIS_LABEL"));
+        m_y_axis_label = GG::Wnd::Create<CUILabel>(UserString("COMBAT_UNIT_HEALTH_AXIS_LABEL"));
         m_y_axis_label->SetColor(axis_label_color);
         AttachChild(m_y_axis_label);
 
-        m_dead_label = new CUILabel( (boost::format(UserString("COMBAT_DESTROYED_LABEL")) % m_side_summary.DestroyedUnits() ).str(), GG::FORMAT_RIGHT);
+        m_dead_label = GG::Wnd::Create<CUILabel>( (boost::format(UserString("COMBAT_DESTROYED_LABEL")) % m_side_summary.DestroyedUnits() ).str(), GG::FORMAT_RIGHT);
         m_dead_label->SetColor(axis_label_color);
         AttachChild(m_dead_label);
 
         MakeBars();
+
     }
 
     void MakeBars() {
         for (CombatSummary::ParticipantSummaryPtr unit : m_side_summary.unit_summaries) {
             if (unit->max_health > 0) {
-                m_participant_bars.push_back(new ParticipantBar(*unit, m_sizer));
+                m_participant_bars.push_back(GG::Wnd::Create<ParticipantBar>(*unit, m_sizer));
                 AttachChild(m_participant_bars.back());
             }
         }
@@ -386,11 +391,13 @@ public:
             Resize(bar_size);
         }
 
-        GG::Pt alive_ll = GG::Pt(GG::X0, GG::Y0);
-        alive_ll.y += ClientHeight();
+        m_x_axis_label->MoveTo(GG::Pt(GG::X0, SIDE_BAR_UP_MARGIN));
+        m_dead_label->MoveTo(GG::Pt(ClientWidth() - m_dead_label->Width(), SIDE_BAR_UP_MARGIN));
+
+        GG::Pt alive_ll = GG::Pt(GG::X0, ClientHeight());
         GG::Pt dead_lr = ClientSize();
 
-        for (ParticipantBar* bar : m_participant_bars) {
+        for (auto& bar : m_participant_bars) {
             bar->DoLayout(m_y_axis_label->MinUsableSize().x);
             if (bar->Alive()) {
                 bar->MoveBottomTo(alive_ll);
@@ -401,9 +408,7 @@ public:
             }
         }
 
-        m_x_axis_label->MoveTo(GG::Pt(GG::X0, Height() - m_x_axis_label->Height()));
         m_y_axis_label->MoveTo(GG::Pt(-m_y_axis_label->MinUsableSize().x / 2 - AXIS_WIDTH, Height()/2 - m_y_axis_label->Height()/2));
-        m_dead_label->MoveTo(GG::Pt(ClientWidth() -  m_dead_label->Width(), Height() - m_dead_label->Height()));
     }
 
     void DrawArrow(GG::Pt begin, GG::Pt end) {
@@ -497,28 +502,22 @@ public:
     }
 
     GG::Pt RelativeClientUpperLeft() const {
-        GG::Pt ul(AXIS_WIDTH + m_y_axis_label->MinUsableSize().x + Y_AXIS_LABEL_MARGIN, GG::Y0);
+        GG::Pt ul{ GG::X0, GG::Y0 };
+        ul.x += AXIS_WIDTH + m_y_axis_label->MinUsableSize().x + Y_AXIS_LABEL_MARGIN;
+        ul.y += SIDE_BAR_UP_MARGIN + AXIS_HEIGHT + X_AXIS_LABEL_MARGIN;
         return ul;
     }
 
     GG::Pt ClientUpperLeft() const override
-    { return  GG::Wnd::UpperLeft() + RelativeClientUpperLeft(); }
-
-    GG::Pt ClientLowerRight() const override {
-        // The axes are considered to be outside the client area.
-        GG::Pt lr = GG::Wnd::ClientLowerRight();
-        lr.y -= AXIS_HEIGHT;
-        lr.y -= m_x_axis_label->Height() + X_AXIS_LABEL_MARGIN;
-        return lr;
-    }
+    { return GG::Wnd::UpperLeft() + RelativeClientUpperLeft(); }
 
 private:
-    const CombatSummary&            m_side_summary;
-    std::vector<ParticipantBar*>    m_participant_bars;
-    GG::Label*                      m_x_axis_label;
-    GG::Label*                      m_y_axis_label;
-    GG::Label*                      m_dead_label;
-    const BarSizer&                 m_sizer;
+    const CombatSummary&                            m_side_summary;
+    std::vector<std::shared_ptr<ParticipantBar>>    m_participant_bars;
+    std::shared_ptr<GG::Label>                      m_x_axis_label;
+    std::shared_ptr<GG::Label>                      m_y_axis_label;
+    std::shared_ptr<GG::Label>                      m_dead_label;
+    const BarSizer&                                 m_sizer;
 
     float MaxMaxHealth() {
         float max_health = -1.0f;
@@ -537,40 +536,47 @@ public:
     OptionsBar(std::unique_ptr<BarSizer>& sizer) :
         GG::Wnd(),
         m_sizer(sizer)
-    {
-        m_toggles.push_back(new ToggleData(UserString("COMBAT_SUMMARY_PARTICIPANT_RELATIVE"),
-                                           UserString("COMBAT_SUMMARY_PARTICIPANT_EQUAL"),
-                                           UserString("COMBAT_SUMMARY_PARTICIPANT_RELATIVE_TIP"),
-                                           UserString("COMBAT_SUMMARY_PARTICIPANT_EQUAL_TIP"),
-                                           TOGGLE_BAR_WIDTH_PROPORTIONAL, &m_sizer, this));
-        m_toggles.push_back(new ToggleData(UserString("COMBAT_SUMMARY_HEALTH_SMOOTH"),
-                                           UserString("COMBAT_SUMMARY_HEALTH_BAR"),
-                                           UserString("COMBAT_SUMMARY_HEALTH_SMOOTH_TIP"),
-                                           UserString("COMBAT_SUMMARY_HEALTH_BAR_TIP"),
-                                           TOGGLE_BAR_HEALTH_SMOOTH, &m_sizer, this));
-        m_toggles.push_back(new ToggleData(UserString("COMBAT_SUMMARY_BAR_HEIGHT_PROPORTIONAL"),
-                                           UserString("COMBAT_SUMMARY_BAR_HEIGHT_EQUAL"),
-                                           UserString("COMBAT_SUMMARY_BAR_HEIGHT_PROPORTIONAL_TIP"),
-                                           UserString("COMBAT_SUMMARY_BAR_HEIGHT_EQUAL_TIP"),
-                                           TOGGLE_BAR_HEIGHT_PROPORTIONAL, &m_sizer, this));
-        m_toggles.push_back(new ToggleData(UserString("COMBAT_SUMMARY_GRAPH_HEIGHT_PROPORTIONAL"),
-                                           UserString("COMBAT_SUMMARY_GRAPH_HEIGHT_EQUAL"),
-                                           UserString("COMBAT_SUMMARY_GRAPH_HEIGHT_PROPORTIONAL_TIP"),
-                                           UserString("COMBAT_SUMMARY_GRAPH_HEIGHT_EQUAL_TIP"),
-                                           TOGGLE_GRAPH_HEIGHT_PROPORTIONAL, &m_sizer, this));
+    {}
+
+    void CompleteConstruction() override {
+        m_toggles.push_back(
+            std::make_shared<ToggleData>(UserString("COMBAT_SUMMARY_PARTICIPANT_RELATIVE"),
+                                         UserString("COMBAT_SUMMARY_PARTICIPANT_EQUAL"),
+                                         UserString("COMBAT_SUMMARY_PARTICIPANT_RELATIVE_TIP"),
+                                         UserString("COMBAT_SUMMARY_PARTICIPANT_EQUAL_TIP"),
+                                         TOGGLE_BAR_WIDTH_PROPORTIONAL, &m_sizer,
+                                         std::dynamic_pointer_cast<OptionsBar>(shared_from_this())));
+        m_toggles.push_back(
+            std::make_shared<ToggleData>(UserString("COMBAT_SUMMARY_HEALTH_SMOOTH"),
+                                         UserString("COMBAT_SUMMARY_HEALTH_BAR"),
+                                         UserString("COMBAT_SUMMARY_HEALTH_SMOOTH_TIP"),
+                                         UserString("COMBAT_SUMMARY_HEALTH_BAR_TIP"),
+                                         TOGGLE_BAR_HEALTH_SMOOTH, &m_sizer,
+                                         std::dynamic_pointer_cast<OptionsBar>(shared_from_this())));
+        m_toggles.push_back(
+            std::make_shared<ToggleData>(UserString("COMBAT_SUMMARY_BAR_HEIGHT_PROPORTIONAL"),
+                                         UserString("COMBAT_SUMMARY_BAR_HEIGHT_EQUAL"),
+                                         UserString("COMBAT_SUMMARY_BAR_HEIGHT_PROPORTIONAL_TIP"),
+                                         UserString("COMBAT_SUMMARY_BAR_HEIGHT_EQUAL_TIP"),
+                                         TOGGLE_BAR_HEIGHT_PROPORTIONAL, &m_sizer,
+                                         std::dynamic_pointer_cast<OptionsBar>(shared_from_this())));
+        m_toggles.push_back(
+            std::make_shared<ToggleData>(UserString("COMBAT_SUMMARY_GRAPH_HEIGHT_PROPORTIONAL"),
+                                         UserString("COMBAT_SUMMARY_GRAPH_HEIGHT_EQUAL"),
+                                         UserString("COMBAT_SUMMARY_GRAPH_HEIGHT_PROPORTIONAL_TIP"),
+                                         UserString("COMBAT_SUMMARY_GRAPH_HEIGHT_EQUAL_TIP"),
+                                         TOGGLE_GRAPH_HEIGHT_PROPORTIONAL, &m_sizer,
+                                         std::dynamic_pointer_cast<OptionsBar>(shared_from_this())));
         DoLayout();
     }
 
-    virtual ~OptionsBar() {
-        for (ToggleData* data : m_toggles)
-        { delete data; }
-        m_toggles.clear();
-    }
+    virtual ~OptionsBar()
+    {}
 
     GG::Pt MinUsableSize() const override {
         GG::Pt min_size(GG::X0, GG::Y0);
 
-        for (ToggleData* data : m_toggles)
+        for (auto& data : m_toggles)
         { min_size.x += data->button->Width() + OPTION_BUTTON_PADDING; }
 
         min_size.y = OPTION_BAR_HEIGHT;
@@ -579,13 +585,13 @@ public:
     }
 
     void DoLayout() {
-        std::shared_ptr<GG::Font> cui_font = ClientUI::GetFont();
+        auto cui_font = ClientUI::GetFont();
 
         GG::Pt pos(GG::X(0), GG::Y(0));
-        for (ToggleData* data : m_toggles) {
+        for (auto& data : m_toggles) {
             if (!data->button->Children().empty()) {
                 //Assume first child of the button is the label
-                if (const GG::TextControl* label = dynamic_cast<GG::TextControl const*>(data->button->Children().front()))
+                if (const auto* label = dynamic_cast<GG::TextControl const*>(data->button->Children().front().get()))
                 {
                     data->button->Resize(
                         GG::Pt(label->MinUsableSize().x + OPTION_BUTTON_PADDING,
@@ -598,8 +604,8 @@ public:
     }
 
 private:
-    std::unique_ptr<BarSizer>& m_sizer;
-    std::vector<ToggleData*> m_toggles;
+    std::unique_ptr<BarSizer>&                  m_sizer;
+    std::vector<std::shared_ptr<ToggleData>>    m_toggles;
 
     struct ToggleData : public boost::signals2::trackable {
         typedef bool (BarSizer::*ToggleGetter)() const;
@@ -611,8 +617,8 @@ private:
         std::string tip_false;
         std::string option_key;
         std::unique_ptr<BarSizer>* sizer;
-        OptionsBar* parent;
-        GG::Button* button;
+        std::weak_ptr<OptionsBar> parent;
+        std::shared_ptr<GG::Button> button;
 
         void Toggle()
         { SetValue(!GetValue()); }
@@ -621,29 +627,32 @@ private:
             (**sizer).Set(option_key, value);
             button->SetText(value?label_true:label_false);
             button->SetBrowseText(value?tip_true:tip_false);
-            parent->DoLayout();
-            parent->ChangedSignal();
+            if (auto locked_parent = parent.lock()) {
+                locked_parent->DoLayout();
+                locked_parent->ChangedSignal();
+            }
         }
 
         bool GetValue() const
         { return (**sizer).Get(option_key); }
 
-        ToggleData(const std::string& label_true, const std::string& label_false,
-                   const std::string& tip_true, const std::string& tip_false,
-                   std::string option_key,
-                   std::unique_ptr<BarSizer>* sizer, OptionsBar* parent) :
-            label_true(label_true),
-            label_false(label_false),
-            tip_true(tip_true),
-            tip_false(tip_false),
-            option_key(option_key),
-            sizer(sizer),
-            parent(parent),
+        ToggleData(const std::string& label_true_, const std::string& label_false_,
+                   const std::string& tip_true_, const std::string& tip_false_,
+                   std::string option_key_,
+                   std::unique_ptr<BarSizer>* sizer_, std::shared_ptr<OptionsBar> parent_) :
+            label_true(label_true_),
+            label_false(label_false_),
+            tip_true(tip_true_),
+            tip_false(tip_false_),
+            option_key(option_key_),
+            sizer(sizer_),
+            parent(std::forward<std::shared_ptr<OptionsBar>>(parent_)),
             button(nullptr)
         {
-            button = new CUIButton("-");
-            parent->AttachChild(button);
-            GG::Connect(button->LeftClickedSignal, &ToggleData::Toggle, this);
+            button = Wnd::Create<CUIButton>("-");
+            parent_->AttachChild(button);
+            button->LeftClickedSignal.connect(
+                boost::bind(&ToggleData::Toggle, this));
             SetValue(GetValue());
         }
     };
@@ -654,6 +663,9 @@ GraphicalSummaryWnd::GraphicalSummaryWnd() :
     GG::Wnd(GG::X0, GG::Y0, GG::X1, GG::Y1, GG::NO_WND_FLAGS),
     m_sizer(nullptr),
     m_options_bar(nullptr)
+{}
+
+GraphicalSummaryWnd::~GraphicalSummaryWnd()
 {}
 
 GG::Pt GraphicalSummaryWnd::MinUsableSize() const {
@@ -692,7 +704,7 @@ void GraphicalSummaryWnd::DoLayout() {
     m_sizer->SetAvailableSize(space_for_bars);
     m_options_bar->DoLayout();
 
-    for (SideBar* box : m_side_boxes) {
+    for (auto& box : m_side_boxes) {
         box->MoveTo(ul);
         box->DoLayout();
         ul.y += box->Height() + SIDE_BOX_MARGIN;
@@ -720,17 +732,17 @@ void GraphicalSummaryWnd::MakeSummaries(int log_id) {
         for (int object_id : log->object_ids) {
             if (object_id < 0)
                 continue;   // fighters and invalid objects
-            std::shared_ptr<UniverseObject> object = GetUniverseObject(object_id);
+            auto object = GetUniverseObject(object_id);
             if (!object) {
                 ErrorLogger() << "GraphicalSummaryWnd::MakeSummaries couldn't find object with id: " << object_id;
                 continue;
             }
 
             int owner_id = object->Owner();
-            if (m_summaries.find(owner_id) == m_summaries.end())
+            if (!m_summaries.count(owner_id))
                 m_summaries[owner_id] = CombatSummary(owner_id);
 
-            std::map<int, CombatParticipantState>::const_iterator map_it = log->participant_states.find(object_id);
+            auto map_it = log->participant_states.find(object_id);
             if (map_it != log->participant_states.end()) {
                 m_summaries[owner_id].AddUnit(object_id, map_it->second);
             } else {
@@ -738,7 +750,7 @@ void GraphicalSummaryWnd::MakeSummaries(int log_id) {
             }
         }
 
-        for (std::map<int, CombatSummary>::value_type& summary : m_summaries) {
+        for (auto& summary : m_summaries) {
             DebugLogger() << "MakeSummaries: empire " << summary.first
                           << " total health: " << summary.second.total_current_health
                           << " max health: " << summary.second.total_max_health
@@ -750,8 +762,8 @@ void GraphicalSummaryWnd::MakeSummaries(int log_id) {
 }
 
 void GraphicalSummaryWnd::DeleteSideBars() {
-    for (SideBar* box : m_side_boxes)
-    { DeleteChild(box); }
+    for (auto& box : m_side_boxes)
+    { DetachChild(box.get()); }
     m_side_boxes.clear();
 }
 
@@ -760,10 +772,10 @@ void GraphicalSummaryWnd::GenerateGraph() {
 
     m_sizer.reset(new BarSizer(m_summaries, ClientSize()));
 
-    for (std::map<int, CombatSummary>::value_type& summary : m_summaries) {
+    for (auto& summary : m_summaries) {
         if (summary.second.total_max_health > EPSILON) {
             summary.second.Sort();
-            SideBar* box = new SideBar(summary.second, *m_sizer);
+            auto box = GG::Wnd::Create<SideBar>(summary.second, *m_sizer);
             m_side_boxes.push_back(box);
             AttachChild(box);
         }
@@ -771,15 +783,14 @@ void GraphicalSummaryWnd::GenerateGraph() {
 
     if (m_options_bar) {
         DebugLogger() << "GraphicalSummaryWnd::GenerateGraph(): m_options_bar "
-                         "already exists, calling DeleteChild(m_options_bar) "
+                         "already exists, calling DetachChild(m_options_bar) "
                          "before creating a new one.";
-        DeleteChild(m_options_bar);
+        DetachChild(m_options_bar.get());
     }
-    m_options_bar = new OptionsBar(m_sizer);
+    m_options_bar = GG::Wnd::Create<OptionsBar>(m_sizer);
     AttachChild(m_options_bar);
-    GG::Connect(m_options_bar->ChangedSignal,
-                &GraphicalSummaryWnd::HandleButtonChanged,
-                this);
+    m_options_bar->ChangedSignal.connect(
+        boost::bind(&GraphicalSummaryWnd::HandleButtonChanged, this));
 
     MinSizeChangedSignal();
     DoLayout();

@@ -32,6 +32,8 @@
 #include <GG/Font.h>
 #include <GG/WndEvent.h>
 
+#include <boost/signals2/signal.hpp>
+
 #include <chrono>
 
 
@@ -50,6 +52,14 @@ class StyleFactory;
 class Texture;
 class Timer;
 struct GUIImpl;
+
+template <typename T>
+std::shared_ptr<T> LockAndResetIfExpired(std::weak_ptr<T>& ptr) {
+    auto locked = ptr.lock();
+    if (!locked)
+        ptr.reset();
+    return locked;
+}
 
 /** \brief An abstract base for an GUI framework class to drive the GG GUI.
 
@@ -162,11 +172,11 @@ public:
 
     /** \name Accessors */ ///@{
     const std::string&          AppName() const;                    ///< returns the user-defined name of the application
-    Wnd*                        FocusWnd() const;                   ///< returns the GG::Wnd that currently has the input focus
+    std::shared_ptr<Wnd>                        FocusWnd() const;                   ///< returns the GG::Wnd that currently has the input focus
     bool                        FocusWndAcceptsTypingInput() const; ///< returns true iff the current focus GG::Wnd accepts typing input
-    Wnd*                        PrevFocusInteractiveWnd() const;    ///< returns the previous Wnd to the current FocusWnd. Cycles through INTERACTIVE Wnds, in order determined by parent-child relationships
-    Wnd*                        NextFocusInteractiveWnd() const;    ///< returns the next Wnd to the current FocusWnd.
-    Wnd*                        GetWindowUnder(const Pt& pt) const; ///< returns the GG::Wnd under the point pt
+    std::shared_ptr<Wnd>                        PrevFocusInteractiveWnd() const;    ///< returns the previous Wnd to the current FocusWnd. Cycles through INTERACTIVE Wnds, in order determined by parent-child relationships
+    std::shared_ptr<Wnd>                        NextFocusInteractiveWnd() const;    ///< returns the next Wnd to the current FocusWnd.
+    std::shared_ptr<Wnd>                        GetWindowUnder(const Pt& pt) const; ///< returns the GG::Wnd under the point pt
     unsigned int                DeltaT() const;                     ///< returns ms since last frame was rendered
     virtual unsigned int        Ticks() const = 0;                  ///< returns milliseconds since the app started running
     bool                        RenderingDragDropWnds() const;      ///< returns true iff drag-and-drop Wnds are currently being rendered
@@ -235,7 +245,7 @@ public:
 
     /** \name Mutators */ ///@{
     void            operator()();                 ///< external interface to Run()
-    virtual void    Exit(int code) = 0;           ///< does basic clean-up, then calls exit(); callable from anywhere in user code via GetGUI()
+    virtual void    ExitApp(int code = 0) = 0;           ///< does basic clean-up, then calls exit(); callable from anywhere in user code via GetGUI()
 
     /** Handles all waiting system events (from SDL, DirectInput, etc.).  This
         function should only be called from custom EventPump event
@@ -247,17 +257,21 @@ public:
 
     void            ClearEventState();
 
-    void            SetFocusWnd(Wnd* wnd);          ///< sets the input focus window to \a wnd
+    void            SetFocusWnd(const std::shared_ptr<Wnd>& wnd);          ///< sets the input focus window to \a wnd
     /** Suspend the GUI thread for \p us microseconds.  Singlethreaded GUI subclasses may do
         nothing here, or may pause for \p us microseconds. */
     virtual void    Wait(std::chrono::microseconds us);
     virtual void    Wait(unsigned int ms);          ///< suspends the GUI thread for \a ms milliseconds.  Singlethreaded GUI subclasses may do nothing here, or may pause for \a ms milliseconds.
-    void            Register(Wnd* wnd);             ///< adds \a wnd into the z-list.  Registering a null pointer or registering the same window multiple times is a no-op.
-    void            RegisterModal(Wnd* wnd);        ///< adds \a wnd onto the modal windows "stack"
-    void            Remove(Wnd* wnd);               ///< removes \a wnd from the z-list.  Removing a null pointer or removing the same window multiple times is a no-op.
-    void            WndDying(Wnd* wnd);             ///< removes \a wnd from all GUI state variables, so that none of them point to a deleted object
-    void            MoveUp(Wnd* wnd);               ///< moves \a wnd to the top of the z-list
-    void            MoveDown(Wnd* wnd);             ///< moves \a wnd to the bottom of the z-list
+
+    /** Adds \p wnd into the z-list.  A registered window is owned by the GUI as a top level
+        window. Registering a null pointer or registering the same window multiple times is a no-op. */
+    void            Register(std::shared_ptr<Wnd> wnd);
+    /** Adds \p wnd onto the modal windows "stack".  Modal windows are owned by the GUI as a
+        top-level window. */
+    void            RegisterModal(std::shared_ptr<Wnd> wnd);
+    void            Remove(const std::shared_ptr<Wnd>& wnd);               ///< removes \a wnd from the z-list.  Removing a null pointer or removing the same window multiple times is a no-op.
+    void            MoveUp(const std::shared_ptr<Wnd>& wnd);               ///< moves \a wnd to the top of the z-list
+    void            MoveDown(const std::shared_ptr<Wnd>& wnd);             ///< moves \a wnd to the bottom of the z-list
 
     /** Creates a new ModalEventPump that will terminate when \a done is set to
         true. */
@@ -269,7 +283,7 @@ public:
         \throw std::runtime_error May throw std::runtime_error if there are
         already other Wnds registered that belong to a window other than \a
         originating_wnd. */
-    void           RegisterDragDropWnd(Wnd* wnd, const Pt& offset, Wnd* originating_wnd);
+    void           RegisterDragDropWnd(std::shared_ptr<Wnd> wnd, const Pt& offset, std::shared_ptr<Wnd> originating_wnd);
     void           CancelDragDrop();             ///< clears the set of current drag-and-drop Wnds
 
     void           RegisterTimer(Timer& timer);  ///< adds \a timer to the list of active timers
@@ -395,7 +409,9 @@ public:
     /** If \p wnd is visible recursively call PreRenderWindow() on all \p wnd's children and then
         call \p wnd->PreRender().  The order guarantees that when wnd->PreRender() is called all
         of \p wnd's children have already been prerendered.*/
+    static void  PreRenderWindow(const std::shared_ptr<Wnd>& wnd);
     static void  PreRenderWindow(Wnd* wnd);
+    static void  RenderWindow(const std::shared_ptr<Wnd>& wnd);    ///< renders a window (if it is visible) and all its visible descendents recursively
     static void  RenderWindow(Wnd* wnd);    ///< renders a window (if it is visible) and all its visible descendents recursively
     virtual void RenderDragDropWnds();      ///< renders Wnds currently being drag-dropped
 
@@ -452,28 +468,34 @@ protected:
     // EventPumpBase interface
     void SetFPS(double FPS);               ///< sets the FPS value based on the most recent calculation
     void SetDeltaT(unsigned int delta_t);  ///< sets the time between the most recent frame and the one before it, in ms
+
     //@}
 
     virtual void   Run() = 0;              ///< initializes GUI state, then executes main event handler/render loop (PollAndRender())
 
+    /** Determine if the app has the mouse focus. */
+    virtual bool AppHasMouseFocus() const { return true; };
+
 private:
     bool           ProcessBrowseInfoImpl(Wnd* wnd);
-    Wnd*           ModalWindow() const;    // returns the current modal window, if any
+    std::shared_ptr<Wnd>           ModalWindow() const;    // returns the current modal window, if any
 
     // Returns the window under \a pt, sending Mouse{Enter|Leave} or
     // DragDrop{Enter|Leave} as appropriate
-    Wnd*           CheckedGetWindowUnder(const Pt& pt, Flags<ModKey> mod_keys);
+    std::shared_ptr<Wnd>           CheckedGetWindowUnder(const Pt& pt, Flags<ModKey> mod_keys);
 
     static GUI*                       s_gui;
-    static std::shared_ptr<GUIImpl> s_impl;
+    std::unique_ptr<GUIImpl>          m_impl;
 
     friend class EventPumpBase; ///< allows EventPumpBase types to drive GUI
     friend struct GUIImpl;
 };
 
-
 /** Returns true if lwnd == rwnd or if lwnd contains rwnd */
 GG_API bool MatchesOrContains(const Wnd* lwnd, const Wnd* rwnd);
+GG_API bool MatchesOrContains(const std::shared_ptr<Wnd>& lwnd, const Wnd* rwnd);
+GG_API bool MatchesOrContains(const Wnd* lwnd, const std::shared_ptr<Wnd>& rwnd);
+GG_API bool MatchesOrContains(const std::shared_ptr<Wnd>& lwnd, const std::shared_ptr<Wnd>& rwnd);
 
 /* returns the storage value of mod_keys that should be used with keyboard
     accelerators the accelerators don't care which side of the keyboard you

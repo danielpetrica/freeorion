@@ -2,19 +2,32 @@ target_sources(freeorionparseobj
     PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}/Parse.h
     PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/CommonParams.h
+        ${CMAKE_CURRENT_LIST_DIR}/CommonParamsParser.h
         ${CMAKE_CURRENT_LIST_DIR}/ConditionParser.h
+        ${CMAKE_CURRENT_LIST_DIR}/ConditionParser1.h
+        ${CMAKE_CURRENT_LIST_DIR}/ConditionParser2.h
+        ${CMAKE_CURRENT_LIST_DIR}/ConditionParser3.h
+        ${CMAKE_CURRENT_LIST_DIR}/ConditionParser4.h
+        ${CMAKE_CURRENT_LIST_DIR}/ConditionParser5.h
+        ${CMAKE_CURRENT_LIST_DIR}/ConditionParser6.h
+        ${CMAKE_CURRENT_LIST_DIR}/ConditionParser7.h
         ${CMAKE_CURRENT_LIST_DIR}/ConditionParserImpl.h
         ${CMAKE_CURRENT_LIST_DIR}/EffectParser.h
+        ${CMAKE_CURRENT_LIST_DIR}/EffectParser1.h
+        ${CMAKE_CURRENT_LIST_DIR}/EffectParser2.h
+        ${CMAKE_CURRENT_LIST_DIR}/EffectParser3.h
+        ${CMAKE_CURRENT_LIST_DIR}/EffectParser4.h
+        ${CMAKE_CURRENT_LIST_DIR}/EffectParser5.h
         ${CMAKE_CURRENT_LIST_DIR}/EffectParserImpl.h
         ${CMAKE_CURRENT_LIST_DIR}/EnumParser.h
+        ${CMAKE_CURRENT_LIST_DIR}/EnumValueRefRules.h
         ${CMAKE_CURRENT_LIST_DIR}/Lexer.h
+        ${CMAKE_CURRENT_LIST_DIR}/MovableEnvelope.h
         ${CMAKE_CURRENT_LIST_DIR}/ParseImpl.h
         ${CMAKE_CURRENT_LIST_DIR}/ReportParseError.h
         ${CMAKE_CURRENT_LIST_DIR}/Tokens.h
         ${CMAKE_CURRENT_LIST_DIR}/ValueRefParser.h
-        ${CMAKE_CURRENT_LIST_DIR}/ValueRefParserImpl.h
-        ${CMAKE_CURRENT_LIST_DIR}/AlignmentsParser.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/ArithmeticRules.cpp
         ${CMAKE_CURRENT_LIST_DIR}/BuildingsParser.cpp
         ${CMAKE_CURRENT_LIST_DIR}/CommonParamsParser.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ConditionParser1.cpp
@@ -38,6 +51,7 @@ target_sources(freeorionparseobj
         ${CMAKE_CURRENT_LIST_DIR}/EnumParser.cpp
         ${CMAKE_CURRENT_LIST_DIR}/FieldsParser.cpp
         ${CMAKE_CURRENT_LIST_DIR}/FleetPlansParser.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/GameRulesParser.cpp
         ${CMAKE_CURRENT_LIST_DIR}/IntComplexValueRefParser.cpp
         ${CMAKE_CURRENT_LIST_DIR}/IntValueRefParser.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ItemsParser.cpp
@@ -58,7 +72,7 @@ target_sources(freeorionparseobj
         ${CMAKE_CURRENT_LIST_DIR}/StringComplexValueRefParser.cpp
         ${CMAKE_CURRENT_LIST_DIR}/StringValueRefParser.cpp
         ${CMAKE_CURRENT_LIST_DIR}/TechsParser.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/Tokens.cpp
         ${CMAKE_CURRENT_LIST_DIR}/UniverseObjectTypeValueRefParser.cpp
-        ${CMAKE_CURRENT_LIST_DIR}/ValueRefParserImpl.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/ValueRefParser.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/VisibilityValueRefParser.cpp
 )

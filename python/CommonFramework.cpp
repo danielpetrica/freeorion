@@ -4,6 +4,10 @@
 #include "../util/Logger.h"
 #include "CommonWrappers.h"
 
+#include <boost/filesystem.hpp>
+#include <boost/python/tuple.hpp>
+#include <boost/python/list.hpp>
+#include <boost/python/extract.hpp>
 #include <boost/python/docstring_options.hpp>
 
 using boost::python::object;
@@ -14,6 +18,7 @@ using boost::python::dict;
 using boost::python::list;
 using boost::python::extract;
 
+namespace fs = boost::filesystem;
 
 // Python module for logging functions
 BOOST_PYTHON_MODULE(freeorion_logger) {
@@ -119,7 +124,6 @@ void PythonBase::HandleErrorAlreadySet() {
     return;
 }
 
-
 void PythonBase::Finalize() {
     if (Py_IsInitialized()) {
         Py_Finalize();
@@ -128,6 +132,10 @@ void PythonBase::Finalize() {
 }
 
 void PythonBase::SetCurrentDir(const std::string dir) {
+    if (!fs::exists(dir)) {
+        ErrorLogger() << "Tried setting current dir to non-existing dir: " << dir;
+        return;
+    }
     std::string script = "import os\n"
     "os.chdir(r'" + dir + "')\n"
     "print 'Python current directory set to', os.getcwd()";
@@ -135,6 +143,10 @@ void PythonBase::SetCurrentDir(const std::string dir) {
 }
 
 void PythonBase::AddToSysPath(const std::string dir) {
+    if (!fs::exists(dir)) {
+        ErrorLogger() << "Tried adding non-existing dir to sys.path: " << dir;
+        return;
+    }
     std::string script = "import sys\n"
         "sys.path.append(r'" + dir + "')";
     exec(script.c_str(), m_namespace, m_namespace);
@@ -160,7 +172,7 @@ std::vector<std::string> PythonBase::ErrorReport() {
             return err_list;
         }
 
-        for(int i = 0; i < len(py_err_list); i++) {
+        for (int i = 0; i < len(py_err_list); i++) {
             err_list.push_back(extract<std::string>(py_err_list[i]));
         }
     }

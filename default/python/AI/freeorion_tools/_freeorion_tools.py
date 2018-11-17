@@ -1,11 +1,14 @@
 # This Python file uses the following encoding: utf-8
+import StringIO
+import cProfile
+import logging
+import pstats
 import re
-import sys
+from collections import Mapping
+from functools import wraps
+from logging import debug, error
 
 import freeOrionAIInterface as fo  # pylint: disable=import-error
-from functools import wraps
-from traceback import format_exc
-
 
 # color wrappers for chat:
 RED = '<rgba 255 0 0 255>%s</rgba>'
@@ -33,7 +36,8 @@ def get_ai_tag_grade(tag_list, tag_type):
     return ""
 
 
-def UserString(label, default=None):  # this name left with C naming style for compatibility with translation assistance procedures  #pylint: disable=invalid-name
+# this name left with C naming style for compatibility with translation assistance procedures
+def UserString(label, default=None):  # pylint: disable=invalid-name
     """
     A translation assistance tool is intended to search for this method to identify translatable strings.
 
@@ -50,7 +54,8 @@ def UserString(label, default=None):  # this name left with C naming style for c
         return table_string
 
 
-def UserStringList(label):  # this name left with C naming style for compatibility with translation assistance procedures  #pylint: disable=invalid-name
+# this name left with C naming style for compatibility with translation assistance procedures
+def UserStringList(label):  # pylint: disable=invalid-name
     """
     A translation assistance tool is intended to search for this method to identify translatable strings.
 
@@ -65,15 +70,15 @@ def tech_is_complete(tech):
     """
     Return if tech is complete.
     """
-    return fo.getEmpire().getTechStatus(tech) == fo.techStatus.complete
+    return fo.getEmpire().techResearched(tech)
 
 
 def ppstring(foo):
     """
     Returns a string version of lists, dicts, sets, such that entries with special characters will be
-    printed in legible string format rather than as hex escape characters, i.e., 
+    printed in legible string format rather than as hex escape characters, i.e.,
     ['Asimov α'] rather than ['Asimov \xce\xb1']."""
-    
+
     if isinstance(foo, list):
         return "[" + ",".join(map(ppstring, foo)) + "]"
     elif isinstance(foo, dict):
@@ -88,33 +93,37 @@ def ppstring(foo):
         return str(foo)
 
 
-def chat_on_error(function):
-    @wraps(function)
-    def wrapper(*args, **kw):
+class ConsoleLogHandler(logging.Handler):
+    """A log handler to send errors to the console. """
+    def emit(self, record):
+        """Emit a record.
+
+        If a formatter is specified, it is used to format the record and then sent to human players. """
         try:
-            return function(*args, **kw)
-        except Exception as e:
-            print_error(e, location=function.__name__, trace=False)
+            human_ids = [x for x in fo.allPlayerIDs() if fo.playerIsHost(x)]
+            if not human_ids:
+                return
+            msg = self.format(record)
+
+            for human_id in human_ids:
+                fo.sendChatMessage(human_id, msg)
+        except (KeyboardInterrupt, SystemExit):
             raise
-    return wrapper
+        # Hide errors from within the ConsoleLogHandler
+        except:
+            self.handleError(record)
 
 
-def print_error(exception, location=None, trace=True):
-    """
-    Sends error to host chat and print its to log.
-    :param exception: message text or exception
-    :type exception: Exception
-    :param location: text that describes error location
-    :param trace: flag if print traceback
-    """
-    print "possible recipients host status: %s" % [(x, fo.playerIsHost(x)) for x in fo.allPlayerIDs()]
-    if location:
-        message = '%s in "%s": "%s"' % (UserString('AI_ERROR_MSG', 'AI_Error: AI script error'), location, exception)
-    else:
-        message = '%s: "%s"' % (fo.userString('AI_ERROR_MSG'), exception)
-    chat_human(RED % message)
-    if trace:
-        sys.stderr.write(format_exc())
+# Create the log handler, format it and attach it to the root logger
+console_handler = ConsoleLogHandler()
+
+console_handler.setFormatter(
+    logging.Formatter(RED % ('%s : %%(filename)s:%%(funcName)s():%%(lineno)d  - %%(message)s'
+                             % fo.userString('AI_ERROR_MSG'))))
+
+console_handler.setLevel(logging.ERROR)
+
+logging.getLogger().addHandler(console_handler)
 
 
 def remove_tags(message):
@@ -129,46 +138,67 @@ def chat_human(message):
     Log message cleared form tags.
     """
     human_id = [x for x in fo.allPlayerIDs() if fo.playerIsHost(x)][0]
+    message = str(message)
     fo.sendChatMessage(human_id, message)
-    print "\nChat Message to human: %s" % remove_tags(message)
+    debug("Chat Message to human: %s", remove_tags(message))
 
 
-def cache_by_session(function):
+def cache_by_session(func):
     """
     Cache a function value by session.
     Wraps only functions with hashable arguments.
     """
     _cache = {}
 
-    @wraps(function)
+    @wraps(func)
     def wrapper(*args, **kwargs):
-        key = (function, args, tuple(kwargs.items()))
+        key = (func, args, tuple(kwargs.items()))
         if key in _cache:
             return _cache[key]
-        res = function(*args, **kwargs)
+        res = func(*args, **kwargs)
         _cache[key] = res
         return res
     wrapper._cache = _cache
     return wrapper
 
 
-def cache_by_turn(function):
+def cache_by_session_with_turnwise_update(func):
+    """
+    Cache a function value during session, updated each turn.
+    Wraps only functions with hashable arguments.
+    """
+    _cache = {}
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        key = (func, args, tuple(kwargs.items()))
+        this_turn = fo.currentTurn()
+        if key in _cache and _cache[key][0] == this_turn:
+            return _cache[key][1]
+        res = func(*args, **kwargs)
+        _cache[key] = (this_turn, res)
+        return res
+    wrapper._cache = _cache
+    return wrapper
+
+
+def cache_by_turn(func):
     """
     Cache a function value by turn, stored in foAIstate so also provides a history that may be analysed. The cache
     is keyed by the original function name.  Wraps only functions without arguments.
     Cache result is stored in savegame, will crash with picle error if result contains any boost object.
     """
     # avoid circular import
-    import FreeOrionAI as foAI
+    from aistate_interface import get_aistate
 
-    @wraps(function)
+    @wraps(func)
     def wrapper():
-        if foAI.foAIstate is None:
-            return function()
+        if get_aistate() is None:
+            return func()
         else:
-            cache = foAI.foAIstate.misc.setdefault('caches', {}).setdefault(function.__name__, {})
+            cache = get_aistate().misc.setdefault('caches', {}).setdefault(func.__name__, {})
             this_turn = fo.currentTurn()
-            return cache[this_turn] if this_turn in cache else cache.setdefault(this_turn, function())
+            return cache[this_turn] if this_turn in cache else cache.setdefault(this_turn, func())
     return wrapper
 
 
@@ -183,5 +213,137 @@ def tuple_to_dict(tup):
         try:
             return {k: v for k, v in [tup]}
         except:
-            print >> sys.stderr, "Can't convert tuple_list to dict: ", tup
+            error("Can't convert tuple_list to dict: %s", tup)
             return {}
+
+
+def profile(func):
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        pr = cProfile.Profile()
+        pr.enable()
+        retval = func(*args, **kwargs)
+        pr.disable()
+        s = StringIO.StringIO()
+        sortby = 'cumulative'
+        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+        ps.print_stats()
+        debug(s.getvalue())
+        return retval
+
+    return wrapper
+
+
+def get_partial_visibility_turn(obj_id):
+    """Return the last turn an object had at least partial visibility.
+
+    :type obj_id: int
+    :return: Last turn an object had at least partial visibility, -9999 if never
+    :rtype: int
+    """
+    visibility_turns_map = fo.getUniverse().getVisibilityTurnsMap(obj_id, fo.empireID())
+    return visibility_turns_map.get(fo.visibility.partial, -9999)
+
+
+class ReadOnlyDict(Mapping):
+    """A dict that offers only read access.
+
+     Note that if the values of the ReadOnlyDict are mutable,
+     then those objects may actually be changed.
+
+     It is strongly advised to store only immutable objects.
+     A slight protection is offered by checking for hashability of the values.
+
+      Example usage:
+      my_dict = ReadOnlyDict({1:2, 3:4})
+      print my_dict[1]
+      for k in my_dict:
+          print my_dict.get(k, -1)
+      for k in my_dict.keys():
+          print my_dict[k]
+      for k, v in my_dict.iteritems():
+          print k, v
+      my_dict[5] = 4  # throws TypeError
+      del my_dict[1]  # throws TypeError
+     """
+
+    def __init__(self, *args, **kwargs):
+        self._data = dict(*args, **kwargs)
+        for k, v in self._data.iteritems():
+            try:
+                hash(v)
+            except TypeError:
+                error("Tried to store a non-hashable value in ReadOnlyDict")
+                raise
+
+    def __getitem__(self, item):
+        return self._data[item]
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __len__(self):
+        return len(self._data)
+
+    def __str__(self):
+        return str(self._data)
+
+
+def dump_universe():
+    """Dump the universe but not more than once per turn."""
+    cur_turn = fo.currentTurn()
+
+    if (not hasattr(dump_universe, "last_dump") or
+            dump_universe.last_dump < cur_turn):
+        dump_universe.last_dump = cur_turn
+        fo.getUniverse().dump()  # goes to debug logger
+
+
+class LogLevelSwitcher(object):
+    """A context manager class which controls the log level within its scope.
+
+    Example usage:
+    logging.getLogger().setLevel(logging.INFO)
+
+    debug("Some message")  # not printed because of log level
+    with LogLevelSwitcher(logging.DEBUG):
+        debug("foo")  # printed because we set to DEBUG level
+
+    debug("baz")  # not printed, we are back to INFO level
+    """
+    def __init__(self, log_level):
+        self.target_log_level = log_level
+        self.old_log_level = 0
+
+    def __enter__(self):
+        self.old_log_level = logging.getLogger().level
+        logging.getLogger().setLevel(self.target_log_level)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        logging.getLogger().setLevel(self.old_log_level)
+
+
+def with_log_level(log_level):
+    """A decorator to set a specific logging level for the function call.
+
+    This decorator is useful to selectively activate debugging for a specific function
+    while the rest of the code base only logs at a higher level.
+
+    If functions are called within the decorated function, then those will be
+    executed with the same logging level. However, if those functions use this
+    decorator as well, then that logging level will be respected for its scope.
+
+    Example usage:
+    @log_with_specific_log_level(logging.DEBUG)
+    def foo():
+        debug("debug stuff")
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            with LogLevelSwitcher(log_level):
+                return func(*args, **kwargs)
+
+        return wrapper
+    return decorator

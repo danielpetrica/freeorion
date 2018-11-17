@@ -33,15 +33,24 @@ namespace {
     struct insert_key_map_ {
         typedef void result_type;
 
-        void operator()(NamedKeymaps& named_keymaps, const NamedKeymaps::value_type& name_keymap) const {
+        void operator()(NamedKeymaps& named_keymaps,
+                        const NamedKeymaps::value_type& name_keymap) const
+        {
             named_keymaps[name_keymap.first] = name_keymap.second;
             //std::cout << "inserted keymap: " << name_keymap.first << std::endl;
         }
     };
     const boost::phoenix::function<insert_key_map_> insert_key_map;
 
-    struct rules {
-        rules() {
+    using start_rule_payload = NamedKeymaps;
+    using start_rule_signature = void(start_rule_payload&);
+
+    struct grammar : public parse::detail::grammar<start_rule_signature> {
+        grammar(const parse::lexer& tok,
+                const std::string& filename,
+                const parse::text_iterator& first, const parse::text_iterator& last) :
+            grammar::base_type(start)
+        {
             namespace phoenix = boost::phoenix;
             namespace qi = boost::spirit::qi;
 
@@ -52,22 +61,20 @@ namespace {
             qi::_3_type _3;
             qi::_4_type _4;
             qi::_a_type _a;
-            qi::_b_type _b;
             qi::_r1_type _r1;
-
-            const parse::lexer& tok = parse::lexer::instance();
+            qi::omit_type omit_;
 
             int_pair
-                =   tok.int_ [ _a = _1 ] >> tok.int_ [ _b = _1 ]
-                    [ insert_key_pair(_r1, construct<Keymap::value_type>(_a, _b)) ]
+                =   (tok.int_ >> tok.int_)
+                    [ insert_key_pair(_r1, construct<Keymap::value_type>(_1, _2)) ]
                 ;
 
             keymap
-                =   tok.Keymap_
-                >   parse::detail::label(Name_token) > tok.string [ _a = _1 ]
-                >   parse::detail::label(Keys_token)
-                >   ( '[' > *(int_pair(_b)) > ']' )
-                    [ insert_key_map(_r1, construct<NamedKeymaps::value_type>(_a, _b)) ]
+                = ( omit_[tok.Keymap_]
+                >   label(tok.Name_) > tok.string
+                >   label(tok.Keys_)
+                >   ( '[' > *(int_pair(_a)) > ']' )
+                  ) [ insert_key_map(_r1, construct<NamedKeymaps::value_type>(_1, _a)) ]
                 ;
 
             start
@@ -82,23 +89,19 @@ namespace {
             debug(article);
 #endif
 
-            qi::on_error<qi::fail>(start, parse::report_error(_1, _2, _3, _4));
+            qi::on_error<qi::fail>(start, parse::report_error(filename, first, last, _1, _2, _3, _4));
         }
 
-        typedef parse::detail::rule<
-            void (Keymap&),
-            boost::spirit::qi::locals<int, int>
-        > int_pair_rule;
+        using int_pair_rule = parse::detail::rule<void (Keymap&)>;
 
-        typedef parse::detail::rule<
+        using keymap_rule = parse::detail::rule<
             void (NamedKeymaps&),
-            boost::spirit::qi::locals<std::string, Keymap>
-        > keymap_rule;
+            boost::spirit::qi::locals<Keymap>
+        >;
 
-        typedef parse::detail::rule<
-            void (NamedKeymaps&)
-        > start_rule;
+        using start_rule = parse::detail::rule<start_rule_signature>;
 
+        parse::detail::Labeller label;
         int_pair_rule   int_pair;
         keymap_rule     keymap;
         start_rule      start;
@@ -106,8 +109,10 @@ namespace {
 }
 
 namespace parse {
-    bool keymaps(NamedKeymaps& nkm) {
-        boost::filesystem::path path = GetResourceDir() / "scripting/keymaps.inf";
-        return detail::parse_file<rules, NamedKeymaps>(path, nkm);
+    NamedKeymaps keymaps(const boost::filesystem::path& path) {
+        const lexer lexer;
+        NamedKeymaps nkm;
+        /*auto success =*/ detail::parse_file<grammar, NamedKeymaps>(lexer, path, nkm);
+        return nkm;
     }
 }

@@ -86,12 +86,16 @@ TextBoxBrowseInfoWnd::TextBoxBrowseInfoWnd(X w, const std::shared_ptr<Font>& fon
     m_border_color(border_color),
     m_border_width(border_width),
     m_preferred_width(w),
-    m_text_control(GetStyleFactory()->NewTextControl("", m_font, text_color, format))
+    m_text_control(GetStyleFactory()->NewTextControl("", m_font, text_color, format)),
+    m_text_margin(text_margin)
+{}
+
+void TextBoxBrowseInfoWnd::CompleteConstruction()
 {
-    m_text_control->Resize(Pt(w, m_text_control->Height()));
+    m_text_control->Resize(Pt(Width(), m_text_control->Height()));
     AttachChild(m_text_control);
     GridLayout();
-    SetLayoutBorderMargin(text_margin);
+    SetLayoutBorderMargin(m_text_margin);
     InitBuffer();
 }
 
@@ -133,8 +137,9 @@ void TextBoxBrowseInfoWnd::SetText(const std::string& str)
     unsigned int margins = 2 * TextMargin();
 
     Flags<TextFormat> fmt = GetTextFormat();
-    std::vector<std::shared_ptr<Font::TextElement>> text_elements = m_font->ExpensiveParseFromTextToTextElements(str, fmt);
-    std::vector<Font::LineData> lines = m_font->DetermineLines(str, fmt, m_preferred_width - X(margins), text_elements);
+    auto text_elements = m_font->ExpensiveParseFromTextToTextElements(str, fmt);
+    auto lines = m_font->DetermineLines(str, fmt, m_preferred_width - X(margins),
+                                        text_elements);
     Pt extent = m_font->TextExtent(lines);
     SetMinSize(extent + Pt(X(margins), Y(margins)));
     m_text_control->SetText(str);

@@ -66,7 +66,7 @@ int TechTreeLayout::Column::ClosestFreeIndex(int index, TechTreeLayout::Node* no
 
 bool TechTreeLayout::Column::Place(int index, TechTreeLayout::Node* node) {
     if (Fit(index, node)) {
-        for ( int i = index + node->GetWeight(); i-->index; )
+        for (int i = index + node->GetWeight(); i-->index; )
             m_column[i] = node;
 
         node->m_row = index;
@@ -77,7 +77,7 @@ bool TechTreeLayout::Column::Place(int index, TechTreeLayout::Node* node) {
 
 bool TechTreeLayout::Column::Move(int to, TechTreeLayout::Node* node) {
     if (Fit(to, node)) {
-        for ( int i = node->m_row + node->GetWeight(); i-->node->m_row; )
+        for (int i = node->m_row + node->GetWeight(); i-->node->m_row; )
             m_column[i] = nullptr;
 
         Place(to, node);
@@ -148,14 +148,14 @@ const std::string& TechTreeLayout::Edge::GetTechTo() const
 void TechTreeLayout::Edge::AddPoint(double x, double y)
 { m_points.push_back(std::pair<double, double>(x, y)); }
 
-void TechTreeLayout::Edge::ReadPoints(std::vector<std::pair<double, double>> & points) const {
-    for(const std::pair<double, double>& p : m_points)
+void TechTreeLayout::Edge::ReadPoints(std::vector<std::pair<double, double>>& points) const {
+    for (const auto& p : m_points)
         points.push_back(p);
 }
 
 void TechTreeLayout::Edge::Debug() const {
     DebugLogger() << "Edge " << m_from << "-> " << m_to << ": ";
-    for(const std::pair<double, double>& p : m_points)
+    for (const auto& p : m_points)
         DebugLogger() << "(" << p.first << "," << p.second << ") ";
     DebugLogger() << "\n";
 }
@@ -213,11 +213,11 @@ void TechTreeLayout::DoLayout(double column_width, double row_height, double x_m
     //3. put nodes into containers for each depth column
     std::vector<std::vector<Node*>> nodes_at_each_depth(max_node_depth + 1);
     for (Node* node : m_nodes) {
-        assert((node->GetDepth() >= 0) && (node->GetDepth() < nodes_at_each_depth.size()));
+        assert((node->GetDepth() >= 0) && (node->GetDepth() < static_cast<int>(nodes_at_each_depth.size())));
         nodes_at_each_depth[node->GetDepth()].push_back(node);
     }
     // sort within each depth column
-    for (std::vector<Node*>& level : nodes_at_each_depth)
+    for (auto& level : nodes_at_each_depth)
     { std::sort(level.begin(), level.end(), NodePointerCmp()); }
 
 
@@ -297,7 +297,7 @@ const GG::Y TechTreeLayout::GetHeight() const
 { return GG::Y(static_cast<int>(m_height)); }
 
 const TechTreeLayout::Node* TechTreeLayout::GetNode(const std::string & name) const {
-    std::map< std::string, TechTreeLayout::Node*>::const_iterator item = m_node_map.find(name);
+    auto item = m_node_map.find(name);
     if (item == m_node_map.end()) {
         DebugLogger() << "TechTreeLayout::getNode: missing node " << name << "\n";
         Debug();
@@ -309,21 +309,21 @@ const TechTreeLayout::Node* TechTreeLayout::GetNode(const std::string & name) co
 
 void TechTreeLayout::AddNode(const std::string& tech, GG::X width, GG::Y height) {
     assert(width > 0 && height > 0 && GetTech(tech));
-    TechTreeLayout::Node* node = new TechTreeLayout::Node(tech, width, height);
+    auto node = new TechTreeLayout::Node(tech, width, height);
     //DebugLogger() << "Adding Node: " << node << " for tech " << tech;
     m_nodes.push_back(node);
     m_node_map[tech] = node;
 }
 
 void TechTreeLayout::AddEdge(const std::string& parent, const std::string& child) {
-    std::map<std::string, TechTreeLayout::Node*>::iterator p = m_node_map.find(parent);
-    std::map<std::string, TechTreeLayout::Node*>::iterator c = m_node_map.find(child);
+    auto p = m_node_map.find(parent);
+    auto c = m_node_map.find(child);
     assert(p != m_node_map.end() && c != m_node_map.end());
     p->second->AddChild(c->second);
 }
 
 const std::vector<TechTreeLayout::Edge*>& TechTreeLayout::GetOutEdges(const std::string& name) const {
-    std::map< std::string, TechTreeLayout::Node*>::const_iterator item = m_node_map.find(name);
+    auto item = m_node_map.find(name);
     if (item == m_node_map.end()) {
         DebugLogger() << "TechTreeLayout::getNode: missing node " << name << "\n";
         Debug();
@@ -353,19 +353,10 @@ void TechTreeLayout::Clear() {
  * creates a node for that tech
  */
 TechTreeLayout::Node::Node(const std::string& tech, GG::X width, GG::Y height) :
-    m_depth(-1),
-    m_row(-1),
     m_tech(tech),
-    m_x(0),
-    m_y(0),
     m_width(Value(width)),
     m_height(Value(height)),
     m_place_holder(false),
-    m_children_rows(0),
-    m_parents(),
-    m_children(),
-    m_primary_child(nullptr),
-    m_out_edges(),
     m_weight(NODE_CELL_HEIGHT)
 { assert(width > 0 && height > 0 && ::GetTech(tech)); }
 
@@ -373,19 +364,10 @@ TechTreeLayout::Node::Node(const std::string& tech, GG::X width, GG::Y height) :
  * recursively creates dummy nodes between parent and child
  */
 TechTreeLayout::Node::Node(Node* parent, Node* child, std::vector<Node*>& nodes) :
-    m_depth(-1),
-    m_row(-1),
     m_tech(),
-    m_x(0),
-    m_y(0),
     m_width(0),
     m_height(0),
     m_place_holder(true),
-    m_children_rows(0),
-    m_parents(),
-    m_children(),
-    m_primary_child(nullptr),
-    m_out_edges(),
     m_weight(LINE_CELL_HEIGHT)
 {
     assert(parent != 0 && child != 0);
@@ -646,7 +628,7 @@ void TechTreeLayout::Node::CreatePlaceHolder(std::vector<Node*>& nodes) {
             //                       << "  child_depth: " << child->m_depth;
             //DebugLogger() << "current_parent_node: " << current_parent_node
             //                       << " child: " << child;
-            Node* dummy_node = new Node(current_parent_node, child, nodes);
+            auto dummy_node = new Node(current_parent_node, child, nodes);
             //DebugLogger() << "new dummy node depth: " << dummy_node->m_depth;
             current_parent_node = dummy_node;
             //++dummy_nodes_added;
@@ -675,14 +657,14 @@ void TechTreeLayout::Node::DoLayout(std::vector<Column>& row_index, bool cat) {
     int index = 0;
     int count = 0;
     //check children
-    for(int i = m_children.size(); i --> 0;) {
+    for (int i = m_children.size(); i --> 0;) {
         if (m_children[i]->m_row != -1) {
             index += m_children[i]->m_row;
             count++;
         }
     }
     //check parents
-    for(int i = m_parents.size(); i --> 0;) {
+    for (int i = m_parents.size(); i --> 0;) {
         if (m_parents[i]->m_row != -1) {
             index += m_parents[i]->m_row;
             count++;
@@ -711,7 +693,7 @@ void TechTreeLayout::Node::CreateEdges(double x_margin, double column_width, dou
         const std::string& to = next->m_tech;
         //create drawing path
         next = m_children[i];
-        Edge* edge = new Edge(m_tech, to);
+        auto edge = new Edge(m_tech, to);
         //from, line start
         edge->AddPoint(m_x, m_y + m_height / 2); // start on the left side of the node
         edge->AddPoint(m_x + m_width + x_margin, m_y + m_height / 2);

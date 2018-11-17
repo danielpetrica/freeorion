@@ -11,9 +11,9 @@
 #include "../universe/System.h"
 #include "../universe/Species.h"
 #include "../util/Directories.h"
+#include "../util/base64_filter.h"
 #include "../util/i18n.h"
 #include "../util/Logger.h"
-#include "../util/MultiplayerCommon.h"
 #include "../util/OptionsDB.h"
 #include "../util/Order.h"
 #include "../util/OrderSet.h"
@@ -36,24 +36,6 @@
 #include <boost/iostreams/stream.hpp>
 #include <boost/thread.hpp>
 
-// HACK: The following two includes work around a bug in boost 1.56,
-// which uses them without including.
-#include <boost/version.hpp>
-#if BOOST_VERSION == 105600
-#include <boost/serialization/singleton.hpp> // This
-#include <boost/serialization/extended_type_info.hpp> //This
-#endif
-// HACK: For a similar boost 1.57 bug
-#if BOOST_VERSION == 105700
-#include <boost/serialization/type_info_implementation.hpp> // This
-#endif
-
-#if BOOST_VERSION == 105800
-// HACK: The following two includes work around a bug in boost 1.58
-#include <boost/serialization/type_info_implementation.hpp>
-#include <boost/archive/basic_archive.hpp>
-#endif
-
 #include <boost/serialization/shared_ptr.hpp>
 
 
@@ -62,7 +44,7 @@ namespace fs = boost::filesystem;
 namespace {
     std::map<int, SaveGameEmpireData> CompileSaveGameEmpireData(const EmpireManager& empire_manager) {
         std::map<int, SaveGameEmpireData> retval;
-        for (const std::map<int, Empire*>::value_type& entry : Empires())
+        for (const auto& entry : Empires())
             retval[entry.first] = SaveGameEmpireData(entry.first, entry.second->Name(), entry.second->PlayerName(), entry.second->Color());
         return retval;
     }
@@ -103,7 +85,7 @@ namespace {
             preview.number_of_human_players = humans;
 
             // Find the empire of the player, if it has one
-            std::map<int, SaveGameEmpireData>::const_iterator empire = empire_save_game_data.find(player->m_empire_id);
+            auto empire = empire_save_game_data.find(player->m_empire_id);
             if (empire != empire_save_game_data.end()) {
                 preview.main_player_empire_name = empire->second.m_empire_name;
                 preview.main_player_empire_colour = empire->second.m_color;
@@ -114,6 +96,7 @@ namespace {
     const std::string UNABLE_TO_OPEN_FILE("Unable to open file");
 
     const std::string XML_COMPRESSED_MARKER("zlib-xml");
+    const std::string XML_COMPRESSED_BASE64_MARKER("zb64-xml");
     const std::string XML_DIRECT_MARKER("raw-xml");
     const std::string BINARY_MARKER("binary");
 }
@@ -126,8 +109,8 @@ int SaveGame(const std::string& filename, const ServerSaveGameData& server_save_
 {
     ScopedTimer timer("SaveGame: " + filename, true);
 
-    bool use_binary = GetOptionsDB().Get<bool>("binary-serialization");
-    bool use_zlib_for_zml = GetOptionsDB().Get<bool>("xml-zlib-serialization");
+    bool use_binary = GetOptionsDB().Get<bool>("save.format.binary.enabled");
+    bool use_zlib_for_zml = GetOptionsDB().Get<bool>("save.format.xml.zlib.enabled");
     DebugLogger() << "SaveGame(" << (use_binary ? "binary" : (use_zlib_for_zml ? "zlib-xml" : "raw-xml")) << ") filename: " << filename;
     GetUniverse().EncodingEmpire() = ALL_EMPIRES;
 
@@ -150,16 +133,29 @@ int SaveGame(const std::string& filename, const ServerSaveGameData& server_save_
 
     try {
         fs::path path = FilenameToPath(filename);
+
         // A relative path should be relative to the save directory.
         if (path.is_relative()) {
-            path = GetSaveDir() / path;
+            path = (multiplayer ? GetServerSaveDir() : GetSaveDir()) / path;
             DebugLogger() << "Made save path relative to save dir. Is now: " << path;
         }
 
         if (multiplayer) {
             // Make sure the path points into our save directory
-            if (!IsInside(path, GetSaveDir())) {
-                path = GetSaveDir() / path.filename();
+            if (!IsInDir(GetServerSaveDir(), path.parent_path())) {
+                WarnLogger() << "Path \"" << path << "\" is not in server save directory.";
+                path = GetServerSaveDir() / path.filename();
+                WarnLogger() << "Path changed to \"" << path << "\"";
+            } else {
+                try {
+                    // ensure save directory exists
+                    if (!exists(path.parent_path())) {
+                        WarnLogger() << "Creating save directories " << path.parent_path().string();
+                        boost::filesystem::create_directories(path.parent_path());
+                    }
+                } catch (const std::exception& e) {
+                    ErrorLogger() << "Server unable to check / create save directory: " << e.what();
+                }
             }
         }
 
@@ -180,7 +176,7 @@ int SaveGame(const std::string& filename, const ServerSaveGameData& server_save_
                     // then contains a string for compressed second archive
                     // that contains the main gamestate info
                     save_preview_data.SetBinary(false);
-                    save_preview_data.save_format_marker = XML_COMPRESSED_MARKER;
+                    save_preview_data.save_format_marker = XML_COMPRESSED_BASE64_MARKER;
 
                     // allocate buffers for serialized gamestate
                     DebugLogger() << "Allocating buffers for XML serialization...";
@@ -202,14 +198,17 @@ int SaveGame(const std::string& filename, const ServerSaveGameData& server_save_
                     InsertDevice serial_inserter(serial_str);
                     boost::iostreams::stream<InsertDevice> s_sink(serial_inserter);
 
-                    // create archive with (preallocated) buffer...
-                    freeorion_xml_oarchive xoa(s_sink);
-                    // serialize main gamestate info
-                    xoa << BOOST_SERIALIZATION_NVP(player_save_game_data);
-                    xoa << BOOST_SERIALIZATION_NVP(empire_manager);
-                    xoa << BOOST_SERIALIZATION_NVP(species_manager);
-                    xoa << BOOST_SERIALIZATION_NVP(combat_log_manager);
-                    Serialize(xoa, universe);
+                    {
+                        // create archive with (preallocated) buffer...
+                        freeorion_xml_oarchive xoa(s_sink);
+                        // serialize main gamestate info
+                        xoa << BOOST_SERIALIZATION_NVP(player_save_game_data);
+                        xoa << BOOST_SERIALIZATION_NVP(empire_manager);
+                        xoa << BOOST_SERIALIZATION_NVP(species_manager);
+                        xoa << BOOST_SERIALIZATION_NVP(combat_log_manager);
+                        Serialize(xoa, universe);
+                    }
+
                     s_sink.flush();
 
                     // wrap gamestate string in iostream::stream to extract serialized data
@@ -224,6 +223,7 @@ int SaveGame(const std::string& filename, const ServerSaveGameData& server_save_
                     // compression-filter gamestate into compressed string
                     boost::iostreams::filtering_ostreambuf o;
                     o.push(boost::iostreams::zlib_compressor());
+                    o.push(boost::iostreams::base64_encoder());
                     o.push(c_sink);
                     boost::iostreams::copy(s_source, o);
                     c_sink.flush();
@@ -315,7 +315,7 @@ void LoadGame(const std::string& filename, ServerSaveGameData& server_save_game_
 
     // player notifications
     if (ServerApp* server = ServerApp::GetApp())
-        server->Networking().SendMessage(TurnProgressMessage(Message::LOADING_GAME));
+        server->Networking().SendMessageAll(TurnProgressMessage(Message::LOADING_GAME));
 
     GetUniverse().EncodingEmpire() = ALL_EMPIRES;
 
@@ -378,6 +378,8 @@ void LoadGame(const std::string& filename, ServerSaveGameData& server_save_game_
 
             } else {
                 // assume compressed XML
+                if (BOOST_VERSION >= 106600 && ignored_save_preview_data.save_format_marker == XML_COMPRESSED_MARKER)
+                    throw std::invalid_argument("Save Format Not Compatible with Boost Version " BOOST_LIB_VERSION);
 
                 // allocate buffers for compressed and deceompressed serialized gamestate
                 DebugLogger() << "Allocating buffers for XML deserialization...";
@@ -415,6 +417,8 @@ void LoadGame(const std::string& filename, ServerSaveGameData& server_save_game_
                 // set up filter to decompress data
                 boost::iostreams::filtering_istreambuf i;
                 i.push(boost::iostreams::zlib_decompressor());
+                if (ignored_save_preview_data.save_format_marker == XML_COMPRESSED_BASE64_MARKER)
+                    i.push(boost::iostreams::base64_decoder());
                 i.push(c_source);
                 boost::iostreams::copy(i, s_sink);
                 // The following line has been commented out because it caused an assertion in boost iostreams to fail
@@ -525,10 +529,12 @@ void LoadPlayerSaveHeaderData(const std::string& filename, std::vector<PlayerSav
     }
 }
 
-void LoadEmpireSaveGameData(const std::string& filename, std::map<int, SaveGameEmpireData>& empire_save_game_data) {
+void LoadEmpireSaveGameData(const std::string& filename,
+                            std::map<int, SaveGameEmpireData>& empire_save_game_data,
+                            std::vector<PlayerSaveHeaderData>& player_save_header_data)
+{
     SaveGamePreviewData                 ignored_save_preview_data;
     ServerSaveGameData                  ignored_server_save_game_data;
-    std::vector<PlayerSaveHeaderData>   ignored_player_save_header_data;
     GalaxySetupData                     ignored_galaxy_setup_data;
 
     ScopedTimer timer("LoadEmpireSaveGameData: " + filename, true);
@@ -548,7 +554,7 @@ void LoadEmpireSaveGameData(const std::string& filename, std::map<int, SaveGameE
             ia >> BOOST_SERIALIZATION_NVP(ignored_save_preview_data);
             ia >> BOOST_SERIALIZATION_NVP(ignored_galaxy_setup_data);
             ia >> BOOST_SERIALIZATION_NVP(ignored_server_save_game_data);
-            ia >> BOOST_SERIALIZATION_NVP(ignored_player_save_header_data);
+            ia >> BOOST_SERIALIZATION_NVP(player_save_header_data);
             ia >> BOOST_SERIALIZATION_NVP(empire_save_game_data);
 
         } catch (...) {
@@ -561,7 +567,7 @@ void LoadEmpireSaveGameData(const std::string& filename, std::map<int, SaveGameE
             ia >> BOOST_SERIALIZATION_NVP(ignored_save_preview_data);
             ia >> BOOST_SERIALIZATION_NVP(ignored_galaxy_setup_data);
             ia >> BOOST_SERIALIZATION_NVP(ignored_server_save_game_data);
-            ia >> BOOST_SERIALIZATION_NVP(ignored_player_save_header_data);
+            ia >> BOOST_SERIALIZATION_NVP(player_save_header_data);
             ia >> BOOST_SERIALIZATION_NVP(empire_save_game_data);
         }
         // skipping additional deserialization which is not needed for this function

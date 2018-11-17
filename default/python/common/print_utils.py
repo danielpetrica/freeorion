@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 """
 Print utils.
 
@@ -9,7 +11,7 @@ from itertools import izip_longest
 from math import ceil
 
 
-def print_in_columns(items, columns=2):
+def print_in_columns(items, columns=2, printer=print):
     """
     Prints collection as columns.
 
@@ -21,6 +23,8 @@ def print_in_columns(items, columns=2):
     :type items: list|tuple
     :param columns: number of columns
     :type columns: int
+    :param printer: function to print result
+    :type printer: (str) -> None
     :return None:
     """
     row_count = int(ceil((float(len(items)) / columns)))
@@ -29,7 +33,7 @@ def print_in_columns(items, columns=2):
     template = '   '.join('%%-%ss' % w for w in column_widths)
 
     for row in zip(*text_columns):
-        print template % row
+        printer(template % row)
 
 
 class Base(object):
@@ -141,6 +145,9 @@ class Table(object):
         self.__rows = []
         self.__headers = headers
 
+    def __str__(self):
+        return self.get_table()
+
     def add_row(self, row):
         self.__rows.append(tuple(h.to_unicode(cell) for h, cell in zip(self.__headers, row)))
 
@@ -151,9 +158,6 @@ class Table(object):
                        2
                        )
 
-    def print_table(self):
-        print self.get_table()
-
     def get_table(self):
         columns = [[len(y) for y in x] for x in zip(*self.__rows)]
         # join size of headers and columns, since columns can be empty
@@ -163,7 +167,7 @@ class Table(object):
         result = []
 
         if self.__table_name:
-            result.append(self.__table_name)
+            result.append(self.__table_name.decode('utf-8'))
 
         result.append(self.__get_row_separator(self.__header_sep, column_widths))
         inner_separator = ' %s ' % self.__vertical_sep

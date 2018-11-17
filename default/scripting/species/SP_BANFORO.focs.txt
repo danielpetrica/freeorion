@@ -19,6 +19,7 @@ Species
     effectsgroups = [
         [[GOOD_INDUSTRY]]
         [[AVERAGE_RESEARCH]]
+        [[AVERAGE_STOCKPILE]]
 
         [[AVERAGE_POPULATION]]
         [[AVERAGE_HAPPINESS]]
@@ -35,7 +36,8 @@ Species
                 Star type = [Blue]
             ]
             accountinglabel = "VERY_BRIGHT_STAR"
-            effects = SetTargetPopulation value = Value - 2 * Source.SizeAsDouble
+            priority = [[TARGET_POPULATION_AFTER_SCALING_PRIORITY]]
+            effects = SetTargetPopulation value = Value - 2 * Source.HabitableSize
 
         EffectsGroup
             scope = Source
@@ -44,7 +46,8 @@ Species
                 Star type = [White]
             ]
             accountinglabel = "BRIGHT_STAR"
-            effects = SetTargetPopulation value = Value - Source.SizeAsDouble
+            priority = [[TARGET_POPULATION_AFTER_SCALING_PRIORITY]]
+            effects = SetTargetPopulation value = Value - Source.HabitableSize
 
         // not for description
         [[AVERAGE_PLANETARY_SHIELDS]]

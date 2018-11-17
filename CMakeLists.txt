@@ -1,10 +1,20 @@
-cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
+if(APPLE)
+    cmake_minimum_required(VERSION 3.4 FATAL_ERROR)
+else()
+    cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
+endif()
+
+cmake_policy(SET CMP0042 NEW)
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_HOME_DIRECTORY}/cmake ${CMAKE_HOME_DIRECTORY}/GG/cmake)
 set(CMAKE_OSX_DEPLOYMENT_TARGET 10.9 CACHE STRING "Set the minimum OSX deployment target version")
-set(CMAKE_OSX_ARCHITECTURES i386 CACHE STRING "Set the architecture the universal binaries for OSX should be built for")
+set(CMAKE_OSX_ARCHITECTURES x86_64 CACHE STRING "Set the architecture the universal binaries for OSX should be built for")
 
-set(CMAKE_CONFIGURATION_TYPES Debug Release)
+IF(CMAKE_GENERATOR STREQUAL "Xcode")
+  set(CMAKE_CONFIGURATION_TYPES Release)
+ELSE()
+  set(CMAKE_CONFIGURATION_TYPES Debug Release)
+ENDIF()
 IF(NOT CMAKE_BUILD_TYPE)
   MESSAGE(STATUS "Setting build type to 'Release' as none was specified.")
   SET(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
@@ -14,6 +24,8 @@ ENDIF(NOT CMAKE_BUILD_TYPE)
 
 message(STATUS "Build type CMAKE_BUILD_TYPE set to ${CMAKE_BUILD_TYPE}")
 
+include(UseCompilerCache)
+find_compiler_cache(PROGRAM ccache)
 
 ##
 ## Global project configuration
@@ -21,18 +33,20 @@ message(STATUS "Build type CMAKE_BUILD_TYPE set to ${CMAKE_BUILD_TYPE}")
 
 project(FreeOrion)
 
+use_compiler_cache_with_xcode()
+
 include(GNUInstallDirs)
 include(UseCodeCoverage)
 include(TargetDependencies)
 
-set(FreeOrion_VERSION 0.4.7+)
+set(FreeOrion_VERSION 0.4.8+)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(BUILD_SHARED_LIBS "Build project as shared libraries." ON)
 option(BUILD_TESTING "Build the testing tree." OFF)
-option(FO_LINK_STATIC_BOOST_LIBS "Link static boost libraries." ${APPLE})
-
+option(BUILD_HEADLESS "Build only headless components: server and AI." OFF)
 
 if(BUILD_TESTING)
     message( STATUS "Building Tests")
@@ -61,9 +75,28 @@ if(WIN32)
 endif()
 
 if(APPLE)
+    set(FreeOrionSDK_VERSION 10)
+    set(FreeOrionSDK_FILE "FreeOrionSDK_${FreeOrionSDK_VERSION}_Clang-MacOSX-10.9-x86_64.tar.bz2")
+    if(NOT EXISTS "${CMAKE_BINARY_DIR}/${FreeOrionSDK_FILE}")
+    file(DOWNLOAD
+            "https://github.com/freeorion/freeorion-sdk/releases/download/v${FreeOrionSDK_VERSION}/${FreeOrionSDK_FILE}"
+            "${CMAKE_BINARY_DIR}/${FreeOrionSDK_FILE}"
+            SHOW_PROGRESS
+        )
+    endif()
+    set(FreeOrionSDK_INSTALL_VERSION 0)
+    if(EXISTS "${CMAKE_BINARY_DIR}/dep/sdkversion")
+        file(READ "${CMAKE_BINARY_DIR}/dep/sdkversion" FreeOrionSDK_INSTALL_VERSION)
+    endif()
+    if(NOT "${FreeOrionSDK_VERSION}" EQUAL "${FreeOrionSDK_INSTALL_VERSION}")
+        file(REMOVE_RECURSE "${CMAKE_BINARY_DIR}/dep")
+        file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/dep")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E tar xfj "${CMAKE_BINARY_DIR}/${FreeOrionSDK_FILE}" WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/dep")
+        file(WRITE "${CMAKE_BINARY_DIR}/dep/sdkversion" "${FreeOrionSDK_VERSION}")
+    endif()
     # Location of the FreeOrionSDK root
-    set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/Xcode/dep/")
-    set(CMAKE_FRAMEWORK_PATH "${CMAKE_SOURCE_DIR}/Xcode/dep/Frameworks")
+    set(CMAKE_PREFIX_PATH "${CMAKE_BINARY_DIR}/dep/")
+    set(CMAKE_FRAMEWORK_PATH "${CMAKE_BINARY_DIR}/dep/Frameworks")
     set(CMAKE_PROGRAM_PATH "${CMAKE_FRAMEWORK_PATH}/Python.framework/Versions/Current/bin")
 endif()
 
@@ -71,8 +104,18 @@ if(UNIX)
     set(FreeOrion_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/freeorion")
 endif()
 
-set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${FreeOrion_INSTALL_LIBDIR}")
-set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+if(APPLE)
+    set(CMAKE_INSTALL_RPATH
+        "@loader_path/../SharedSupport"
+        "@loader_path/../Frameworks"
+    )
+    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+endif()
+
+if(NOT APPLE)
+    set(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/${FreeOrion_INSTALL_LIBDIR}")
+    set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+endif()
 
 add_compile_options(
     # Enable (almost) all warnings on compilers
@@ -121,6 +164,7 @@ set_property(DIRECTORY APPEND
         $<$<PLATFORM_ID:Darwin>:FREEORION_MACOSX>
         $<$<PLATFORM_ID:Linux>:FREEORION_LINUX>
         $<$<PLATFORM_ID:FreeBSD>:FREEORION_FREEBSD>
+        $<$<PLATFORM_ID:OpenBSD>:FREEORION_OPENBSD>
 )
 
 if(WIN32 AND MSVC)
@@ -136,7 +180,7 @@ if(APPLE)
 endif()
 
 if(UNIX AND NOT APPLE)
-    add_definitions(-DENABLE_BINRELOC)
+    add_definitions(-DENABLE_BINRELOC -DBINPATH=\"${CMAKE_INSTALL_FULL_BINDIR}\" -DSHAREPATH=\"${CMAKE_INSTALL_FULL_DATADIR}\")
 endif()
 
 
@@ -145,7 +189,7 @@ endif()
 ##
 
 set(MINIMUM_PYTHON_VERSION 2.7)
-set(MINIMUM_BOOST_VERSION 1.56.0)
+set(MINIMUM_BOOST_VERSION 1.58.0)
 
 find_package(Threads)
 find_package(PythonInterp ${MINIMUM_PYTHON_VERSION} REQUIRED)
@@ -157,25 +201,33 @@ find_package(Boost ${MINIMUM_BOOST_VERSION}
         iostreams
         locale
         log
+        log_setup
         regex
         serialization
-        python
-        signals
         system
         thread
     REQUIRED)
-find_package(ZLIB REQUIRED)
-find_package(Freetype REQUIRED)
-find_package(OpenGL REQUIRED)
-
-if(NOT OPENGL_GLU_FOUND)
-    message(FATAL_ERROR "OpenGL GLU library not found.")
+if(${Boost_VERSION} GREATER 106699) # boost >= 1.67
+    find_package(Boost COMPONENTS python27 REQUIRED)
+    set(Boost_PYTHON_LIBRARY ${Boost_PYTHON27_LIBRARY})
+else()
+    find_package(Boost COMPONENTS python REQUIRED)
 endif()
 
-find_package(SDL REQUIRED)
-find_package(OpenAL REQUIRED)
-find_package(Ogg REQUIRED)
-find_package(Vorbis REQUIRED)
+find_package(ZLIB REQUIRED)
+if(NOT BUILD_HEADLESS)
+    find_package(Freetype REQUIRED)
+    find_package(OpenGL REQUIRED)
+
+    if(NOT OPENGL_GLU_FOUND)
+        message(FATAL_ERROR "OpenGL GLU library not found.")
+    endif()
+
+    find_package(SDL REQUIRED)
+    find_package(OpenAL REQUIRED)
+    find_package(Ogg REQUIRED)
+    find_package(Vorbis REQUIRED)
+endif()
 
 if(APPLE)
     find_library(CORE_FOUNDATION_LIBRARY CoreFoundation)
@@ -186,12 +238,14 @@ if(BUILD_TESTING)
     add_subdirectory(test)
 endif()
 
-set(BUILD_DEVEL_PACKAGE OFF CACHE INTERNAL "Disables installation of GiGi development files." FORCE)
-set(_ORIG_CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
-set(CMAKE_INSTALL_LIBDIR "${FreeOrion_INSTALL_LIBDIR}")
-add_subdirectory(GG)
-set(CMAKE_INSTALL_LIBDIR ${_ORIG_CMAKE_INSTALL_LIBDIR})
-unset(_ORIG_CMAKE_INSTALL_LIBDIR)
+if(NOT BUILD_HEADLESS)
+    set(BUILD_DEVEL_PACKAGE OFF CACHE INTERNAL "Disables installation of GiGi development files." FORCE)
+    set(_ORIG_CMAKE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(CMAKE_INSTALL_LIBDIR "${FreeOrion_INSTALL_LIBDIR}")
+    add_subdirectory(GG)
+    set(CMAKE_INSTALL_LIBDIR ${_ORIG_CMAKE_INSTALL_LIBDIR})
+    unset(_ORIG_CMAKE_INSTALL_LIBDIR)
+endif()
 
 set_property(DIRECTORY APPEND
     PROPERTY COMPILE_DEFINITIONS
@@ -205,16 +259,15 @@ set_property(DIRECTORY APPEND
         # http://www.boost.org/doc/libs/1_59_0/boost/iostreams/detail/config/zlib.hpp
         $<$<PLATFORM_ID:Windows>:BOOST_ZLIB_BINARY=zlib.lib>
 
-        # Link all boost libraries dynamically unless the user requests
-        # otherwise.
+        # Link all boost libraries dynamically
         # http://www.boost.org/doc/libs/1_59_0/libs/config/doc/html/index.html#boost_config.configuring_boost_for_your_platform.user_settable_options
-        $<$<NOT:$<BOOL:${FO_LINK_STATIC_BOOST_LIBS}>>:BOOST_ALL_DYN_LINK>
+        BOOST_ALL_DYN_LINK
 
         # with boost 1.61 some boost::optional internals were changed. However
         # boost::spirit relies on some API the old implementation provided.
         # This define enables the usage of the old boost::optional
         # implementation.  Boost upstream tracks this bug as #12349
-        $<$<VERSION_GREATER:${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION},1.60>:BOOST_OPTIONAL_CONFIG_USE_OLD_IMPLEMENTATION_OF_OPTIONAL>
+        $<$<AND:$<VERSION_GREATER:${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION},1.60>,$<VERSION_LESS:${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION},1.67>>:BOOST_OPTIONAL_CONFIG_USE_OLD_IMPLEMENTATION_OF_OPTIONAL>
 
         # We don't need localized output of Boost date_time and not setting
         # the define causes the inclusion of code, which contains std::tolower.
@@ -223,10 +276,6 @@ set_property(DIRECTORY APPEND
         # fixed this with python bug #10910
         $<$<PLATFORM_ID:Darwin>:BOOST_DATE_TIME_NO_LOCALE>
         $<$<PLATFORM_ID:FreeBSD>:BOOST_DATE_TIME_NO_LOCALE>
-)
-
-link_directories(
-    ${Boost_LIBRARY_DIRS}
 )
 
 
@@ -249,6 +298,14 @@ set_source_files_properties(
     PROPERTIES
     GENERATED TRUE
 )
+
+if(Apple)
+    set_source_files_properties(
+        "${CMAKE_CURRENT_SOURCE_DIR}/Xcode/Info.plist"
+        PROPERTIES
+        GENERATED TRUE
+    )
+endif()
 
 
 add_library(freeorioncommon "")
@@ -293,10 +350,11 @@ target_link_libraries(freeorioncommon
     ${Boost_DATE_TIME_LIBRARY}
     ${Boost_FILESYSTEM_LIBRARY}
     ${Boost_IOSTREAMS_LIBRARY}
+    ${Boost_LOCALE_LIBRARY}
     ${Boost_LOG_LIBRARY}
+    ${Boost_LOG_SETUP_LIBRARY}
     ${Boost_REGEX_LIBRARY}
     ${Boost_SERIALIZATION_LIBRARY}
-    ${Boost_SIGNALS_LIBRARY}
     ${Boost_SYSTEM_LIBRARY}
     ${Boost_THREAD_LIBRARY}
     ${ZLIB_LIBRARIES}
@@ -357,10 +415,10 @@ if(APPLE)
     # source code files associated and only links the freeorionparselib
     # objects into a shared library.  Adding an empty file fixes this.
     # https://cmake.org/cmake/help/v3.0/command/add_library.html
-    file(WRITE xcode_dummy.cpp "")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/xcode_dummy.cpp" "")
     target_sources(freeorionparse
         PRIVATE
-            xcode_dummy.cpp
+            "${CMAKE_CURRENT_BINARY_DIR}/xcode_dummy.cpp"
     )
 
     set_target_properties(freeorionparse
@@ -404,6 +462,8 @@ target_link_libraries(freeoriond
     freeorionparse
     ${PYTHON_LIBRARIES}
     ${Boost_PYTHON_LIBRARY}
+    ${Boost_LOG_LIBRARY}
+    ${Boost_LOG_SETUP_LIBRARY}
     ${CMAKE_THREAD_LIBS_INIT}
 )
 
@@ -445,80 +505,176 @@ target_link_libraries(freeorionca
     freeorionparse
     ${PYTHON_LIBRARIES}
     ${Boost_PYTHON_LIBRARY}
+    ${Boost_LOG_LIBRARY}
+    ${Boost_LOG_SETUP_LIBRARY}
     ${CMAKE_THREAD_LIBS_INIT}
 )
 
 target_dependencies_copy_to_build(freeorionca)
 target_dependent_data_symlink_to_build(freeorionca ${PROJECT_SOURCE_DIR}/default)
 
+if(NOT BUILD_HEADLESS)
+    add_executable(freeorion "")
 
-add_executable(freeorion "")
-
-if(WIN32)
-    set_property(TARGET freeorion
-        PROPERTY
-            OUTPUT_NAME FreeOrion
-    )
-    if(MSVC AND (CMAKE_VERSION VERSION_GREATER "3.6"))
-        set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    if(WIN32)
+        set_property(TARGET freeorion
             PROPERTY
-                VS_STARTUP_PROJECT freeorion
+                OUTPUT_NAME FreeOrion
+        )
+        if(MSVC AND (CMAKE_VERSION VERSION_GREATER "3.6"))
+            set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                PROPERTY
+                    VS_STARTUP_PROJECT freeorion
+            )
+        endif()
+    endif()
+
+    if(APPLE)
+        set_property(TARGET freeorion
+            PROPERTY
+                OUTPUT_NAME FreeOrion
+        )
+
+        list(APPEND FREEORION_ASSETS
+            Changelog.md
+            default
+            Xcode/FreeOrion.icns
+            Xcode/main.xib
+        )
+        target_sources(freeorion
+            PRIVATE
+                ${FREEORION_ASSETS}
+        )
+        set_property(
+            SOURCE
+                ${FREEORION_ASSETS}
+            PROPERTY
+                MACOSX_PACKAGE_LOCATION "Resources/"
+        )
+        # Workaround for creating the initial Info.plist, which needs to exist
+        # at configuration time.
+        execute_process(
+            COMMAND
+            "${PYTHON_EXECUTABLE}"
+            "${CMAKE_SOURCE_DIR}/cmake/make_versioncpp.py"
+            "${CMAKE_SOURCE_DIR}"
+            "CMake"
+        )
+        set_target_properties(freeorion
+            PROPERTIES
+                MACOSX_BUNDLE TRUE
+                MACOSX_BUNDLE_BUNDLE_NAME "${PROJECT_NAME}"
+                MACOSX_BUNDLE_INFO_PLIST "${PROJECT_SOURCE_DIR}/Xcode/Info.plist"
+                RESOURCE "${PROJECT_SOURCE_DIR}/Xcode/main.xib"
         )
     endif()
+
+    target_compile_options(freeorion
+        PRIVATE
+            $<$<CXX_COMPILER_ID:GNU>:-fvisibility=hidden>
+            $<$<CXX_COMPILER_ID:Clang>:-fvisibility=hidden>
+            $<$<CXX_COMPILER_ID:AppleClang>:-fvisibility=hidden>
+    )
+
+    target_compile_definitions(freeorion
+        PRIVATE
+            -DFREEORION_BUILD_HUMAN
+    )
+
+    target_include_directories(freeorion SYSTEM
+        PRIVATE
+            ${Boost_INCLUDE_DIRS}
+            ${OPENGL_INCLUDE_DIR}
+            ${GLEW_INCLUDE_DIRS}
+            ${SDL_INCLUDE_DIR}
+            ${OPENAL_INCLUDE_DIR}
+            ${OGG_INCLUDE_DIRS}
+            ${VORBIS_INCLUDE_DIRS}
+            ${FREETYPE_INCLUDE_DIRS}
+            ${ZLIB_INCLUDE_DIRS}
+            ${PROJECT_SOURCE_DIR}/GG
+    )
+
+    if(WIN32)
+        target_sources(freeorion
+            PRIVATE
+                ${CMAKE_CURRENT_LIST_DIR}/FreeOrion.ico
+        )
+    endif()
+
+    target_link_libraries(freeorion
+        freeorioncommon
+        freeorionparse
+        GiGi
+        GiGiSDL
+        ${OPENGL_gl_LIBRARY}
+        ${OPENGL_glu_LIBRARY}
+        ${OPENAL_LIBRARY}
+        ${SDL_LIBRARIES}
+        ${OGG_LIBRARIES}
+        ${VORBIS_LIBRARIES}
+        ${ZLIB_LIBRARIES}
+        ${Boost_LOCALE_LIBRARY}
+        ${Boost_LOG_LIBRARY}
+        ${Boost_LOG_SETUP_LIBRARY}
+        ${ICONV_LIBRARY}
+        ${CMAKE_THREAD_LIBS_INIT}
+    )
+
+    target_dependencies_copy_to_build(freeorion)
+    target_dependent_data_symlink_to_build(freeorion ${PROJECT_SOURCE_DIR}/default)
 endif()
 
-target_compile_options(freeorion
-    PRIVATE
-        $<$<CXX_COMPILER_ID:GNU>:-fvisibility=hidden>
-        $<$<CXX_COMPILER_ID:Clang>:-fvisibility=hidden>
-        $<$<CXX_COMPILER_ID:AppleClang>:-fvisibility=hidden>
-)
-
-target_compile_definitions(freeorion
-    PRIVATE
-        -DFREEORION_BUILD_HUMAN
-)
-
-target_include_directories(freeorion SYSTEM
-    PRIVATE
-        ${Boost_INCLUDE_DIRS}
-        ${OPENGL_INCLUDE_DIR}
-        ${GLEW_INCLUDE_DIRS}
-        ${SDL_INCLUDE_DIRS}
-        ${OPENAL_INCLUDE_DIR}
-        ${OGG_INCLUDE_DIRS}
-        ${VORBIS_INCLUDE_DIRS}
-        ${FREETYPE_INCLUDE_DIRS}
-        ${ZLIB_INCLUDE_DIRS}
-        ${PROJECT_SOURCE_DIR}/GG
-)
-
-if(WIN32)
-    target_sources(freeorion
-        PRIVATE
-            ${CMAKE_CURRENT_LIST_DIR}/FreeOrion.ico
+if(APPLE)
+    add_custom_command(TARGET freeorion POST_BUILD
+        COMMAND
+            ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:freeorion>/../Executables"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:freeorionca>" "$<TARGET_FILE_DIR:freeorion>/../Executables"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:freeoriond>" "$<TARGET_FILE_DIR:freeorion>/../Executables"
+        COMMAND
+            ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:freeorioncommon>" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:freeorionparse>" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+            ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:GiGi>" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:GiGiSDL>" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_ATOMIC_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_CHRONO_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_DATE_TIME_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_FILESYSTEM_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_IOSTREAMS_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_LOCALE_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_LOG_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_LOG_SETUP_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_REGEX_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_PYTHON_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_SERIALIZATION_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_SYSTEM_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E copy_if_different "${Boost_THREAD_LIBRARY}" "$<TARGET_FILE_DIR:freeorion>/../SharedSupport"
+        COMMAND
+           ${CMAKE_COMMAND} -E remove_directory "$<TARGET_FILE_DIR:freeorion>/../Frameworks"
+        COMMAND
+           cp -R "${CMAKE_FRAMEWORK_PATH}" "$<TARGET_FILE_DIR:freeorion>/.."
     )
 endif()
-
-target_link_libraries(freeorion
-    freeorioncommon
-    freeorionparse
-    GiGi
-    GiGiSDL
-    ${OPENGL_gl_LIBRARY}
-    ${OPENGL_glu_LIBRARY}
-    ${OPENAL_LIBRARY}
-    ${SDL_LIBRARIES}
-    ${OGG_LIBRARIES}
-    ${VORBIS_LIBRARIES}
-    ${ZLIB_LIBRARIES}
-    ${Boost_LOCALE_LIBRARY}
-    ${ICONV_LIBRARY}
-    ${CMAKE_THREAD_LIBS_INIT}
-)
-
-target_dependencies_copy_to_build(freeorion)
-target_dependent_data_symlink_to_build(freeorion ${PROJECT_SOURCE_DIR}/default)
 
 
 ##
@@ -533,7 +689,9 @@ add_subdirectory(network)
 add_subdirectory(parse)
 add_subdirectory(python)
 add_subdirectory(server)
-add_subdirectory(UI)
+if(NOT BUILD_HEADLESS)
+    add_subdirectory(UI)
+endif()
 add_subdirectory(universe)
 add_subdirectory(util)
 add_subdirectory(check)
@@ -544,57 +702,74 @@ add_subdirectory(doc)
 ## Install targets and package project.
 ##
 
-install(
-    TARGETS
-        freeorioncommon
-        freeorionparse
-    LIBRARY DESTINATION ${FreeOrion_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
-install(
-    TARGETS
-        freeoriond
-        freeorionca
-        freeorion
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
-
-install(
-    DIRECTORY default/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/freeorion/default
-    PATTERN "*~" EXCLUDE
-    PATTERN "*.pyc" EXCLUDE
-)
-
-install(
-    FILES
-    ${CMAKE_SOURCE_DIR}/freeorion.desktop
-    DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications
-)
-
-foreach(SIZE 16 24 32 64 128 256)
+if(UNIX AND NOT BUILD_HEADLESS)
     install(
-        FILES
-        ${CMAKE_SOURCE_DIR}/default/data/art/icons/FO_Icon_${SIZE}x${SIZE}.png
-        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${SIZE}x${SIZE}/apps/
-        RENAME freeorion.png
+        TARGETS
+	    freeorion
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        BUNDLE DESTINATION .
+        RESOURCE
     )
-endforeach()
+endif()
+
+if(UNIX AND NOT APPLE)
+    install(
+        TARGETS
+            freeorioncommon
+            freeorionparse
+        LIBRARY DESTINATION ${FreeOrion_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+
+    install(
+        TARGETS
+            freeoriond
+            freeorionca
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        BUNDLE DESTINATION .
+    )
+
+    if(NOT BUILD_HEADLESS)
+        install(
+            FILES
+            ${CMAKE_SOURCE_DIR}/freeorion.desktop
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/applications
+        )
+    endif()
+
+    install(
+        DIRECTORY default/
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/freeorion/default
+        PATTERN "*~" EXCLUDE
+        PATTERN "*.pyc" EXCLUDE
+    )
+
+    foreach(SIZE 16 24 32 64 128 256)
+        install(
+            FILES
+            ${CMAKE_SOURCE_DIR}/default/data/art/icons/FO_Icon_${SIZE}x${SIZE}.png
+            DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/${SIZE}x${SIZE}/apps/
+            RENAME freeorion.png
+        )
+    endforeach()
+endif()
 
 if(WIN32)
     install(
         FILES
         OpenAL32.dll
-        boost_date_time-vc90-mt-1_44.dll
-        boost_filesystem-vc90-mt-1_44.dll
-        boost_iostreams-vc90-mt-1_44.dll
-        boost_python-vc90-mt-1_44.dll
-        boost_regex-vc90-mt-1_44.dll
-        boost_serialization-vc90-mt-1_44.dll
-        boost_signals-vc90-mt-1_44.dll
-        boost_system-vc90-mt-1_44.dll
-        boost_thread-vc90-mt-1_44.dll
+        boost_chrono.dll
+        boost_date_time.dll
+        boost_filesystem.dll
+        boost_iostreams.dll
+        boost_locale.dll
+        boost_log.dll
+        boost_log_setup.dll
+        boost_python.dll
+        boost_regex.dll
+        boost_serialization.dll
+        boost_system.dll
+        boost_thread.dll
         glew32.dll
         libexpat.dll
         libogg.dll
@@ -615,9 +790,15 @@ set(CPACK_PACKAGE_VENDOR "FreeOrion Community")
 set(CPACK_PACKAGE_CONTACT http://freeorion.org/forum)
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "FreeOrion is a free, open source, turn-based space empire and galactic conquest (4X) computer game being designed and built by the FreeOrion project. FreeOrion is inspired by the tradition of the Master of Orion games, but is not a clone or remake of that series or any other game.")
 set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_SOURCE_DIR}/default/COPYING)
-set(CPACK_SYSTEM_NAME ${CMAKE_SYSTEM_NAME})
+if(NOT APPLE)
+    set(CPACK_SYSTEM_NAME ${CMAKE_SYSTEM_NAME})
+else()
+    set(CPACK_SYSTEM_NAME MacOSX)
+endif()
 if(WIN32)
     set(PACKAGE_FILE_SYSTEM_NAME win32)
+elseif(APPLE)
+    set(PACKAGE_FILE_SYSTEM_NAME ${CPACK_SYSTEM_NAME}_${CMAKE_OSX_DEPLOYMENT_TARGET})
 else()
     set(PACKAGE_FILE_SYSTEM_NAME ${CPACK_SYSTEM_NAME})
 endif()
@@ -636,7 +817,13 @@ set(CPACK_RPM_PACKAGE_REQUIRES)
 # Deb-specific settings
 set(CPACK_DEBIAN_PACKAGE_SECTION games)
 
-if(UNIX)
+# DMG-specific settings
+set(CPACK_DMG_VOLUME_NAME "${CMAKE_PROJECT_NAME}")
+set(CPACK_DMG_FORMAT UDZO)
+
+if(APPLE)
+    set(CPACK_GENERATOR DragNDrop)
+elseif(UNIX)
     set(CPACK_GENERATOR TGZ TBZ2)
     find_program(RPMBUILD rpmbuild)
     if(RPMBUILD)

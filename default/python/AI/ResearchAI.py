@@ -1,20 +1,19 @@
-from functools import partial
 import math
 import random
-import sys
-import traceback
+from functools import partial
+from logging import warn, debug
 
 import freeOrionAIInterface as fo  # pylint: disable=import-error
-import FreeOrionAI as foAI
+from common.print_utils import print_in_columns
+
 import AIDependencies as Dep
 import AIstate
 import ColonisationAI
-import ProductionAI
+from aistate_interface import get_aistate
 import ShipDesignAI
 import TechsListsAI
+from freeorion_tools import chat_human, get_ai_tag_grade, tech_is_complete
 from turn_state import state
-from freeorion_tools import tech_is_complete, get_ai_tag_grade, chat_human
-from common.print_utils import print_in_columns
 
 inProgressTechs = {}
 
@@ -31,6 +30,7 @@ class Choices(object):
         self.extra_robotic_hull = rng.random() < 0.05
         self.extra_asteroid_hull = rng.random() < 0.05
         self.extra_energy_hull = rng.random() < 0.05
+
 
 empire_stars = {}
 research_reqs = {}
@@ -58,11 +58,11 @@ HIGH = 42
 
 # TODO research AI no longer use this method, rename and move this method elsewhere
 def get_research_index():
-    return foAI.foAIstate.character.get_research_index()
+    return get_aistate().character.get_research_index()
 
 
 def has_low_aggression():
-    return foAI.foAIstate.character.prefer_research_low_aggression()
+    return get_aistate().character.prefer_research_low_aggression()
 
 
 def conditional_priority(func_if_true, func_if_false, cond_func):
@@ -83,7 +83,7 @@ def conditional_priority(func_if_true, func_if_false, cond_func):
 
 def get_main_ship_designer_list():
     if not MAIN_SHIP_DESIGNER_LIST:
-        MAIN_SHIP_DESIGNER_LIST.extend([ShipDesignAI.MilitaryShipDesigner(), ShipDesignAI.StandardTroopShipDesigner(),
+        MAIN_SHIP_DESIGNER_LIST.extend([ShipDesignAI.WarShipDesigner(), ShipDesignAI.StandardTroopShipDesigner(),
                                         ShipDesignAI.StandardColonisationShipDesigner()])
     return MAIN_SHIP_DESIGNER_LIST
 
@@ -120,7 +120,7 @@ def has_star(star_type):
 def if_enemies(true_val, false_val):
     return conditional_priority(true_val,
                                 false_val,
-                                cond_func=lambda: foAI.foAIstate.misc.get('enemies_sighted', {}))
+                                cond_func=lambda: get_aistate().misc.get('enemies_sighted', {}))
 
 
 def if_dict(this_dict, this_key, true_val, false_val):
@@ -176,7 +176,7 @@ def get_initial_research_target():
 def get_ship_tech_usefulness(tech, ship_designer):
     this_tech = fo.getTech(tech)
     if not this_tech:
-        print "Invalid Tech specified"
+        debug("Invalid Tech specified")
         return 0
     unlocked_items = this_tech.unlockedItems
     unlocked_hulls = []
@@ -212,18 +212,18 @@ def get_population_boost_priority(tech_name=""):
 def get_stealth_priority(tech_name=""):
     max_stealth_species = get_max_stealth_species()
     if max_stealth_species[1] > 0:
-        print "Has a stealthy species %s. Increase stealth tech priority for %s" % (max_stealth_species[0], tech_name)
+        debug("Has a stealthy species %s. Increase stealth tech priority for %s", max_stealth_species[0], tech_name)
         return 1.5
     else:
         return 0.1
 
 
 def get_xeno_genetics_priority(tech_name=""):
-    if not foAI.foAIstate.character.may_research_xeno_genetics_variances():
+    if not get_aistate().character.may_research_xeno_genetics_variances():
         return get_population_boost_priority()
     if has_only_bad_colonizers():
         # Empire only have lousy colonisers, xeno-genetics are really important for them
-        print "Empire has only lousy colonizers, increase priority to xeno_genetics"
+        debug("Empire has only lousy colonizers, increase priority to xeno_genetics")
         return get_population_boost_priority() * 3
     else:
         # TODO: assess number of planets with Adequate/Poor planets owned or considered for colonies
@@ -232,11 +232,11 @@ def get_xeno_genetics_priority(tech_name=""):
 
 def get_artificial_black_hole_priority(tech_name=""):
     if has_star(fo.starType.blackHole) or not has_star(fo.starType.red):
-        print "Already have black hole, or does not have a red star to turn to black hole. Skipping ART_BLACK_HOLE"
+        debug("Already have black hole, or does not have a red star to turn to black hole. Skipping ART_BLACK_HOLE")
         return 0
     for tech in Dep.SHIP_TECHS_REQUIRING_BLACK_HOLE:
         if tech_is_complete(tech):
-            print "Solar hull is researched, needs a black hole to produce it. Research ART_BLACK_HOLE now!"
+            debug("Solar hull is researched, needs a black hole to produce it. Research ART_BLACK_HOLE now!")
             return 999
     return 1
 
@@ -267,11 +267,11 @@ def get_hull_priority(tech_name):
         energy = 0
 
     useful = max(
-        get_ship_tech_usefulness(tech_name, ShipDesignAI.MilitaryShipDesigner()),
+        get_ship_tech_usefulness(tech_name, ShipDesignAI.WarShipDesigner()),
         get_ship_tech_usefulness(tech_name, ShipDesignAI.StandardTroopShipDesigner()),
         get_ship_tech_usefulness(tech_name, ShipDesignAI.StandardColonisationShipDesigner()))
 
-    if foAI.foAIstate.misc.get('enemies_sighted', {}):
+    if get_aistate().misc.get('enemies_sighted', {}):
         aggression = 1
     else:
         aggression = 0.1
@@ -348,7 +348,7 @@ def init():
     """
     choices.init()
     # prefixes for tech search. Check for prefix will be applied in same order as they defined
-    defensive = foAI.foAIstate.character.prefer_research_defensive()
+    defensive = get_aistate().character.prefer_research_defensive()
     prefixes = [
         (Dep.DEFENSE_TECHS_PREFIX, 2.0 if defensive else if_enemies(1.0, 0.2)),
         (Dep.WEAPON_PREFIX, ship_usefulness(if_enemies(1.0, 0.2), MIL_IDX))
@@ -367,7 +367,7 @@ def init():
         (Dep.UNRESEARCHABLE_TECHS, -1.0),
         (Dep.UNUSED_TECHS, ZERO),
         (Dep.THEORY_TECHS, ZERO),
-        (Dep.PRODUCTION_BOOST_TECHS, if_dict(ColonisationAI.empire_status, 'industrialists', 1.5, 0.6)),
+        (Dep.PRODUCTION_BOOST_TECHS, conditional_priority(1.5, 0.6, state.population_with_industry_focus())),
         (Dep.RESEARCH_BOOST_TECHS, if_tech_target(get_initial_research_target(), 2.1, 2.5)),
         (Dep.PRODUCTION_AND_RESEARCH_BOOST_TECHS, 2.5),
         (Dep.POPULATION_BOOST_TECHS, get_population_boost_priority),
@@ -406,7 +406,7 @@ def init():
                 priority_funcs[tech] = handler
                 break
         else:
-            print "Tech %s does not have a priority, falling back to default." % tech
+            debug("Tech %s does not have a priority, falling back to default." % tech)
             priority_funcs[tech] = DEFAULT_PRIORITY
 
 
@@ -414,12 +414,12 @@ def generate_research_orders():
     """Generate research orders."""
 
     if use_classic_research_approach():
-        print "Classical research approach is used"
+        debug("Classical research approach is used")
         generate_classic_research_orders()
         return
     else:
-        print 'New research approach is used'
-    
+        debug('New research approach is used')
+
     # initializing priority functions here within generate_research_orders() to avoid import race
     if not priority_funcs:
         init()
@@ -427,15 +427,15 @@ def generate_research_orders():
     empire = fo.getEmpire()
     empire_id = empire.empireID
     completed_techs = get_completed_techs()
-    print "Research Queue Management on turn %d:" % fo.currentTurn()
-    print "ColonisationAI survey:"
-    print '  have asteroids:', state.have_asteroids
-    print '  have gas giant:', state.have_gas_giant
-    print '  have ruins', state.have_ruins
+    debug("Research Queue Management on turn %d:", fo.currentTurn())
+    debug("ColonisationAI survey:")
+    debug('  have asteroids: %s', state.have_asteroids)
+    debug('  have gas giant: %s', state.have_gas_giant)
+    debug('  have ruins: %s', state.have_ruins)
 
     resource_production = empire.resourceProduction(fo.resourceType.research)
-    print "\nTotal Current Research Points: %.2f\n" % resource_production
-    print "Techs researched and available for use:"
+    debug("\nTotal Current Research Points: %.2f\n", resource_production)
+    debug("Techs researched and available for use:")
     print_in_columns(sorted(completed_techs))
 
     #
@@ -445,21 +445,21 @@ def generate_research_orders():
     research_queue_list = get_research_queue_techs()
     tech_turns_left = {}
     if research_queue_list:
-        print "Techs currently at head of Research Queue:"
+        debug("Techs currently at head of Research Queue:")
         for element in list(research_queue)[:10]:
             tech_turns_left[element.tech] = element.turnsLeft
             this_tech = fo.getTech(element.tech)
             if not this_tech:
-                print >> sys.stderr, "Can't retrieve tech ", element.tech
+                warn("Can't retrieve tech ", element.tech)
                 continue
             missing_prereqs = [preReq for preReq in this_tech.recursivePrerequisites(empire_id) if preReq not in completed_techs]
             # unlocked_items = [(uli.name, uli.type) for uli in this_tech.unlocked_items]
             unlocked_items = [uli.name for uli in this_tech.unlockedItems]
             if not missing_prereqs:
-                print "  %25s allocated %6.2f RP -- unlockable items: %s " % (element.tech, element.allocation, unlocked_items)
+                debug("  %25s allocated %6.2f RP -- unlockable items: %s", element.tech, element.allocation, unlocked_items)
             else:
-                print "  %25s allocated %6.2f RP -- missing preReqs: %s -- unlockable items: %s " % (element.tech, element.allocation, missing_prereqs, unlocked_items)
-        print
+                debug("  %25s allocated %6.2f RP -- missing preReqs: %s -- unlockable items: %s", element.tech, element.allocation, missing_prereqs, unlocked_items)
+        debug('')
 
     #
     # calculate all research priorities, as in get_priority(tech) / total cost of tech (including prereqs)
@@ -510,35 +510,33 @@ def generate_research_orders():
     possible.sort(key=priorities.__getitem__, reverse=True)
 
     missing_prereq_list = []
-    print "Research priorities"
-    print "  %-25s %8s %8s %8s %-25s %s" % ("Name", "Priority", "Cost", "Time", "As Prereq To", "Missing Prerequisties")
+    debug("Research priorities")
+    debug("  %-25s %8s %8s %8s %-25s %s", "Name", "Priority", "Cost", "Time", "As Prereq To", "Missing Prerequisties")
     for idx, tech_name in enumerate(possible[:20]):
         tech_info = research_reqs[tech_name]
-        print "  %-25s %8.4f %8.2f %8.2f %-25s %s" % (tech_name, priorities[tech_name], tech_info[1], tech_info[2], on_path_to.get(tech_name, ""), tech_info[0])
+        debug("  %-25s %8.4f %8.2f %8.2f %-25s %s", tech_name, priorities[tech_name], tech_info[1], tech_info[2], on_path_to.get(tech_name, ""), tech_info[0])
         missing_prereq_list.extend([prereq for prereq in tech_info[0] if prereq not in possible[:idx] and not tech_is_complete(prereq)])
-    print
+    debug('')
 
     if missing_prereq_list:
-        print 'Prerequirements seeming out of order:'
-        print "  %-25s %8s %8s %8s %8s %-25s %s" % ("Name", "Priority", "Base Prio", "Cost", "Time", "As Prereq To", "Missing Prerequisties")
+        debug('Prerequirements seeming out of order:')
+        debug("  %-25s %8s %8s %8s %8s %-25s %s", "Name", "Priority", "Base Prio", "Cost", "Time", "As Prereq To", "Missing Prerequisties")
         for tech_name in missing_prereq_list:
             tech_info = research_reqs[tech_name]
-            print "  %-25s %8.4f %8.4f %8.2f %8.2f %-25s %s" % (tech_name, priorities[tech_name], base_priorities[tech_name], tech_info[1], tech_info[2], on_path_to.get(tech_name, ""), tech_info[0])
+            debug("  %-25s %8.4f %8.4f %8.2f %8.2f %-25s %s", tech_name, priorities[tech_name], base_priorities[tech_name], tech_info[1], tech_info[2], on_path_to.get(tech_name, ""), tech_info[0])
 
-    print "Enqueuing techs, already spent %.2f RP of %.2f RP" % (fo.getEmpire().researchQueue.totalSpent, total_rp)
+    debug("Enqueuing techs, already spent %.2f RP of %.2f RP", fo.getEmpire().researchQueue.totalSpent, total_rp)
     possible = [x for x in possible if x not in set(get_research_queue_techs())]
     # some floating point issues can cause AI to enqueue every tech......
     while empire.resourceProduction(fo.resourceType.research) - empire.researchQueue.totalSpent > 0.001 and possible:
         to_research = possible.pop(0)  # get tech with highest priority
         fo.issueEnqueueTechOrder(to_research, -1)
         fo.updateResearchQueue()
-        print "  %-25s %6.2f RP/turn %6.2f RP" % (to_research,
-                                                  fo.getTech(to_research).perTurnCost(empire.empireID),
-                                                  fo.getTech(to_research).researchCost(empire.empireID))
+        debug("  %-25s %6.2f RP/turn %6.2f RP", to_research, fo.getTech(to_research).perTurnCost(empire.empireID),
+              fo.getTech(to_research).researchCost(empire.empireID))
 
-    print "Finish research orders, spent %.2f RP of %.2f RP" % (fo.getEmpire().researchQueue.totalSpent,
-                                                                empire.resourceProduction(fo.resourceType.research))
-    print
+    debug("Finish research orders, spent %.2f RP of %.2f RP\n", fo.getEmpire().researchQueue.totalSpent,
+          empire.resourceProduction(fo.resourceType.research))
 
 
 def generate_default_research_order():
@@ -566,22 +564,22 @@ def generate_default_research_order():
         [(fo.getTech(tech).researchCost(empire.empireID), tech) for tech in fo.techs() if is_possible(tech)],
         reverse=True)
 
-    print "Techs in possible list after enqueues to Research Queue:"
+    debug("Techs in possible list after enqueues to Research Queue:")
     for _, tech in possible:
-        print "    " + tech
-    print
+        debug("    " + tech)
+    debug('')
 
     # iterate through techs in order of cost
     fo.updateResearchQueue()
     total_spent = fo.getEmpire().researchQueue.totalSpent
-    print "Enqueuing techs. already spent RP: %s total RP: %s" % (total_spent, total_rp)
+    debug("Enqueuing techs. already spent RP: %s total RP: %s", total_spent, total_rp)
 
     while total_rp > 0 and possible:
         cost, name = possible.pop()  # get chipest
         total_rp -= cost
         fo.issueEnqueueTechOrder(name, -1)
-        print "    enqueued tech " + name + "  : cost: " + str(cost) + "RP"
-    print
+        debug("    enqueued tech %s  : cost: %s RP", name, cost)
+    debug('')
 
 
 def get_possible_projects():
@@ -605,7 +603,7 @@ def get_research_queue_techs():
 
 
 def exclude_tech(tech_name):
-    return ((not foAI.foAIstate.character.may_research_tech(tech_name))
+    return ((not get_aistate().character.may_research_tech(tech_name))
             or tech_name in TechsListsAI.unusable_techs()
             or tech_name in Dep.UNRESEARCHABLE_TECHS)
 
@@ -615,19 +613,20 @@ def generate_classic_research_orders():
     report_adjustments = False
     empire = fo.getEmpire()
     empire_id = empire.empireID
-    enemies_sighted = foAI.foAIstate.misc.get('enemies_sighted', {})
+    aistate = get_aistate()
+    enemies_sighted = aistate.misc.get('enemies_sighted', {})
     galaxy_is_sparse = ColonisationAI.galaxy_is_sparse()
-    print "Research Queue Management:"
+    debug("Research Queue Management:")
     resource_production = empire.resourceProduction(fo.resourceType.research)
-    print "\nTotal Current Research Points: %.2f\n" % resource_production
-    print "Techs researched and available for use:"
+    debug("\nTotal Current Research Points: %.2f\n", resource_production)
+    debug("Techs researched and available for use:")
     completed_techs = sorted(list(get_completed_techs()))
     tlist = completed_techs + [" "] * 3
     tlines = zip(tlist[0::3], tlist[1::3], tlist[2::3])
     for tline in tlines:
-        print "%25s %25s %25s" % tline
-    print
-    
+        debug("%25s %25s %25s", *tline)
+    debug('')
+
     #
     # report techs currently at head of research queue
     #
@@ -637,35 +636,35 @@ def generate_classic_research_orders():
     inProgressTechs.clear()
     tech_turns_left = {}
     if research_queue_list:
-        print "Techs currently at head of Research Queue:"
+        debug("Techs currently at head of Research Queue:")
         for element in list(research_queue)[:10]:
             tech_turns_left[element.tech] = element.turnsLeft
             if element.allocation > 0.0:
                 inProgressTechs[element.tech] = True
             this_tech = fo.getTech(element.tech)
             if not this_tech:
-                print >> sys.stderr, "Can't retrieve tech ", element.tech
+                warn("Can't retrieve tech ", element.tech)
                 continue
             missing_prereqs = [preReq for preReq in this_tech.recursivePrerequisites(empire_id) if preReq not in completed_techs]
             # unlocked_items = [(uli.name, uli.type) for uli in this_tech.unlocked_items]
             unlocked_items = [uli.name for uli in this_tech.unlockedItems]
             if not missing_prereqs:
-                print "    %25s allocated %6.2f RP -- unlockable items: %s " % (element.tech, element.allocation, unlocked_items)
+                debug("    %25s allocated %6.2f RP -- unlockable items: %s ", element.tech, element.allocation, unlocked_items)
             else:
-                print "    %25s allocated %6.2f RP -- missing preReqs: %s -- unlockable items: %s " % (element.tech, element.allocation, missing_prereqs, unlocked_items)
-        print
+                debug("    %25s allocated %6.2f RP -- missing preReqs: %s -- unlockable items: %s ", element.tech, element.allocation, missing_prereqs, unlocked_items)
+        debug('')
     #
     # set starting techs, or after turn 100 add any additional default techs
     #
-    if (fo.currentTurn() == 1) or ((total_rp - research_queue.totalSpent) > 0):
+    if (fo.currentTurn() <= 2) or ((total_rp - research_queue.totalSpent) > 0):
         research_index = get_research_index()
         if fo.currentTurn() == 1:
             # do only this one on first turn, to facilitate use of a turn-1 savegame for testing of alternate
             # research strategies
-            new_tech = ["GRO_PLANET_ECOL", "LRN_ALGO_ELEGANCE"]
+            new_tech = ["LRN_PHYS_BRAIN", "LRN_ALGO_ELEGANCE"]
         else:
             new_tech = TechsListsAI.sparse_galaxy_techs(research_index) if galaxy_is_sparse else TechsListsAI.primary_meta_techs(research_index)
-        print "Empire %s (%d) is selecting research index %d" % (empire.name, empire_id, research_index)
+        debug("Empire %s (%d) is selecting research index %d", empire.name, empire_id, research_index)
         # techs_to_enqueue = (set(new_tech)-(set(completed_techs)|set(research_queue_list)))
         techs_to_enqueue = new_tech[:]
         tech_base = set(completed_techs + research_queue_list)
@@ -674,13 +673,13 @@ def generate_classic_research_orders():
             if tech not in tech_base:
                 this_tech = fo.getTech(tech)
                 if this_tech is None:
-                    print >> sys.stderr, "Desired tech '%s' appears to not exist" % tech
+                    warn("Desired tech '%s' appears to not exist" % tech)
                     continue
                 missing_prereqs = [preReq for preReq in this_tech.recursivePrerequisites(empire_id) if preReq not in tech_base]
                 techs_to_add.extend(missing_prereqs + [tech])
                 tech_base.update(missing_prereqs + [tech])
         cum_cost = 0
-        print "  Enqueued Tech: %20s \t\t %8s \t %s" % ("Name", "Cost", "CumulativeCost")
+        debug("  Enqueued Tech: %20s \t\t %8s \t %s", "Name", "Cost", "CumulativeCost")
         for name in techs_to_add:
             try:
                 enqueue_res = fo.issueEnqueueTechOrder(name, -1)
@@ -690,23 +689,22 @@ def generate_classic_research_orders():
                     if this_tech:
                         this_cost = this_tech.researchCost(empire_id)
                         cum_cost += this_cost
-                    print "    Enqueued Tech: %20s \t\t %8.0f \t %8.0f" % (name, this_cost, cum_cost)
+                    debug("    Enqueued Tech: %20s \t\t %8.0f \t %8.0f", name, this_cost, cum_cost)
                 else:
-                    print >> sys.stderr, "    Failed attempt to enqueued Tech: " + name
+                    warn("    Failed attempt to enqueued Tech: " + name)
             except:
-                print >> sys.stderr, "    Failed attempt to enqueued Tech: " + name
-                print >> sys.stderr, "    Exception triggered and caught: ", traceback.format_exc()
+                warn("    Failed attempt to enqueued Tech: " + name, exc_info=True)
 
-        print '\n\nAll techs:'
-        print '=' * 20
+        debug('\n\nAll techs:')
+        debug('=' * 20)
         alltechs = fo.techs()
         print_in_columns(sorted(fo.techs()), columns=3)
 
-        print '\n\nAll unqueued techs:'
-        print '=' * 20
+        debug('\n\nAll unqueued techs:')
+        debug('=' * 20)
         # coveredTechs = new_tech+completed_techs
         print_in_columns([tn for tn in alltechs if tn not in tech_base], columns=3)
-        print
+        debug('')
 
         if fo.currentTurn() == 1:
             return
@@ -714,27 +712,27 @@ def generate_classic_research_orders():
             research_queue_list = get_research_queue_techs()
             def_techs = TechsListsAI.defense_techs_1()
             for def_tech in def_techs:
-                if (foAI.foAIstate.character.may_research_tech_classic(def_tech)
-                    and def_tech not in research_queue_list[:5] and not tech_is_complete(def_tech)):
+                if (aistate.character.may_research_tech_classic(def_tech)
+                        and def_tech not in research_queue_list[:5] and not tech_is_complete(def_tech)):
                     res = fo.issueEnqueueTechOrder(def_tech, min(3, len(research_queue_list)))
-                    print "Empire is very defensive, so attempted to fast-track %s, got result %d" % (def_tech, res)
+                    debug("Empire is very defensive, so attempted to fast-track %s, got result %d", def_tech, res)
         if False:  # with current stats of Conc Camps, disabling this fast-track
             research_queue_list = get_research_queue_techs()
-            if "CON_CONC_CAMP" in research_queue_list and foAI.foAIstate.character.may_research_tech_classic("CON_CONC_CAMP"):
+            if "CON_CONC_CAMP" in research_queue_list and aistate.character.may_research_tech_classic("CON_CONC_CAMP"):
                 insert_idx = min(40, research_queue_list.index("CON_CONC_CAMP"))
             else:
                 insert_idx = max(0, min(40, len(research_queue_list) - 10))
-            if "SHP_DEFLECTOR_SHIELD" in research_queue_list and foAI.foAIstate.character.may_research_tech_classic("SHP_DEFLECTOR_SHIELD"):
+            if "SHP_DEFLECTOR_SHIELD" in research_queue_list and aistate.character.may_research_tech_classic("SHP_DEFLECTOR_SHIELD"):
                 insert_idx = min(insert_idx, research_queue_list.index("SHP_DEFLECTOR_SHIELD"))
             for cc_tech in ["CON_ARCH_PSYCH", "CON_CONC_CAMP"]:
                 if (cc_tech not in research_queue_list[:insert_idx + 1] and not tech_is_complete(cc_tech)
-                    and foAI.foAIstate.character.may_research_tech_classic(cc_tech)):
+                        and aistate.character.may_research_tech_classic(cc_tech)):
                     res = fo.issueEnqueueTechOrder(cc_tech, insert_idx)
                     msg = "Empire is very aggressive, so attempted to fast-track %s, got result %d" % (cc_tech, res)
                     if report_adjustments:
                         chat_human(msg)
                     else:
-                        print msg
+                        debug(msg)
 
     elif fo.currentTurn() > 100:
         generate_default_research_order()
@@ -758,22 +756,6 @@ def generate_classic_research_orders():
     nest_tech = Dep.NEST_DOMESTICATION_TECH
     artif_minds = Dep.ART_MINDS
 
-    # fast-track LRN_PHYS_BRAIN if we want to build the Automatic History Analyzer
-    # The decision-making is made by the relevant ProductionAI.py scripts which also enqueue the building.
-    # Both LRN_ART_MINDS and GRO_SUBTER_HAB are prioritized over this.
-    if not tech_is_complete(Dep.LRN_PHYS_BRAIN):
-        print "Considering whether to fast-track %s to build Automatic History Analyzer" % Dep.LRN_PHYS_BRAIN
-        if ProductionAI.find_automatic_historic_analyzer_candidates():
-            artif_mind_idx = artif_minds in research_queue_list and research_queue_list.index(artif_minds) or 0
-            subter_hab_idx = Dep.GRO_SUBTER_HAB in research_queue_list and research_queue_list.index(Dep.GRO_SUBTER_HAB) or 0
-            insert_idx = 1 + max(artif_mind_idx, subter_hab_idx)
-            res = fo.issueEnqueueTechOrder(Dep.LRN_PHYS_BRAIN, insert_idx)
-            num_techs_accelerated += 1
-            print "Got possible locations to build the Automatic History Analyzer. Enqueuing, got result %d" % res
-            research_queue_list = get_research_queue_techs()
-        else:
-            print "Currently, no interest in building Automatic History Analyzer. Do not fast-track."
-
     if state.have_nest and not tech_is_complete(nest_tech):
         if artif_minds in research_queue_list:
             insert_idx = 1 + research_queue_list.index(artif_minds)
@@ -785,20 +767,20 @@ def generate_classic_research_orders():
         if report_adjustments:
             chat_human(msg)
         else:
-            print msg
+            debug(msg)
         research_queue_list = get_research_queue_techs()
 
     #
     # Supply range and detection range
     if False:  # disabled for now, otherwise just to help with cold-folding / organization
-        if len(foAI.foAIstate.colonisablePlanetIDs) == 0:
+        if len(aistate.colonisablePlanetIDs) == 0:
             best_colony_site_score = 0
         else:
-            best_colony_site_score = foAI.foAIstate.colonisablePlanetIDs.items()[0][1]
-        if len(foAI.foAIstate.colonisableOutpostIDs) == 0:
+            best_colony_site_score = aistate.colonisablePlanetIDs.items()[0][1]
+        if len(aistate.colonisableOutpostIDs) == 0:
             best_outpost_site_score = 0
         else:
-            best_outpost_site_score = foAI.foAIstate.colonisableOutpostIDs.items()[0][1]
+            best_outpost_site_score = aistate.colonisableOutpostIDs.items()[0][1]
         need_improved_scouting = (best_colony_site_score < 150 or best_outpost_site_score < 200)
 
         if need_improved_scouting:
@@ -811,7 +793,7 @@ def generate_classic_research_orders():
                     if report_adjustments:
                         chat_human(msg)
                     else:
-                        print msg
+                        debug(msg)
             elif not tech_is_complete("CON_CONTGRAV_ARCH"):
                 num_techs_accelerated += 1
                 if ("CON_CONTGRAV_ARCH" not in research_queue_list[:1+num_techs_accelerated]) and (
@@ -822,7 +804,7 @@ def generate_classic_research_orders():
                         if report_adjustments:
                             chat_human(msg)
                         else:
-                            print msg
+                            debug(msg)
             elif not tech_is_complete("CON_GAL_INFRA"):
                 num_techs_accelerated += 1
                 if ("CON_GAL_INFRA" not in research_queue_list[:1+num_techs_accelerated]) and (
@@ -832,7 +814,7 @@ def generate_classic_research_orders():
                     if report_adjustments:
                         chat_human(msg)
                     else:
-                        print msg
+                        debug(msg)
             else:
                 pass
             research_queue_list = get_research_queue_techs()
@@ -850,14 +832,14 @@ def generate_classic_research_orders():
                     if report_adjustments:
                         chat_human(msg)
                     else:
-                        print msg
+                        debug(msg)
                 research_queue_list = get_research_queue_techs()
 
     #
     # check to accelerate xeno_arch
     if True:  # just to help with cold-folding /  organization
         if (state.have_ruins and not tech_is_complete("LRN_XENOARCH")
-            and foAI.foAIstate.character.may_research_tech_classic("LRN_XENOARCH")):
+                and aistate.character.may_research_tech_classic("LRN_XENOARCH")):
             if artif_minds in research_queue_list:
                 insert_idx = 7 + research_queue_list.index(artif_minds)
             elif "GRO_SYMBIOTIC_BIO" in research_queue_list:
@@ -873,7 +855,7 @@ def generate_classic_research_orders():
                         if report_adjustments:
                             chat_human(msg)
                         else:
-                            print msg
+                            debug(msg)
                 research_queue_list = get_research_queue_techs()
 
     if False and not enemies_sighted:  # curently disabled
@@ -894,7 +876,7 @@ def generate_classic_research_orders():
             else:
                 target_index = num_techs_accelerated
             for move_tech in add_tech_list:
-                print "for tech %s, target_slot %s, target_index:%s ; num_techs_accelerated:%s" % (move_tech, target_slot, target_index, num_techs_accelerated)
+                debug("for tech %s, target_slot %s, target_index:%s ; num_techs_accelerated:%s", move_tech, target_slot, target_index, num_techs_accelerated)
                 if tech_is_complete(move_tech):
                     continue
                 if target_index <= num_techs_accelerated:
@@ -905,7 +887,7 @@ def generate_classic_research_orders():
                     if report_adjustments:
                         chat_human(msg)
                     else:
-                        print msg
+                        debug(msg)
                     target_index += 1
     #
     # check to accelerate asteroid or GG tech
@@ -920,7 +902,7 @@ def generate_classic_research_orders():
                 if report_adjustments:
                     chat_human(msg)
                 else:
-                    print msg
+                    debug(msg)
                 research_queue_list = get_research_queue_techs()
             elif tech_is_complete("SHP_ZORTRIUM_PLATE"):
                 insert_idx = (1 + insert_idx) if "LRN_FORCE_FIELD" not in research_queue_list else max(1 + insert_idx, research_queue_list.index("LRN_FORCE_FIELD") - 1)
@@ -930,7 +912,7 @@ def generate_classic_research_orders():
                         num_techs_accelerated += 1
                         insert_idx += 1
                         msg = "Asteroids: plan to colonize an asteroid belt, so attempted to fast-track %s , got result %d" % (ast_tech, res)
-                        print msg
+                        debug(msg)
                         if report_adjustments:
                             chat_human(msg)
                 research_queue_list = get_research_queue_techs()
@@ -942,7 +924,7 @@ def generate_classic_research_orders():
                 res = fo.issueEnqueueTechOrder("PRO_ORBITAL_GEN", insert_idx)
                 num_techs_accelerated += 1
                 msg = "GasGiant: plan to colonize a gas giant, so attempted to fast-track %s, got result %d" % ("PRO_ORBITAL_GEN", res)
-                print msg
+                debug(msg)
                 if report_adjustments:
                     chat_human(msg)
                 research_queue_list = get_research_queue_techs()
@@ -963,12 +945,12 @@ def generate_classic_research_orders():
             if most_adequate == 0:
                 insert_idx = num_techs_accelerated
                 for xg_tech in ["GRO_XENO_GENETICS", "GRO_GENETIC_ENG"]:
-                    if (xg_tech not in research_queue_list[:1+num_techs_accelerated] and not tech_is_complete(xg_tech)
-                        and foAI.foAIstate.character.may_research_tech_classic(xg_tech)):
+                    if (xg_tech not in research_queue_list[:1 + num_techs_accelerated] and not tech_is_complete(xg_tech)
+                            and aistate.character.may_research_tech_classic(xg_tech)):
                         res = fo.issueEnqueueTechOrder(xg_tech, insert_idx)
                         num_techs_accelerated += 1
                         msg = "Empire has poor colonizers, so attempted to fast-track %s, got result %d" % (xg_tech, res)
-                        print msg
+                        debug(msg)
                         if report_adjustments:
                             chat_human(msg)
                 research_queue_list = get_research_queue_techs()
@@ -982,25 +964,26 @@ def generate_classic_research_orders():
                 if this_spec and ("TELEPATHIC" in list(this_spec.tags)):
                     got_telepathy = True
                     break
-            if empire.population() > ([300, 100][got_telepathy]):
+            pop_threshold = 100 if got_telepathy else 300
+            if empire.population() > pop_threshold:
                 insert_idx = num_techs_accelerated
                 for dt_ech in ["LRN_PHYS_BRAIN", "LRN_TRANSLING_THT", "LRN_PSIONICS", "LRN_DISTRIB_THOUGHT"]:
                     if (dt_ech not in research_queue_list[:insert_idx + 2] and not tech_is_complete(dt_ech)
-                        and foAI.foAIstate.character.may_research_tech_classic(dt_ech)):
+                            and aistate.character.may_research_tech_classic(dt_ech)):
                         res = fo.issueEnqueueTechOrder(dt_ech, insert_idx)
                         num_techs_accelerated += 1
                         insert_idx += 1
                         fmt_str = "Empire has a telepathic race, so attempted to fast-track %s (got result %d)"
                         fmt_str += " with current target_RP %.1f and current pop %.1f, on turn %d"
                         msg = fmt_str % (dt_ech, res, resource_production, empire.population(), fo.currentTurn())
-                        print msg
+                        debug(msg)
                         if report_adjustments:
                             chat_human(msg)
                 research_queue_list = get_research_queue_techs()
     #
     # check to accelerate quant net
     if False:  # disabled for now, otherwise just to help with cold-folding / organization
-        if foAI.foAIstate.character.may_research_tech_classic("LRN_QUANT_NET") and (ColonisationAI.empire_status.get('researchers', 0) >= 40):
+        if aistate.character.may_research_tech_classic("LRN_QUANT_NET") and (state.population_with_research_focus() >= 40):
             if not tech_is_complete("LRN_QUANT_NET"):
                 insert_idx = num_techs_accelerated  # TODO determine min target slot if reenabling
                 for qnTech in ["LRN_NDIM_SUBSPACE", "LRN_QUANT_NET"]:
@@ -1009,7 +992,7 @@ def generate_classic_research_orders():
                         num_techs_accelerated += 1
                         insert_idx += 1
                         msg = "Empire has many researchers, so attempted to fast-track %s (got result %d) on turn %d" % (qnTech, res, fo.currentTurn())
-                        print msg
+                        debug(msg)
                         if report_adjustments:
                             chat_human(msg)
                 research_queue_list = get_research_queue_techs()
@@ -1018,7 +1001,7 @@ def generate_classic_research_orders():
     # if we own a blackhole, accelerate sing_gen and conc camp
     if True:  # just to help with cold-folding / organization
         if (fo.currentTurn() > 50 and len(AIstate.empireStars.get(fo.starType.blackHole, [])) != 0 and
-                foAI.foAIstate.character.may_research_tech_classic("PRO_SINGULAR_GEN") and not tech_is_complete(Dep.PRO_SINGULAR_GEN) and
+                aistate.character.may_research_tech_classic("PRO_SINGULAR_GEN") and not tech_is_complete(Dep.PRO_SINGULAR_GEN) and
                 tech_is_complete(Dep.PRO_SOL_ORB_GEN)):
             # sing_tech_list = [ "LRN_GRAVITONICS" , "PRO_SINGULAR_GEN"]  # formerly also "CON_ARCH_PSYCH", "CON_CONC_CAMP",
             sing_gen_tech = fo.getTech(Dep.PRO_SINGULAR_GEN)
@@ -1029,7 +1012,7 @@ def generate_classic_research_orders():
                     res = fo.issueEnqueueTechOrder(singTech, num_techs_accelerated)
                     num_techs_accelerated += 1
                     msg = "have a black hole star outpost/colony, so attempted to fast-track %s, got result %d" % (singTech, res)
-                    print msg
+                    debug(msg)
                     if report_adjustments:
                         chat_human(msg)
             research_queue_list = get_research_queue_techs()
@@ -1056,25 +1039,25 @@ def generate_classic_research_orders():
     for tech in techs:
         this_tech = fo.getTech(tech)
         if not this_tech:
-            print "Invalid Tech specified"
+            debug("Invalid Tech specified")
             continue
         unlocked_items = this_tech.unlockedItems
         unlocked_hulls = []
         unlocked_parts = []
         for item in unlocked_items:
             if item.type == fo.unlockableItemType.shipPart:
-                print "Tech %s unlocks a ShipPart: %s" % (tech, item.name)
+                debug("Tech %s unlocks a ShipPart: %s", tech, item.name)
                 unlocked_parts.append(item.name)
             elif item.type == fo.unlockableItemType.shipHull:
-                print "Tech %s unlocks a ShipHull: %s" % (tech, item.name)
+                debug("Tech %s unlocks a ShipHull: %s", tech, item.name)
                 unlocked_hulls.append(item.name)
         if not (unlocked_parts or unlocked_hulls):
-            print "No new ship parts/hulls unlocked by tech %s" % tech
+            debug("No new ship parts/hulls unlocked by tech %s", tech)
             continue
-        old_designs = ShipDesignAI.MilitaryShipDesigner().optimize_design(consider_fleet_count=False)
-        new_designs = ShipDesignAI.MilitaryShipDesigner().optimize_design(additional_hulls=unlocked_hulls,
-                                                                          additional_parts=unlocked_parts,
-                                                                          consider_fleet_count=False)
+        old_designs = ShipDesignAI.WarShipDesigner().optimize_design(consider_fleet_count=False)
+        new_designs = ShipDesignAI.WarShipDesigner().optimize_design(additional_hulls=unlocked_hulls,
+                                                                     additional_parts=unlocked_parts,
+                                                                     consider_fleet_count=False)
         if not (old_designs and new_designs):
             # AI is likely defeated; don't bother with logging error message
             continue
@@ -1083,13 +1066,13 @@ def generate_classic_research_orders():
         new_rating, new_pid, new_design_id, new_cost, new_stats = new_designs[0]
         new_design = fo.getShipDesign(new_design_id)
         if new_rating > old_rating:
-            print "Tech %s gives access to a better design!" % tech
-            print "old best design: Rating %.5f" % old_rating
-            print "old design specs: %s - " % old_design.hull, list(old_design.parts)
-            print "new best design: Rating %.5f" % new_rating
-            print "new design specs: %s - " % new_design.hull, list(new_design.parts)
+            debug("Tech %s gives access to a better design!", tech)
+            debug("old best design: Rating %.5f", old_rating)
+            debug("old design specs: %s - %s", old_design.hull, list(old_design.parts))
+            debug("new best design: Rating %.5f", new_rating)
+            debug("new design specs: %s - %s", new_design.hull, list(new_design.parts))
         else:
-            print "Tech %s gives access to new parts or hulls but there seems to be no military advantage." % tech
+            debug("Tech %s gives access to new parts or hulls but there seems to be no military advantage.", tech)
 
 
 def use_classic_research_approach():

@@ -112,7 +112,16 @@ content of the PR may require extensive gameplay balance testing.
 
 The Issue/PR deals with non-game related infrastructure that aids development.
 For example this includes issues with the project homepage, used external
-services like continuous integration or hosting of release binaries.
+services like continuous integration, hosting of release binaries, tools for
+checking code style, etc.
+
+Infrastructure Issues/PRs should not entail/contain any changes to the actual
+codebase unless such changes are essentially required by the Issue/PR and would
+not make sense outside of its context. Any such non-codebase Infrastructure
+Issues/PRs should not be assigned a milestone unless they have particular
+relevance to the milestone, such as by establishing some type of
+testing/verification of the codebase which is desired to be completed for the
+milestone. 
 
 #### Label `component:internal`
 
@@ -163,7 +172,7 @@ the number of the covering Issue/PR in a comment and close this Issue/PR.  For
 PRs document why the other PR was chosen over this PR.  For Issues copy over
 new knowledge that is valuable to solve the covering Issue.
 
-#### Label `status:follow up`
+#### Label `status:superseded`
 
 The PR discussion showed that the proposed implementation is insufficient in
 some way or the PR in itself is malformed.  Usually not required as we prefer

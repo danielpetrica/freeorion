@@ -7,39 +7,40 @@
 #include "Predicates.h"
 #include "Universe.h"
 #include "ValueRef.h"
-#include "../parse/Parse.h"
 #include "../util/AppInterface.h"
 #include "../util/OptionsDB.h"
 #include "../util/Logger.h"
+#include "../util/CheckSums.h"
+#include "../util/ScopedTimer.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/filesystem/fstream.hpp>
+//TODO: replace with std::make_unique when transitioning to C++14
+#include <boost/smart_ptr/make_unique.hpp>
 
 namespace {
     std::shared_ptr<Effect::EffectsGroup>
     IncreaseMeter(MeterType meter_type, double increase) {
-        typedef std::shared_ptr<Effect::EffectsGroup> EffectsGroupPtr;
-        typedef std::vector<Effect::EffectBase*> Effects;
-        Condition::Source* scope = new Condition::Source;
-        Condition::Source* activation = nullptr;
-        ValueRef::ValueRefBase<double>* vr =
-            new ValueRef::Operation<double>(
+        typedef std::vector<std::unique_ptr<Effect::EffectBase>> Effects;
+        auto scope = boost::make_unique<Condition::Source>();
+        std::unique_ptr<Condition::Source> activation = nullptr;
+        auto vr =
+            boost::make_unique<ValueRef::Operation<double>>(
                 ValueRef::PLUS,
-                new ValueRef::Variable<double>(ValueRef::EFFECT_TARGET_VALUE_REFERENCE, std::vector<std::string>()),
-                new ValueRef::Constant<double>(increase)
+                boost::make_unique<ValueRef::Variable<double>>(
+                    ValueRef::EFFECT_TARGET_VALUE_REFERENCE, std::vector<std::string>()),
+                boost::make_unique<ValueRef::Constant<double>>(increase)
             );
-        return EffectsGroupPtr(
-            new Effect::EffectsGroup(
-                scope, activation, Effects(1, new Effect::SetMeter(meter_type, vr))));
+        auto effects = Effects();
+        effects.push_back(boost::make_unique<Effect::SetMeter>(meter_type, std::move(vr)));
+        return std::make_shared<Effect::EffectsGroup>(std::move(scope), std::move(activation), std::move(effects));
     }
 }
 
 /////////////////////////////////////////////////
 // Field                                       //
 /////////////////////////////////////////////////
-Field::Field() :
-    UniverseObject(),
-    m_type_name("")
+Field::Field()
 {}
 
 Field::~Field()
@@ -111,9 +112,9 @@ bool Field::HasTag(const std::string& name) const {
 UniverseObjectType Field::ObjectType() const
 { return OBJ_FIELD; }
 
-std::string Field::Dump() const {
+std::string Field::Dump(unsigned short ntabs) const {
     std::stringstream os;
-    os << UniverseObject::Dump();
+    os << UniverseObject::Dump(ntabs);
     os << " field type: " << m_type_name;
     return os.str();
 }
@@ -166,22 +167,25 @@ void Field::ClampMeters() {
 /////////////////////////////////////////////////
 FieldType::FieldType(const std::string& name, const std::string& description,
                      float stealth, const std::set<std::string>& tags,
-                     const std::vector<std::shared_ptr<Effect::EffectsGroup>>& effects,
+                     std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects,
                      const std::string& graphic) :
     m_name(name),
     m_description(description),
     m_stealth(stealth),
     m_tags(),
-    m_effects(effects),
+    m_effects(),
     m_graphic(graphic)
 {
     for (const std::string& tag : tags)
         m_tags.insert(boost::to_upper_copy<std::string>(tag));
 
+    for (auto&& effect : effects)
+        m_effects.emplace_back(std::move(effect));
+
     if (m_stealth != 0.0f)
         m_effects.push_back(IncreaseMeter(METER_STEALTH,    m_stealth));
 
-    for (std::shared_ptr<Effect::EffectsGroup> effect : m_effects) {
+    for (auto& effect : m_effects) {
         effect->SetTopLevelContent(m_name);
     }
 }
@@ -189,34 +193,39 @@ FieldType::FieldType(const std::string& name, const std::string& description,
 FieldType::~FieldType()
 {}
 
-std::string FieldType::Dump() const {
-    std::string retval = DumpIndent() + "FieldType\n";
-    ++g_indent;
-    retval += DumpIndent() + "name = \"" + m_name + "\"\n";
-    retval += DumpIndent() + "description = \"" + m_description + "\"\n";
-    retval += DumpIndent() + "location = \n";
-    //++g_indent;
-    //retval += m_location->Dump();
-    //--g_indent;
+std::string FieldType::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "FieldType\n";
+    retval += DumpIndent(ntabs+1) + "name = \"" + m_name + "\"\n";
+    retval += DumpIndent(ntabs+1) + "description = \"" + m_description + "\"\n";
+    retval += DumpIndent(ntabs+1) + "location = \n";
+    //retval += m_location->Dump(ntabs+2);
     if (m_effects.size() == 1) {
-        retval += DumpIndent() + "effectsgroups =\n";
-        ++g_indent;
-        retval += m_effects[0]->Dump();
-        --g_indent;
+        retval += DumpIndent(ntabs+1) + "effectsgroups =\n";
+        retval += m_effects[0]->Dump(ntabs+2);
     } else {
-        retval += DumpIndent() + "effectsgroups = [\n";
-        ++g_indent;
-        for (std::shared_ptr<Effect::EffectsGroup> effect : m_effects) {
-            retval += effect->Dump();
+        retval += DumpIndent(ntabs+1) + "effectsgroups = [\n";
+        for (auto& effect : m_effects) {
+            retval += effect->Dump(ntabs+2);
         }
-        --g_indent;
-        retval += DumpIndent() + "]\n";
+        retval += DumpIndent(ntabs+1) + "]\n";
     }
-    retval += DumpIndent() + "graphic = \"" + m_graphic + "\"\n";
-    --g_indent;
+    retval += DumpIndent(ntabs+1) + "graphic = \"" + m_graphic + "\"\n";
     return retval;
 }
 
+unsigned int FieldType::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, m_name);
+    CheckSums::CheckSumCombine(retval, m_description);
+    CheckSums::CheckSumCombine(retval, m_stealth);
+    CheckSums::CheckSumCombine(retval, m_tags);
+    CheckSums::CheckSumCombine(retval, m_effects);
+    CheckSums::CheckSumCombine(retval, m_graphic);
+
+    DebugLogger() << "FieldTypeManager checksum: " << retval;
+    return retval;
+}
 
 /////////////////////////////////////////////////
 // FieldTypeManager                         //
@@ -228,38 +237,47 @@ FieldTypeManager::FieldTypeManager() {
     if (s_instance)
         throw std::runtime_error("Attempted to create more than one FieldTypeManager.");
 
+    // Only update the global pointer on sucessful construction.
     s_instance = this;
-
-    try {
-        parse::fields(m_field_types);
-    } catch (const std::exception& e) {
-        ErrorLogger() << "Failed parsing fields: error: " << e.what();
-        throw e;
-    }
-
-    if (GetOptionsDB().Get<bool>("verbose-logging")) {
-        DebugLogger() << "Field Types:";
-        for (const std::map<std::string, FieldType*>::value_type& entry : *this) {
-            DebugLogger() << " ... " << entry.first;
-        }
-    }
-}
-
-FieldTypeManager::~FieldTypeManager() {
-    for (const std::map<std::string, FieldType*>::value_type& entry : m_field_types) {
-        delete entry.second;
-    }
 }
 
 const FieldType* FieldTypeManager::GetFieldType(const std::string& name) const {
-    std::map<std::string, FieldType*>::const_iterator it = m_field_types.find(name);
-    return it != m_field_types.end() ? it->second : nullptr;
+    CheckPendingFieldTypes();
+    auto it = m_field_types.find(name);
+    return it != m_field_types.end() ? it->second.get() : nullptr;
+}
+
+FieldTypeManager::iterator FieldTypeManager::begin() const {
+    CheckPendingFieldTypes();
+    return m_field_types.begin();
+}
+
+FieldTypeManager::iterator FieldTypeManager::end() const {
+    CheckPendingFieldTypes();
+    return m_field_types.end();
 }
 
 FieldTypeManager& FieldTypeManager::GetFieldTypeManager() {
     static FieldTypeManager manager;
     return manager;
 }
+
+unsigned int FieldTypeManager::GetCheckSum() const {
+    CheckPendingFieldTypes();
+    unsigned int retval{0};
+    for (auto const& name_type_pair : m_field_types)
+        CheckSums::CheckSumCombine(retval, name_type_pair);
+    CheckSums::CheckSumCombine(retval, m_field_types.size());
+
+    return retval;
+}
+
+void FieldTypeManager::SetFieldTypes(Pending::Pending<FieldTypeMap>&& future)
+{ m_pending_types = std::move(future); }
+
+void FieldTypeManager::CheckPendingFieldTypes() const
+{ Pending::SwapPending(m_pending_types, m_field_types); }
+
 
 ///////////////////////////////////////////////////////////
 // Free Functions                                        //

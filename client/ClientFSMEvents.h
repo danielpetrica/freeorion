@@ -13,10 +13,8 @@ struct Disconnection : boost::statechart::event<Disconnection> {};
 
 //  Message events
 /** The base class for all state machine events that are based on Messages. */
-struct MessageEventBase
-{
+struct MessageEventBase {
     MessageEventBase(Message& message);
-
     Message m_message;
 };
 
@@ -36,11 +34,15 @@ struct MessageEventBase
     (TurnUpdate)                               \
     (TurnPartialUpdate)                        \
     (TurnProgress)                             \
+    (TurnRevoked)                              \
     (PlayerStatus)                             \
     (PlayerChat)                               \
     (Diplomacy)                                \
     (DiplomaticStatusUpdate)                   \
-    (EndGame)
+    (EndGame)                                  \
+    (CheckSum)                                 \
+    (AuthRequest)                              \
+    (ChatHistory)
 
 
 #define DECLARE_MESSAGE_EVENT(r, data, name)                            \

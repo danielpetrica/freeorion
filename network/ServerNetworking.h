@@ -7,11 +7,12 @@
 #include <boost/function.hpp>
 #include <boost/iterator/filter_iterator.hpp>
 #include <boost/signals2/signal.hpp>
+#include <boost/functional/hash.hpp>
 
 #include <memory>
 #include <queue>
 #include <set>
-
+#include <unordered_map>
 
 class DiscoveryServer;
 class PlayerConnection;
@@ -20,6 +21,25 @@ typedef std::shared_ptr<PlayerConnection> PlayerConnectionPtr;
 typedef boost::function<void (Message, PlayerConnectionPtr)> MessageAndConnectionFn;
 typedef boost::function<void (PlayerConnectionPtr)> ConnectionFn;
 typedef boost::function<void ()> NullaryFn;
+
+/** Data associated with cookie
+ */
+struct CookieData {
+    std::string player_name;
+    boost::posix_time::ptime expired;
+    Networking::AuthRoles roles;
+    bool authenticated;
+
+    CookieData(const std::string& player_name_,
+               const boost::posix_time::ptime& expired_,
+               const Networking::AuthRoles& roles_,
+               bool authenticated_) :
+        player_name(player_name_),
+        expired(expired_),
+        roles(roles_),
+        authenticated(authenticated_)
+    { }
+};
 
 /** Encapsulates the networking facilities of the server.  This class listens
     for incoming UDP LAN server-discovery requests and TCP player connections.
@@ -85,14 +105,24 @@ public:
 
     /** Returns whether there are any moderators in the game. */
     bool ModeratorsInGame() const;
+
+    /** Returns whether there no non-expired cookie with this player name. */
+    bool IsAvailableNameInCookies(const std::string& player_name) const;
+
+    /** Returns whether player have non-expired cookie with this player name.
+      * Fills roles and authentication status on success. */
+    bool CheckCookie(boost::uuids::uuid cookie,
+                     const std::string& player_name,
+                     Networking::AuthRoles& roles,
+                     bool& authenticated) const;
+
+    /** Returns count of stored cookies so we don't collide with reserved player names. */
+    int GetCookiesSize() const;
     //@}
 
     /** \name Mutators */ //@{
-    /** Sends a synchronous message \a message to \a player_connection and returns true on success. */
-    bool SendMessage(const Message& message, PlayerConnectionPtr player_connection);
-
     /** Sends a synchronous message \a message to the player indicated in the message and returns true on success. */
-    bool SendMessage(const Message& message);
+    bool SendMessageAll(const Message& message);
 
     /** Disconnects the server from player \a id. */
     void Disconnect(int id);
@@ -127,6 +157,17 @@ public:
 
     /** Sets Host player ID. */
     void SetHostPlayerID(int host_player_id);
+
+    /** Generate cookies for player's name, roles, and authentication status. */
+    boost::uuids::uuid GenerateCookie(const std::string& player_name,
+                                      const Networking::AuthRoles& roles,
+                                      bool authenticated);
+
+    /** Bump cookie's expired date. */
+    void UpdateCookie(boost::uuids::uuid cookie);
+
+    /** Clean up expired cookies. */
+    void CleanupCookies();
     //@}
 
 private:
@@ -143,6 +184,7 @@ private:
     boost::asio::ip::tcp::acceptor  m_player_connection_acceptor;
     PlayerConnections               m_player_connections;
     std::queue<NullaryFn>           m_event_queue;
+    std::unordered_map<boost::uuids::uuid, CookieData, boost::hash<boost::uuids::uuid>> m_cookies;
 
     MessageAndConnectionFn          m_nonplayer_message_callback;
     MessageAndConnectionFn          m_player_message_callback;
@@ -191,6 +233,18 @@ public:
     /** Checks if client associated with this connection runs on the same
         physical machine as the server */
     bool IsLocalConnection() const;
+
+    /** Checks if the player is established, has a valid name, id and client type. */
+    bool IsEstablished() const;
+
+    /** Checks if the player was authenticated. */
+    bool IsAuthenticated() const;
+
+    /** Checks if the player has a some role */
+    bool HasAuthRole(Networking::RoleType role) const;
+
+    /** Get cookie associated with this connection. */
+    boost::uuids::uuid Cookie() const;
     //@}
 
     /** \name Mutators */ //@{
@@ -200,6 +254,10 @@ public:
     /** Sends \a synchronous message to out on the connection and return true on success. */
     bool SendMessage(const Message& message);
 
+    /** Set player properties to use them after authentication successed. */
+    void AwaitPlayer(Networking::ClientType client_type,
+                     const std::string& client_version_string);
+
     /** Establishes a connection as a player with a specific name and id.
         This function must only be called once. */
     void EstablishPlayer(int id, const std::string& player_name, Networking::ClientType client_type,
@@ -208,6 +266,20 @@ public:
     /** Sets this connection's client type. Useful for already-connected players
       * changing type such as in the multiplayer lobby. */
     void SetClientType(Networking::ClientType client_type);
+
+    /** Sets authenticated status for connection. */
+    void SetAuthenticated();
+
+    /** Sets authorization roles and send message to client. */
+    void SetAuthRoles(const std::initializer_list<Networking::RoleType>& roles);
+
+    void SetAuthRoles(const Networking::AuthRoles& roles);
+
+    /** Sets or unset authorizaion role and send message to client. */
+    void SetAuthRole(Networking::RoleType role, bool value = true);
+
+    /** Sets cookie value to this connection to update expire date. */
+    void SetCookie(boost::uuids::uuid cookie);
     //@}
 
     mutable boost::signals2::signal<void (const NullaryFn&)> EventSignal;
@@ -236,6 +308,9 @@ private:
     bool                            m_new_connection;
     Networking::ClientType          m_client_type;
     std::string                     m_client_version_string;
+    bool                            m_authenticated;
+    Networking::AuthRoles           m_roles;
+    boost::uuids::uuid              m_cookie;
 
     MessageAndConnectionFn          m_nonplayer_message_callback;
     MessageAndConnectionFn          m_player_message_callback;

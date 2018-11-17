@@ -1,5 +1,5 @@
 from collections import Counter
-import sys
+from logging import warn
 
 import freeOrionAIInterface as fo
 import FleetUtilsAI
@@ -119,11 +119,11 @@ class ShipCombatStats(object):
             return  # TODO: Add some estimate for stealthed ships
 
         if self._consider_refuel:
-            structure = ship.currentMeterValue(fo.meterType.maxStructure)
-            shields = ship.currentMeterValue(fo.meterType.maxShield)
+            structure = ship.initialMeterValue(fo.meterType.maxStructure)
+            shields = ship.initialMeterValue(fo.meterType.maxShield)
         else:
-            structure = ship.currentMeterValue(fo.meterType.structure)
-            shields = ship.currentMeterValue(fo.meterType.shield)
+            structure = ship.initialMeterValue(fo.meterType.structure)
+            shields = ship.initialMeterValue(fo.meterType.shield)
         attacks = {}
         fighter_launch_rate = 0
         fighter_capacity = 0
@@ -146,7 +146,7 @@ class ShipCombatStats(object):
                     if part_damage != fighter_damage and fighter_damage > 0:
                         # the C++ code fails also in this regard, so FOCS content *should* not allow this.
                         # TODO: Depending on future implementation, might actually need to handle this case.
-                        print "WARNING: Multiple hangar types present on one ship, estimates expected to be wrong."
+                        warn("Multiple hangar types present on one ship, estimates expected to be wrong.")
                     fighter_damage = max(fighter_damage, part_damage)
         self._basic_stats = self.BasicStats(attacks, structure, shields)
         self._fighter_stats = self.FighterStats(fighter_capacity, fighter_launch_rate, fighter_damage)
@@ -299,7 +299,7 @@ def _get_species_grades(species_name, grade_type):
         if species:
             spec_tags = species.tags
         else:
-            print >> sys.stderr, "get_species_grades() couldn't retrieve species '%s'\n" % species_name
+            warn("get_species_grades() couldn't retrieve species '%s'\n" % species_name)
     return get_ai_tag_grade(spec_tags, grade_type)
 
 
@@ -411,3 +411,18 @@ def rating_needed(target, current=0):
         return 0
     else:
         return target + current - 2 * (target * current)**0.5
+
+
+def rating_difference(first_rating, second_rating):
+
+    """Return the absolute nonlinear difference between ratings.
+
+    :param first_rating: rating of a first force
+    :type first_rating: float
+    :param second_rating: rating of a second force
+    :type second_rating: float
+    :return: Estimated rating by which the greater force (nonlinearly) exceeds the lesser
+    :rtype: float
+    """
+
+    return rating_needed(max(first_rating, second_rating), min(first_rating, second_rating))

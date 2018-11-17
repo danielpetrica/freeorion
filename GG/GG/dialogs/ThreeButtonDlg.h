@@ -63,6 +63,7 @@ public:
                    Clr border_color, Clr button_color, Clr text_color, std::size_t buttons, const std::string& zero = "", 
                    const std::string& one = "", const std::string& two = "");
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ ///@{
     Clr         ButtonColor() const;   ///< returns the color of the buttons in the dialog
@@ -84,8 +85,6 @@ public:
 
 private:
     std::size_t NumButtons() const;
-    void Init(const std::string& msg, const std::shared_ptr<Font>& font, std::size_t buttons,
-              const std::string& zero = "", const std::string& one = "", const std::string& two = "");
     void ConnectSignals();
     void Button0Clicked();
     void Button1Clicked();
@@ -98,9 +97,10 @@ private:
     std::size_t m_default;
     std::size_t m_escape;
     std::size_t m_result;
-    Button*     m_button_0;
-    Button*     m_button_1;
-    Button*     m_button_2;
+    std::shared_ptr<Button>     m_button_0;
+    std::shared_ptr<Button>     m_button_1;
+    std::shared_ptr<Button>     m_button_2;
+    std::shared_ptr<Layout>     m_button_layout;
 };
 
 } // namespace GG

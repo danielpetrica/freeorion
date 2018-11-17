@@ -1,6 +1,7 @@
 #include "Parse.h"
 
 #include "ParseImpl.h"
+#include "MovableEnvelope.h"
 #include "ConditionParserImpl.h"
 
 #include "../universe/Universe.h"
@@ -8,125 +9,125 @@
 #include "../util/Directories.h"
 
 #include <boost/spirit/include/phoenix.hpp>
-
+//TODO: replace with std::make_unique when transitioning to C++14
+#include <boost/smart_ptr/make_unique.hpp>
 
 #define DEBUG_PARSERS 0
 
 #if DEBUG_PARSERS
 namespace std {
-    inline ostream& operator<<(ostream& os, const std::vector<MonsterFleetPlan*>&) { return os; }
+    inline ostream& operator<<(ostream& os, const std::vector<parse::detail::MovableEnvelope<MonsterFleetPlan>>&) { return os; }
     inline ostream& operator<<(ostream& os, const std::vector<std::string>&) { return os; }
 }
 #endif
 
 namespace {
-    struct new_monster_fleet_plan_ {
-        typedef MonsterFleetPlan* result_type;
-
-        MonsterFleetPlan* operator()(const std::string& fleet_name, const std::vector<std::string>& ship_design_names,
-                                     double spawn_rate, int spawn_limit, Condition::ConditionBase* location) const
-        { return new MonsterFleetPlan(fleet_name, ship_design_names, spawn_rate, spawn_limit, location); }
+    void insert_monster_fleet_plan(
+        std::vector<std::unique_ptr<MonsterFleetPlan>>& plans,
+        const std::string& fleet_name, const std::vector<std::string>& ship_design_names,
+        const boost::optional<double>& spawn_rate,
+        const boost::optional<int>& spawn_limit,
+        const boost::optional<parse::detail::condition_payload>& location, bool& pass)
+    {
+        plans.push_back(
+            boost::make_unique<MonsterFleetPlan>(
+                fleet_name, ship_design_names,
+                (spawn_rate ? *spawn_rate : 1.0),
+                (spawn_limit ? *spawn_limit : 9999),
+                (location ? location->OpenEnvelope(pass) : nullptr)
+            ));
     };
-    const boost::phoenix::function<new_monster_fleet_plan_> new_monster_fleet_plan;
+    BOOST_PHOENIX_ADAPT_FUNCTION(void, insert_monster_fleet_plan_, insert_monster_fleet_plan, 7)
 
-    struct rules {
-        rules() {
+    using start_rule_payload = std::vector<std::unique_ptr<MonsterFleetPlan>>;
+    using start_rule_signature = void(start_rule_payload&);
+
+    struct grammar : public parse::detail::grammar<start_rule_signature> {
+        grammar(const parse::lexer& tok,
+                const std::string& filename,
+                const parse::text_iterator& first, const parse::text_iterator& last) :
+            grammar::base_type(start),
+            condition_parser(tok, label),
+            string_grammar(tok, label, condition_parser),
+            double_rule(tok),
+            int_rule(tok),
+            one_or_more_string_tokens(tok)
+        {
             namespace phoenix = boost::phoenix;
             namespace qi = boost::spirit::qi;
-
-            using phoenix::clear;
-            using phoenix::push_back;
 
             qi::_1_type _1;
             qi::_2_type _2;
             qi::_3_type _3;
             qi::_4_type _4;
+            qi::_5_type _5;
             qi::_r1_type _r1;
-            qi::_val_type _val;
             qi::eps_type eps;
-
-            const parse::lexer& tok = parse::lexer::instance();
-
-            monster_fleet_plan_prefix
-                =    tok.MonsterFleet_
-                >    parse::detail::label(Name_token) > tok.string [ phoenix::ref(_a) = _1 ]
-                ;
+            qi::_pass_type _pass;
+            qi::omit_type omit_;
+            const boost::phoenix::function<parse::detail::construct_movable> construct_movable_;
+            const boost::phoenix::function<parse::detail::deconstruct_movable> deconstruct_movable_;
 
             ships
-                =    parse::detail::label(Ships_token)
-                >    eps [ clear(phoenix::ref(_b)) ]
-                >    (
-                            ('[' > +tok.string [ push_back(phoenix::ref(_b), _1) ] > ']')
-                        |    tok.string [ push_back(phoenix::ref(_b), _1) ]
-                     )
+                =    label(tok.Ships_) > one_or_more_string_tokens
                 ;
 
-            spawns
-                =    (
-                            (parse::detail::label(SpawnRate_token) > parse::detail::double_ [ phoenix::ref(_c) = _1 ])
-                        |    eps [ phoenix::ref(_c) = 1.0 ]
-                     )
-                >    (
-                            (parse::detail::label(SpawnLimit_token) > parse::detail::int_ [ phoenix::ref(_d) = _1 ])
-                        |    eps [ phoenix::ref(_d) = 9999 ]
-                     )
+            spawn_rate =
+                label(tok.SpawnRate_) > double_rule
+                ;
+
+            spawn_limit =
+                label(tok.SpawnLimit_) > int_rule
                 ;
 
             monster_fleet_plan
-                =    (
-                            monster_fleet_plan_prefix
-                        >   ships
-                        >   spawns
-                        > -(parse::detail::label(Location_token) > parse::detail::condition_parser [ phoenix::ref(_e) = _1 ])
-                     )
-                [ _val = new_monster_fleet_plan(phoenix::ref(_a), phoenix::ref(_b), phoenix::ref(_c), phoenix::ref(_d), phoenix::ref(_e)) ]
+                = ( omit_[tok.MonsterFleet_]
+                    > label(tok.Name_) > tok.string
+                    > ships
+                    > -spawn_rate
+                    > -spawn_limit
+                    > -(label(tok.Location_) > condition_parser)
+                ) [ insert_monster_fleet_plan_(_r1, _1, _2, _3, _4, _5, _pass) ]
                 ;
 
-            start
-                =   (+monster_fleet_plan) [ _r1 = _1 ]
-                ;
+            start = (+monster_fleet_plan(_r1));
 
-            monster_fleet_plan_prefix.name("MonsterFleet");
             ships.name("Ships");
-            spawns.name("spawn rate and spawn limit");
+            spawn_rate.name("spawn rate");
+            spawn_limit.name("spawn limit");
             monster_fleet_plan.name("MonsterFleet");
 
 #if DEBUG_PARSERS
             debug(monster_fleet_plan);
 #endif
 
-            qi::on_error<qi::fail>(start, parse::report_error(_1, _2, _3, _4));
+            qi::on_error<qi::fail>(start, parse::report_error(filename, first, last, _1, _2, _3, _4));
         }
 
-        typedef parse::detail::rule<> generic_rule;
+        using monster_fleet_plan_rule = parse::detail::rule<start_rule_signature>;
 
-        typedef parse::detail::rule<
-            MonsterFleetPlan* ()
-        > monster_fleet_plan_rule;
+        using start_rule = parse::detail::rule<start_rule_signature>;
 
-        typedef parse::detail::rule<
-            void (std::vector<MonsterFleetPlan*>&)
-        > start_rule;
-
-        generic_rule            monster_fleet_plan_prefix;
-        generic_rule            ships;
-        generic_rule            spawns;
-        monster_fleet_plan_rule monster_fleet_plan;
-        start_rule              start;
-
-        // locals
-        std::string                 _a;
-        std::vector<std::string>    _b;
-        double                      _c;
-        int                         _d;
-        Condition::ConditionBase*   _e;
+        parse::detail::Labeller            label;
+        parse::conditions_parser_grammar   condition_parser;
+        const parse::string_parser_grammar string_grammar;
+        parse::detail::double_grammar      double_rule;
+        parse::detail::int_grammar         int_rule;
+        parse::detail::single_or_repeated_string<std::vector<std::string>> one_or_more_string_tokens;
+        parse::detail::rule<std::vector<std::string>()> ships;
+        parse::detail::rule<double()>      spawn_rate;
+        parse::detail::rule<int()>         spawn_limit;
+        monster_fleet_plan_rule            monster_fleet_plan;
+        start_rule                         start;
     };
 
 }
 
 namespace parse {
-    bool monster_fleet_plans(std::vector<MonsterFleetPlan*>& monster_fleet_plans_) {
-        boost::filesystem::path path = GetResourceDir() / "scripting/monster_fleets.inf";
-        return detail::parse_file<rules, std::vector<MonsterFleetPlan*>>(path, monster_fleet_plans_);
+    start_rule_payload monster_fleet_plans(const boost::filesystem::path& path) {
+        const lexer lexer;
+        start_rule_payload monster_fleet_plans_;
+        /*auto success =*/ detail::parse_file<grammar, start_rule_payload>(lexer, path, monster_fleet_plans_);
+        return monster_fleet_plans_;
     }
 }

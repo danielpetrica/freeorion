@@ -12,10 +12,6 @@
 
 #include <chrono>
 
-/** This function returns true iff the FSM's state instrumentation should be
-  * output to the logger's debug stream. */
-bool TraceHumanClientFSMExecution();
-
 // Human client-specific events not already defined in ClientFSMEvents.h
 
 /** Indicates that the "Start Game" button was clicked in the MP Lobby UI, in
@@ -43,10 +39,13 @@ struct AdvanceTurn : boost::statechart::event<AdvanceTurn> {};
 /** The set of events used by the QuittingGame state. */
 class Process;
 struct StartQuittingGame : boost::statechart::event<StartQuittingGame> {
-    StartQuittingGame(bool _r, Process& _s) : m_reset_to_intro(_r), m_server(_s) {}
+    StartQuittingGame(Process& server_, std::function<void()>&& after_server_shutdown_action_) :
+        m_server(server_), m_after_server_shutdown_action(std::move(after_server_shutdown_action_))
+    {}
 
-    bool m_reset_to_intro;  ///< Determines if on completion it resets to intro (true) or exits app (false).
     Process& m_server;
+    /// An action to be completed after disconnecting from the server
+    std::function<void()> m_after_server_shutdown_action;
 };
 
 struct ShutdownServer : boost::statechart::event<ShutdownServer> {};
@@ -110,7 +109,9 @@ struct IntroMenu : boost::statechart::state<IntroMenu, HumanClientFSM> {
         boost::statechart::custom_reaction<HostSPGameRequested>,
         boost::statechart::custom_reaction<HostMPGameRequested>,
         boost::statechart::custom_reaction<JoinMPGameRequested>,
-        boost::statechart::custom_reaction<StartQuittingGame>
+        boost::statechart::custom_reaction<StartQuittingGame>,
+        boost::statechart::custom_reaction<Disconnection>,
+        boost::statechart::custom_reaction<EndGame>
     > reactions;
 
     IntroMenu(my_context ctx);
@@ -120,6 +121,8 @@ struct IntroMenu : boost::statechart::state<IntroMenu, HumanClientFSM> {
     boost::statechart::result react(const HostMPGameRequested& a);
     boost::statechart::result react(const JoinMPGameRequested& a);
     boost::statechart::result react(const StartQuittingGame& msg);
+    boost::statechart::result react(const EndGame&);
+    boost::statechart::result react(const Disconnection&);
 
     CLIENT_ACCESSOR
 };
@@ -134,7 +137,8 @@ struct WaitingForSPHostAck : boost::statechart::simple_state<WaitingForSPHostAck
         boost::statechart::custom_reaction<HostSPGame>,
         boost::statechart::custom_reaction<Disconnection>,
         boost::statechart::custom_reaction<StartQuittingGame>,
-        boost::statechart::custom_reaction<Error>
+        boost::statechart::custom_reaction<Error>,
+        boost::statechart::custom_reaction<CheckSum>
     > reactions;
 
     WaitingForSPHostAck();
@@ -144,6 +148,7 @@ struct WaitingForSPHostAck : boost::statechart::simple_state<WaitingForSPHostAck
     boost::statechart::result react(const Disconnection& d);
     boost::statechart::result react(const StartQuittingGame& msg);
     boost::statechart::result react(const Error& msg);
+    boost::statechart::result react(const CheckSum& msg);
 
     CLIENT_ACCESSOR
 };
@@ -158,7 +163,8 @@ struct WaitingForMPHostAck : boost::statechart::simple_state<WaitingForMPHostAck
         boost::statechart::custom_reaction<HostMPGame>,
         boost::statechart::custom_reaction<Disconnection>,
         boost::statechart::custom_reaction<StartQuittingGame>,
-        boost::statechart::custom_reaction<Error>
+        boost::statechart::custom_reaction<Error>,
+        boost::statechart::custom_reaction<CheckSum>
     > reactions;
 
     WaitingForMPHostAck();
@@ -168,6 +174,7 @@ struct WaitingForMPHostAck : boost::statechart::simple_state<WaitingForMPHostAck
     boost::statechart::result react(const Disconnection& d);
     boost::statechart::result react(const StartQuittingGame& msg);
     boost::statechart::result react(const Error& msg);
+    boost::statechart::result react(const CheckSum& msg);
 
     CLIENT_ACCESSOR
 };
@@ -181,8 +188,10 @@ struct WaitingForMPJoinAck : boost::statechart::simple_state<WaitingForMPJoinAck
 
     typedef boost::mpl::list<
         boost::statechart::custom_reaction<JoinGame>,
+        boost::statechart::custom_reaction<AuthRequest>,
         boost::statechart::custom_reaction<Disconnection>,
         boost::statechart::custom_reaction<StartQuittingGame>,
+        boost::statechart::custom_reaction<CancelMPGameClicked>,
         boost::statechart::custom_reaction<Error>
     > reactions;
 
@@ -190,8 +199,10 @@ struct WaitingForMPJoinAck : boost::statechart::simple_state<WaitingForMPJoinAck
     ~WaitingForMPJoinAck();
 
     boost::statechart::result react(const JoinGame& a);
+    boost::statechart::result react(const AuthRequest& a);
     boost::statechart::result react(const Disconnection& d);
     boost::statechart::result react(const StartQuittingGame& msg);
+    boost::statechart::result react(const CancelMPGameClicked& msg);
     boost::statechart::result react(const Error& msg);
 
     CLIENT_ACCESSOR
@@ -206,12 +217,17 @@ struct MPLobby : boost::statechart::state<MPLobby, HumanClientFSM> {
         boost::statechart::custom_reaction<Disconnection>,
         boost::statechart::custom_reaction<HostID>,
         boost::statechart::custom_reaction<LobbyUpdate>,
-        boost::statechart::custom_reaction<LobbyChat>,
+        boost::statechart::custom_reaction<PlayerChat>,
         boost::statechart::custom_reaction<CancelMPGameClicked>,
         boost::statechart::custom_reaction<StartMPGameClicked>,
         boost::statechart::custom_reaction<GameStart>,
         boost::statechart::custom_reaction<StartQuittingGame>,
-        boost::statechart::custom_reaction<Error>
+        boost::statechart::custom_reaction<Error>,
+        boost::statechart::custom_reaction<CheckSum>,
+        boost::statechart::custom_reaction<ChatHistory>,
+        boost::statechart::custom_reaction<PlayerStatus>,
+        boost::statechart::custom_reaction<SaveGameComplete>,
+        boost::statechart::custom_reaction<TurnProgress>
     > reactions;
 
     MPLobby(my_context ctx);
@@ -220,19 +236,23 @@ struct MPLobby : boost::statechart::state<MPLobby, HumanClientFSM> {
     boost::statechart::result react(const Disconnection& d);
     boost::statechart::result react(const HostID& msg);
     boost::statechart::result react(const LobbyUpdate& msg);
-    boost::statechart::result react(const LobbyChat& msg);
+    boost::statechart::result react(const PlayerChat& msg);
     boost::statechart::result react(const CancelMPGameClicked& a);
     boost::statechart::result react(const StartMPGameClicked& a);
     boost::statechart::result react(const GameStart& msg);
     boost::statechart::result react(const StartQuittingGame& msg);
     boost::statechart::result react(const Error& msg);
+    boost::statechart::result react(const CheckSum& msg);
+    boost::statechart::result react(const ChatHistory& msg);
+    boost::statechart::result react(const PlayerStatus& msg);
+    boost::statechart::result react(const SaveGameComplete& msg);
+    boost::statechart::result react(const TurnProgress& msg);
 
     CLIENT_ACCESSOR
 };
 
 
-/** The human client state in which a game has been started, and a turn is being
-  * played. */
+/** The human client state in which a game has been started. */
 struct PlayingGame : boost::statechart::state<PlayingGame, HumanClientFSM, WaitingForGameStart> {
     typedef boost::statechart::state<PlayingGame, HumanClientFSM, WaitingForGameStart> Base;
 
@@ -247,7 +267,8 @@ struct PlayingGame : boost::statechart::state<PlayingGame, HumanClientFSM, Waiti
         boost::statechart::custom_reaction<StartQuittingGame>,
         boost::statechart::custom_reaction<Error>,
         boost::statechart::custom_reaction<TurnProgress>,
-        boost::statechart::custom_reaction<TurnPartialUpdate>
+        boost::statechart::custom_reaction<TurnPartialUpdate>,
+        boost::statechart::custom_reaction<LobbyUpdate>
     > reactions;
 
     PlayingGame(my_context ctx);
@@ -264,6 +285,7 @@ struct PlayingGame : boost::statechart::state<PlayingGame, HumanClientFSM, Waiti
     boost::statechart::result react(const Error& msg);
     boost::statechart::result react(const TurnProgress& msg);
     boost::statechart::result react(const TurnPartialUpdate& msg);
+    boost::statechart::result react(const LobbyUpdate& msg);
 
     CLIENT_ACCESSOR
 };
@@ -296,6 +318,7 @@ struct WaitingForTurnData : boost::statechart::state<WaitingForTurnData, Playing
         boost::statechart::custom_reaction<SaveGameDataRequest>,
         boost::statechart::custom_reaction<SaveGameComplete>,
         boost::statechart::custom_reaction<TurnUpdate>,
+        boost::statechart::custom_reaction<TurnRevoked>,
         boost::statechart::custom_reaction<DispatchCombatLogs>
     > reactions;
 
@@ -305,6 +328,7 @@ struct WaitingForTurnData : boost::statechart::state<WaitingForTurnData, Playing
     boost::statechart::result react(const SaveGameDataRequest& d);
     boost::statechart::result react(const SaveGameComplete& d);
     boost::statechart::result react(const TurnUpdate& msg);
+    boost::statechart::result react(const TurnRevoked& msg);
     boost::statechart::result react(const DispatchCombatLogs& msg);
 
     CLIENT_ACCESSOR
@@ -363,10 +387,9 @@ struct QuittingGame : boost::statechart::state<QuittingGame, HumanClientFSM> {
 
     std::chrono::steady_clock::time_point m_start_time;
 
-    // if m_reset_to_intro is true QuittingGame transits to the Intro menu, otherwise it
-    // exits the app.
-    bool m_reset_to_intro;
-    Process* m_server_process;
+    Process* m_server_process = nullptr;
+    /// An action to be completed after disconnecting from the server
+    std::function<void()> m_after_server_shutdown_action = std::function<void()>();
 
     CLIENT_ACCESSOR
 };

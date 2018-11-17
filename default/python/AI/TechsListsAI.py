@@ -3,12 +3,9 @@ The TechsListAI module provides functions that describes dependencies between
 various technologies to help the AI decide which technologies should be
 researched next.
 """
-import sys
+from logging import warn, debug
 
-from freeorion_tools import print_error
 import freeOrionAIInterface as fo  # pylint: disable=import-error
-
-EXOBOT_TECH_NAME = "PRO_EXOBOTS"
 
 
 def unusable_techs():
@@ -85,12 +82,12 @@ class TechGroup(object):
                     # Do not display error message as those should be shown only once per game session
                     # by the initial test_tech_integrity() call.
                     msg = "Try to enqueue tech from empty list"
-                    print >> sys.stderr, msg
+                    warn(msg)
                     self._errors.append(msg)
                     continue
             if tech_name in self._tech_queue:
                 msg = "Tech is already in queue: %s" % tech_name
-                print >> sys.stderr, msg
+                warn(msg)
                 self._errors.append(msg)
             else:
                 self._tech_queue.append(tech_name)
@@ -109,9 +106,10 @@ class TechGroup1(TechGroup):
     def __init__(self):
         super(TechGroup1, self).__init__()
         self.economy.extend([
+            "LRN_PHYS_BRAIN",
             "GRO_PLANET_ECOL",
-            "GRO_SUBTER_HAB",
             "LRN_ALGO_ELEGANCE",
+            "GRO_SUBTER_HAB",
             "LRN_ARTIF_MINDS",
             "CON_ORBITAL_CON",  # not a economy tech in the strictest sense but bonus supply often equals more planets
             "PRO_ROBOTIC_PROD",
@@ -128,8 +126,9 @@ class TechGroup1(TechGroup):
         self.hull.extend([
             "SHP_MIL_ROBO_CONT",
         ])
-        # always start with the same first 6 techs
+        # always start with the same first 7 techs; leaves 2 econ, 3 weap, 1 hull
         self.enqueue(
+            self.economy,
             self.economy,
             self.economy,
             self.economy,
@@ -161,7 +160,7 @@ class TechGroup1b(TechGroup1):
             self.economy,
             self.weapon,
             self.weapon,
-
+            self.economy,
         )
 
 
@@ -197,6 +196,7 @@ class TechGroup1SparseB(TechGroup1):
             "SHP_SPACE_FLUX_DRIVE"
         )
 
+
 class TechGroup1SparseC(TechGroup1):
     def __init__(self):
         super(TechGroup1SparseC, self).__init__()
@@ -204,7 +204,6 @@ class TechGroup1SparseC(TechGroup1):
             self.economy,
             self.economy,
             self.weapon,
-            "LRN_PHYS_BRAIN",
             "SHP_ORG_HULL",
             self.weapon,
             "PRO_NANOTECH_PROD",
@@ -636,27 +635,27 @@ def test_tech_integrity():
         TechGroup4,
         TechGroup5
     ]
-    print "Checking TechGroup integrity..."
+    debug("Checking TechGroup integrity...")
     for group in tech_groups:
-        print "Checking %s: " % group.__name__,
+        debug("Checking %s: " % group.__name__)
         error_occured = False
         this_group = group()
         techs = this_group.get_techs()
         for tech in techs:
             if not fo.getTech(tech):
-                print_error("In %s: Tech %s seems not to exist!" % (group.__name__, tech))
+                warn("In %s: Tech %s seems not to exist!" % (group.__name__, tech))
                 error_occured = True
         for err in this_group.get_errors():
-            print_error(err, location=group.__name__)
+            warn(err, exc_info=True)
             error_occured = True
         if not error_occured:
-            print "Seems to be OK!"
+            debug("Seems to be OK!")
 
 
 def sparse_galaxy_techs(index):
     # return primary_meta_techs()
     result = []
-    print "Choosing Research Techlist Index %d" % index
+    debug("Choosing Research Techlist Index %d" % index)
     if index == 0:
         result = TechGroup1a().get_techs()  # early org_hull
         result += TechGroup2A().get_techs()  # prioritizes growth & defense over weapons
@@ -697,7 +696,7 @@ def primary_meta_techs(index=0):
     # index = 1 - index
     result = []
 
-    print "Choosing Research Techlist Index %d" % index
+    debug("Choosing Research Techlist Index %d" % index)
     if index == 0:
         result = TechGroup1a().get_techs()  # early org_hull
         result += TechGroup2A().get_techs()  # prioritizes growth & defense over weapons

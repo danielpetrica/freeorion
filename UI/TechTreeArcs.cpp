@@ -84,7 +84,7 @@ public:
         // We highlight lines that lead to techs that are queued for research
         if (const Empire* empire = GetEmpire(HumanClientApp::GetApp()->EmpireID())) {
             const ResearchQueue& queue = empire->GetResearchQueue();
-            for(std::map<std::string, std::set<std::string>>::value_type& edge : m_edges_to_show) {
+            for (const auto& edge : m_edges_to_show) {
                 std::string tech1 = edge.first;
                 const std::set<std::string>& heads = edge.second;
 
@@ -120,9 +120,8 @@ private:
                 const std::string& to   = edge->GetTechTo();
                 // Do not show lines leading to techs
                 // we are not showing
-                if (techs.find(to) == techs.end()) {
+                if (!techs.count(to))
                     continue;
-                }
                 // Remember what edges we are showing so
                 // we can eventually highlight them
                 m_edges_to_show[from].insert(to);

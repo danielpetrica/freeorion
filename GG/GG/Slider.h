@@ -72,6 +72,7 @@ public:
     Slider(T min, T max, Orientation orientation, Clr color,
            unsigned int tab_width, unsigned int line_width = 5, Flags<WndFlag> flags = INTERACTIVE);
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ ///@{
     Pt MinUsableSize() const override;
@@ -145,7 +146,7 @@ private:
     unsigned int              m_line_width;
     unsigned int              m_tab_width;
     int                       m_tab_drag_offset;
-    Button*                   m_tab;
+    std::shared_ptr<Button>   m_tab;
     bool                      m_dragging_tab;
 };
 
@@ -172,13 +173,18 @@ Slider<T>::Slider(T min, T max, Orientation orientation,
     m_dragging_tab(false)
 {
     Control::SetColor(color);
+}
+
+template <class T>
+void Slider<T>::CompleteConstruction()
+{
     AttachChild(m_tab);
-    m_tab->InstallEventFilter(this);
+    m_tab->InstallEventFilter(shared_from_this());
     SizeMove(UpperLeft(), LowerRight());
 
     if (INSTRUMENT_ALL_SIGNALS) {
-        Connect(SlidSignal, SlidEcho("Slider<T>::SlidSignal"));
-        Connect(SlidAndStoppedSignal, SlidEcho("Slider<T>::SlidAndStoppedSignal"));
+        SlidSignal.connect(SlidEcho("Slider<T>::SlidSignal"));
+        SlidAndStoppedSignal.connect(SlidEcho("Slider<T>::SlidAndStoppedSignal"));
     }
 }
 
@@ -293,7 +299,7 @@ void Slider<T>::SetPageSize(T size)
 
 template <class T>
 Button* Slider<T>::Tab() const
-{ return m_tab; }
+{ return m_tab.get(); }
 
 template <class T>
 T Slider<T>::PtToPosn(const Pt& pt) const
@@ -366,7 +372,7 @@ void Slider<T>::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mo
 template <class T>
 bool Slider<T>::EventFilter(Wnd* w, const WndEvent& event)
 {
-    if (w == m_tab) {
+    if (w == m_tab.get()) {
         switch (event.Type()) {
         case WndEvent::LDrag: {
             if (!Disabled()) {

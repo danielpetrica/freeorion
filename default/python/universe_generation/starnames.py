@@ -1,7 +1,9 @@
 import random
+
 import freeorion as fo
-import options
+
 import names
+import options
 
 
 # for starname modifiers
@@ -53,7 +55,7 @@ def cluster_stars(positions, num_star_groups):
     """
     Returns a list, same size as positions argument, containing indices from 0 to num_star_groups.
     """
-    
+
     if num_star_groups > len(positions):
         return [[pos] for pos in positions]
     centers = [[pos[0], pos[1]] for pos in random.sample(positions, num_star_groups)]
@@ -223,7 +225,8 @@ def name_star_systems(system_list):
     individual_names.extend(potential_group_names[:num_for_indiv])
     group_names.extend(potential_group_names[num_for_indiv:])
 
-    # print "sampling for %d indiv names from list of %d total indiv names"%(num_individual_stars, len(individual_names))
+    # print "sampling for %d indiv names from list of %d total indiv names" % (
+    #     num_individual_stars, len(individual_names))
     indiv_name_sample = random.sample(individual_names, num_individual_stars)
     # indiv_name_assignments = zip([(pos.x, pos.y) for pos in position_list[:num_individual_stars]], indiv_name_sample)
     indiv_name_assignments = zip(indiv_systems, indiv_name_sample)

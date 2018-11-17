@@ -9,6 +9,7 @@
 #include "../universe/Universe.h"
 
 #include "Serialize.ipp"
+#include <boost/serialization/version.hpp>
 
 
 template <class Archive>
@@ -69,7 +70,8 @@ void ProductionQueue::Element::serialize(Archive& ar, const unsigned int version
         & BOOST_SERIALIZATION_NVP(turns_left_to_next_item)
         & BOOST_SERIALIZATION_NVP(turns_left_to_completion)
         & BOOST_SERIALIZATION_NVP(rally_point_id)
-        & BOOST_SERIALIZATION_NVP(paused);
+        & BOOST_SERIALIZATION_NVP(paused)
+        & BOOST_SERIALIZATION_NVP(allowed_imperial_stockpile_use);
 }
 
 template void ProductionQueue::Element::serialize<freeorion_bin_oarchive>(freeorion_bin_oarchive&, const unsigned int);
@@ -83,6 +85,8 @@ void ProductionQueue::serialize(Archive& ar, const unsigned int version)
     ar  & BOOST_SERIALIZATION_NVP(m_queue)
         & BOOST_SERIALIZATION_NVP(m_projects_in_progress)
         & BOOST_SERIALIZATION_NVP(m_object_group_allocated_pp)
+        & BOOST_SERIALIZATION_NVP(m_object_group_allocated_stockpile_pp)
+        & BOOST_SERIALIZATION_NVP(m_expected_new_stockpile_amount)
         & BOOST_SERIALIZATION_NVP(m_empire_id);
 }
 
@@ -101,9 +105,20 @@ void Empire::serialize(Archive& ar, const unsigned int version)
         & BOOST_SERIALIZATION_NVP(m_capital_id)
         & BOOST_SERIALIZATION_NVP(m_source_id)
         & BOOST_SERIALIZATION_NVP(m_eliminated)
-        & BOOST_SERIALIZATION_NVP(m_victories)
-        & BOOST_SERIALIZATION_NVP(m_techs)
-        & BOOST_SERIALIZATION_NVP(m_meters)
+        & BOOST_SERIALIZATION_NVP(m_victories);
+
+    if (Archive::is_loading::value && version < 1) {
+        // adapt set to map
+        std::set<std::string> temp_stringset;
+        ar  & boost::serialization::make_nvp("m_techs", temp_stringset);
+        m_techs.clear();
+        for (auto& entry : temp_stringset)
+            m_techs[entry] = BEFORE_FIRST_TURN;
+    } else {
+        ar  & BOOST_SERIALIZATION_NVP(m_techs);
+    }
+
+    ar  & BOOST_SERIALIZATION_NVP(m_meters)
         & BOOST_SERIALIZATION_NVP(m_research_queue)
         & BOOST_SERIALIZATION_NVP(m_research_progress)
         & BOOST_SERIALIZATION_NVP(m_production_queue)
@@ -112,15 +127,14 @@ void Empire::serialize(Archive& ar, const unsigned int version)
         & BOOST_SERIALIZATION_NVP(m_available_hull_types)
         & BOOST_SERIALIZATION_NVP(m_supply_system_ranges)
         & BOOST_SERIALIZATION_NVP(m_supply_unobstructed_systems)
-        & BOOST_SERIALIZATION_NVP(m_available_system_exit_lanes);
+        & BOOST_SERIALIZATION_NVP(m_preserved_system_exit_lanes);
 
     if (GetUniverse().AllObjectsVisible() ||
         GetUniverse().EncodingEmpire() == ALL_EMPIRES ||
         m_id == GetUniverse().EncodingEmpire())
     {
-        ar  & BOOST_SERIALIZATION_NVP(m_ship_designs)
-            & BOOST_SERIALIZATION_NVP(m_ship_designs_ordered)
-            & BOOST_SERIALIZATION_NVP(m_sitrep_entries)
+        ar  & boost::serialization::make_nvp("m_ship_designs", m_known_ship_designs);
+        ar  & BOOST_SERIALIZATION_NVP(m_sitrep_entries)
             & BOOST_SERIALIZATION_NVP(m_resource_pools)
             & BOOST_SERIALIZATION_NVP(m_population_pool)
 
@@ -154,6 +168,8 @@ void Empire::serialize(Archive& ar, const unsigned int version)
             & BOOST_SERIALIZATION_NVP(m_building_types_scrapped);
     }
 }
+
+BOOST_CLASS_VERSION(Empire, 2)
 
 template void Empire::serialize<freeorion_bin_oarchive>(freeorion_bin_oarchive&, const unsigned int);
 template void Empire::serialize<freeorion_bin_iarchive>(freeorion_bin_iarchive&, const unsigned int);

@@ -9,16 +9,13 @@
 BuildingType
     name = "BLD_SHIPYARD_ORBITAL_DRYDOCK"
     description = "BLD_SHIPYARD_ORBITAL_DRYDOCK_DESC"
-    buildcost = 20
+    buildcost = 20 * [[BUILDING_COST_MULTIPLIER]]
     buildtime = 5
     tags = "ORBITAL"
     location = And [
         Planet
         Not Contains Building name = "BLD_SHIPYARD_ORBITAL_DRYDOCK"
-        Contains And [
-            Building name = "BLD_SHIPYARD_BASE"
-            OwnedBy empire = Source.Owner
-        ]
+        [[LOCATION_ALLOW_ENQUEUE_IF_PREREQ_ENQUEUED(BLD_SHIPYARD_BASE)]]
         OwnedBy empire = Source.Owner
     ]
     EnqueueLocation = [[ENQUEUE_BUILD_ONE_PER_PLANET]]
@@ -174,7 +171,7 @@ ORB_DRYDOCK_REPAIR_RATE
 ORB_DRYDOCK_REPAIR_VAL
 '''[[ORB_DRYDOCK_HAPPY_RATE]] * [[ORB_DRYDOCK_REPAIR_RATE(@1@)]]'''
 
-+// Planet in system with highest happiness that is owned and has a drydock
+// Planet in system with highest happiness that is owned and has a drydock
 PLANET_OWNED_DRYDOCK_HIGHEST_HAPPINESS
 '''MaximumNumberOf Number = 1 SortKey = LocalCandidate.Happiness Condition = And [
     Planet
@@ -186,5 +183,5 @@ PLANET_OWNED_DRYDOCK_HIGHEST_HAPPINESS
 '''
 
 #include "/scripting/common/enqueue.macros"
-
 #include "/scripting/common/priorities.macros"
+#include "/scripting/common/base_prod.macros"

@@ -84,7 +84,6 @@ public:
     /** \name Structors */ //@{
     SettableInWindowCUIButton(const GG::SubTexture& unpressed, const GG::SubTexture& pressed, const GG::SubTexture& rollover, boost::function<bool(const SettableInWindowCUIButton*, const GG::Pt&)> in_window_function);
     //@}
-
     /** \name Accessors */ //@{
     bool InWindow(const GG::Pt& pt) const override;
     //@}
@@ -203,6 +202,7 @@ public:
     /** \name Structors */ //@{
     CUIStateButton(const std::string& str, GG::Flags<GG::TextFormat> format, std::shared_ptr<GG::StateButtonRepresenter> representer);
     //@}
+
 };
 
 /** Tab bar with buttons for selecting tabbed windows. */
@@ -308,18 +308,15 @@ private:
 class CUIEdit : public GG::Edit {
 public:
     /** \name Structors */ //@{
-    CUIEdit(const std::string& str);
+    explicit CUIEdit(const std::string& str);
     //@}
 
     /** \name Mutators */ //@{
     void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-
-    void KeyPress(GG::Key key, std::uint32_t key_code_point, GG::Flags<GG::ModKey> mod_keys) override;
-
+    void KeyPress(GG::Key key, std::uint32_t key_code_point,
+                  GG::Flags<GG::ModKey> mod_keys) override;
     void GainingFocus() override;
-
     void LosingFocus() override;
-
     void Render() override;
     //@}
 
@@ -327,16 +324,46 @@ public:
     mutable boost::signals2::signal<void ()> LosingFocusSignal;
 };
 
+/** a FreeOrion Edit control that replaces its displayed characters with a
+  * placeholder. Useful for password entry.*/
+class CensoredCUIEdit : public CUIEdit {
+public:
+    /** \name Structors */ //@{
+    explicit CensoredCUIEdit(const std::string& str, char display_placeholder = '*');
+    //@}
+
+    /** \name Accessors */ //@{
+    const std::string& RawText() const;
+    //@}
+
+    /** \name Mutators */ //@{
+    void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
+    void KeyPress(GG::Key key, std::uint32_t key_code_point,
+                  GG::Flags<GG::ModKey> mod_keys) override;
+    void SetText(const std::string& str) override;
+    void AcceptPastedText(const std::string& text) override;
+    //@}
+
+protected:
+    char m_placeholder = '*';
+
+private:
+    void ClearSelected();
+
+    std::string m_raw_text = "";
+};
+
 /** a FreeOrion MultiEdit control */
 class CUIMultiEdit : public GG::MultiEdit {
 public:
     /** \name Structors */ //@{
-    CUIMultiEdit(const std::string& str, GG::Flags<GG::MultiEditStyle> style = GG::MULTI_LINEWRAP);
+    explicit CUIMultiEdit(const std::string& str,
+                          GG::Flags<GG::MultiEditStyle> style = GG::MULTI_LINEWRAP);
     //@}
+    void CompleteConstruction() override;
 
     /** \name Mutators */ //@{
     void Render() override;
-
     void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
     //@}
 };
@@ -347,28 +374,21 @@ public:
     /** \name Structors */ //@{
     CUILinkTextMultiEdit(const std::string& str, GG::Flags<GG::MultiEditStyle> style = GG::MULTI_LINEWRAP);
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ //@{
     const std::vector<GG::Font::LineData>& GetLineData() const override;
-
     const std::shared_ptr<GG::Font>& GetFont() const override;
-
     GG::Pt TextUpperLeft() const override;
-
     GG::Pt TextLowerRight() const override;
-
     const std::string& RawText() const override;
     //@}
 
     /** \name Mutators */ //@{
     void Render() override;
-
     void LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-
     void RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-
     void MouseHere(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) override;
-
     void MouseLeave() override;
 
     /** Needed primarily so the SetText call will take a RawText. */
@@ -392,7 +412,10 @@ private:
   * lists, such as the ones used in the game setup dialogs. */
 struct CUISimpleDropDownListRow : public GG::ListBox::Row {
     CUISimpleDropDownListRow(const std::string& row_text, GG::Y row_height = DEFAULT_ROW_HEIGHT);
+    void CompleteConstruction() override;
     static const GG::Y DEFAULT_ROW_HEIGHT;
+private:
+    std::shared_ptr<CUILabel> m_row_label;
 };
 
 /** Encapsulates an icon and text that goes with it in a single control.  For
@@ -409,20 +432,19 @@ class StatisticIcon : public GG::Control {
 public:
     /** \name Structors */ //@{
     StatisticIcon(const std::shared_ptr<GG::Texture> texture,
-                  GG::X x = GG::X0, GG::Y y = GG::Y0,
                   GG::X w = GG::X1, GG::Y h = GG::Y1); ///< initialized with no value (just an icon)
 
     StatisticIcon(const std::shared_ptr<GG::Texture> texture,
                   double value, int digits, bool showsign,
-                  GG::X x = GG::X0, GG::Y y = GG::Y0,
                   GG::X w = GG::X1, GG::Y h = GG::Y1); ///< initializes with one value
 
     StatisticIcon(const std::shared_ptr<GG::Texture> texture,
                   double value0, double value1, int digits0, int digits1,
                   bool showsign0, bool showsign1,
-                  GG::X x = GG::X0, GG::Y y = GG::Y0,
                   GG::X w = GG::X1, GG::Y h = GG::Y1); ///< initializes with two values
     //@}
+
+    void CompleteConstruction() override;
 
     /** \name Accessors */ //@{
     double          GetValue(int index = 0) const;
@@ -463,8 +485,8 @@ private:
     std::vector<int>    m_digits;
     std::vector<bool>   m_show_signs;
 
-    GG::StaticGraphic*  m_icon;
-    GG::Label*          m_text;
+    std::shared_ptr<GG::StaticGraphic>  m_icon;
+    std::shared_ptr<GG::Label>          m_text;
 };
 
 class CUIToolBar : public GG::Control {
@@ -487,22 +509,14 @@ private:
 class SpeciesSelector : public CUIDropDownList {
 public:
     /** \name Structors */ //@{
-    SpeciesSelector(GG::X w, GG::Y h);                          ///< populates with all species in SpeciesManager
+    SpeciesSelector(const std::string& preselect_species, GG::X w, GG::Y h);                          ///< populates with all species in SpeciesManager
     //@}
 
     /** \name Accessors */ //@{
     const std::string&          CurrentSpeciesName() const;     ///< returns the name of the species that is currently selected
-    std::vector<std::string>    AvailableSpeciesNames() const;  ///< returns the names of species in the selector
-    //@}
-
-    /** \name Mutators */ //@{
-    void SelectSpecies(const std::string& species_name);
     //@}
 
     mutable boost::signals2::signal<void (const std::string&)> SpeciesChangedSignal;
-
-private:
-    void SelectionChanged(GG::DropDownList::iterator it);
 };
 
 /** A control used to pick from the empire colors returned by EmpireColors(). */
@@ -521,9 +535,6 @@ public:
     //@}
 
     mutable boost::signals2::signal<void (const GG::Clr&)> ColorChangedSignal;
-
-private:
-    void SelectionChanged(GG::DropDownList::iterator it);
 };
 
 /** A control used to pick arbitrary colors using GG::ColorDlg. */
@@ -558,52 +569,70 @@ class FileDlg : public GG::FileDlg {
 public:
     /** \name Structors */ //@{
     FileDlg(const std::string& directory, const std::string& filename, bool save, bool multi,
-            const std::vector<std::pair<std::string, std::string>>& types);
+            std::vector<std::pair<std::string, std::string>> types);
     //@}
+    void CompleteConstruction() override;
+private:
+    const std::vector<std::pair<std::string, std::string>> m_init_file_filters;
 };
 
-/** Despite the name, this is actually used to display info in both the Research and Production screens. */
-class ProductionInfoPanel : public CUIWnd {
+/** Displays resource and stockpile info on the Researach and Production
+    screens. */
+class ResourceInfoPanel : public CUIWnd {
 public:
     /** \name Structors */ //@{
-    ProductionInfoPanel(const std::string& title, const std::string& point_units_str, const GG::X x, const GG::Y y,
-                        const GG::X w, const GG::Y h, const std::string& config_name);
+    ResourceInfoPanel(const std::string& title, const std::string& point_units_str,
+                      const GG::X x, const GG::Y y, const GG::X w, const GG::Y h,
+                      const std::string& config_name);
     //@}
+    void    CompleteConstruction() override;
 
     /** \name Accessors */ //@{
-    GG::Pt MinUsableSize() const override;
+    GG::Pt  MinUsableSize() const override;
     //@}
 
     /** \name Mutators */ //@{
-    void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
+    void    SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
 
-    void            SetTotalPointsCost(float total_points, float total_cost);
-    void            SetLocalPointsCost(float local_points, float local_cost, const std::string& location_name);
-    void            SetEmpireID(int empire_id);
-    void            ClearLocalInfo();
-    void            Clear();
+    void    SetTotalPointsCost(float total_points, float total_cost);
+    void    SetStockpileCost(float stockpile, float stockpile_use, float stockpile_use_max);
+    void    SetLocalPointsCost(float local_points, float local_cost, float local_stockpile_use,
+                               float local_stockpile_use_max, const std::string& location_name);
+    void    SetEmpireID(int empire_id);
+    void    ClearLocalInfo();
+    void    Clear();
     //@}
 
 private:
-    void DoLayout();
+    void    DoLayout();
 
     std::string m_units_str;
     std::string m_title_str;
     int         m_empire_id;
 
-    GG::Label*  m_total_points_label;
-    GG::Label*  m_total_points;
-    GG::Label*  m_total_points_P_label;
-    GG::Label*  m_wasted_points_label;
-    GG::Label*  m_wasted_points;
-    GG::Label*  m_wasted_points_P_label;
-
-    GG::Label*  m_local_points_label;
-    GG::Label*  m_local_points;
-    GG::Label*  m_local_points_P_label;
-    GG::Label*  m_local_wasted_points_label;
-    GG::Label*  m_local_wasted_points;
-    GG::Label*  m_local_wasted_points_P_label;
+    std::shared_ptr<GG::Label>  m_empire_column_label;
+    std::shared_ptr<GG::Label>  m_local_column_label;
+    std::shared_ptr<GG::Label>  m_total_points_label;
+    std::shared_ptr<GG::Label>  m_total_points;
+    std::shared_ptr<GG::Label>  m_total_points_P_label;
+    std::shared_ptr<GG::Label>  m_stockpile_points_label;
+    std::shared_ptr<GG::Label>  m_stockpile_points;
+    std::shared_ptr<GG::Label>  m_stockpile_points_P_label;
+    std::shared_ptr<GG::Label>  m_stockpile_use_label;
+    std::shared_ptr<GG::Label>  m_stockpile_use;
+    std::shared_ptr<GG::Label>  m_stockpile_use_P_label;
+    std::shared_ptr<GG::Label>  m_local_stockpile_use;
+    std::shared_ptr<GG::Label>  m_local_stockpile_use_P_label;
+    std::shared_ptr<GG::Label>  m_stockpile_max_use_label;
+    std::shared_ptr<GG::Label>  m_stockpile_max_use;
+    std::shared_ptr<GG::Label>  m_stockpile_max_use_P_label;
+    std::shared_ptr<GG::Label>  m_wasted_points_label;
+    std::shared_ptr<GG::Label>  m_wasted_points;
+    std::shared_ptr<GG::Label>  m_wasted_points_P_label;
+    std::shared_ptr<GG::Label>  m_local_points;
+    std::shared_ptr<GG::Label>  m_local_points_P_label;
+    std::shared_ptr<GG::Label>  m_local_wasted_points;
+    std::shared_ptr<GG::Label>  m_local_wasted_points_P_label;
 };
 
 /** Displays progress that is divided over mulitple turns, as in the Research and Production screens. */
@@ -738,7 +767,7 @@ private:
 /** Consistently rendered popup menu */
 class CUIPopupMenu : public GG::PopupMenu {
 public:
-    CUIPopupMenu(GG::X x, GG::Y y, const GG::MenuItem& menu);
+    CUIPopupMenu(GG::X x, GG::Y y);
 };
 
 #endif // _CUIControls_h_

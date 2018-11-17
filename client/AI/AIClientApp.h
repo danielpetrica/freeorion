@@ -13,14 +13,23 @@ class PythonAI;
 /** the application framework for an AI player FreeOrion client.*/
 class AIClientApp : public ClientApp {
 public:
-    /** \name Structors */ //@{
+    AIClientApp() = delete;
+
     AIClientApp(const std::vector<std::string>& args);
-    ~AIClientApp();
-    //@}
+
+    AIClientApp(const AIClientApp&) = delete;
+
+    AIClientApp(AIClientApp&&) = delete;
+
+    ~AIClientApp() override;
+
+    const AIClientApp& operator=(const AIClientApp&) = delete;
+
+    AIClientApp& operator=(const AIClientApp&&) = delete;
 
     /** \name Mutators */ //@{
     void                operator()();   ///< external interface to Run()
-    void                Exit(int code); ///< does basic clean-up, then calls exit(); callable from anywhere in user code via GetApp()
+    void                ExitApp(int code = 0); ///< does basic clean-up, then calls exit(); callable from anywhere in user code via GetApp()
     void                SetPlayerName(const std::string& player_name) { m_player_name = player_name; }
     //@}
 

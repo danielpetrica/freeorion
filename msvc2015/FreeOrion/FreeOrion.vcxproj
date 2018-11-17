@@ -89,7 +89,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;FREEORION_BUILD_HUMAN;FREEORION_WIN32;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>../../../include/;../../GG/;../include/;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>../../../include/;../../GG/;../include/;../../../include/freetype2;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
       <PrecompiledHeaderOutputFile>
@@ -147,8 +147,11 @@
     <ClInclude Include="..\..\client\human\HumanClientApp.h" />
     <ClInclude Include="..\..\client\human\HumanClientFSM.h" />
     <ClInclude Include="..\..\Empire\Empire.h" />
+    <ClInclude Include="..\..\Empire\ResearchQueue.h" />
+    <ClInclude Include="..\..\Empire\ProductionQueue.h" />
     <ClInclude Include="..\..\Empire\EmpireManager.h" />
     <ClInclude Include="..\..\Empire\ResourcePool.h" />
+    <ClInclude Include="..\..\Empire\PopulationPool.h" />
     <ClInclude Include="..\..\network\ClientNetworking.h" />
     <ClInclude Include="..\..\network\Message.h" />
     <ClInclude Include="..\..\network\MessageQueue.h" />
@@ -191,6 +194,7 @@
     <ClInclude Include="..\..\UI\MultiplayerLobbyWnd.h" />
     <ClInclude Include="..\..\UI\ObjectListWnd.h" />
     <ClInclude Include="..\..\UI\OptionsWnd.h" />
+    <ClInclude Include="..\..\UI\PasswordEnterWnd.h" />
     <ClInclude Include="..\..\UI\PlayerListWnd.h" />
     <ClInclude Include="..\..\UI\PopulationPanel.h" />
     <ClInclude Include="..\..\UI\ProductionWnd.h" />
@@ -200,7 +204,6 @@
     <ClInclude Include="..\..\UI\ResourcePanel.h" />
     <ClInclude Include="..\..\UI\ServerConnectWnd.h" />
     <ClInclude Include="..\..\UI\ShaderProgram.h" />
-    <ClInclude Include="..\..\UI\ShipDesignPanel.h" />
     <ClInclude Include="..\..\UI\SidePanel.h" />
     <ClInclude Include="..\..\UI\SitRepPanel.h" />
     <ClInclude Include="..\..\UI\Sound.h" />
@@ -218,6 +221,7 @@
     <ClInclude Include="..\..\universe\Enums.h" />
     <ClInclude Include="..\..\universe\Field.h" />
     <ClInclude Include="..\..\universe\Fleet.h" />
+    <ClInclude Include="..\..\universe\IDAllocator.h" />
     <ClInclude Include="..\..\util\blocking_combiner.h" />
     <ClInclude Include="..\..\universe\Meter.h" />
     <ClInclude Include="..\..\universe\ObjectMap.h" />
@@ -239,6 +243,7 @@
     <ClInclude Include="..\..\util\binreloc.h" />
     <ClInclude Include="..\..\util\Directories.h" />
     <ClInclude Include="..\..\util\MultiplayerCommon.h" />
+    <ClInclude Include="..\..\util\GameRules.h" />
     <ClInclude Include="..\..\util\i18n.h" />
     <ClInclude Include="..\..\util\Logger.h" />
     <ClInclude Include="..\..\util\OptionsDB.h" />
@@ -301,6 +306,7 @@
     <ClCompile Include="..\..\UI\MultiplayerLobbyWnd.cpp" />
     <ClCompile Include="..\..\UI\ObjectListWnd.cpp" />
     <ClCompile Include="..\..\UI\OptionsWnd.cpp" />
+    <ClCompile Include="..\..\UI\PasswordEnterWnd.cpp" />
     <ClCompile Include="..\..\UI\PlayerListWnd.cpp" />
     <ClCompile Include="..\..\UI\PopulationPanel.cpp" />
     <ClCompile Include="..\..\UI\ProductionWnd.cpp" />
@@ -311,7 +317,6 @@
     <ClCompile Include="..\..\UI\SaveFileDialog.cpp" />
     <ClCompile Include="..\..\UI\ServerConnectWnd.cpp" />
     <ClCompile Include="..\..\UI\ShaderProgram.cpp" />
-    <ClCompile Include="..\..\UI\ShipDesignPanel.cpp" />
     <ClCompile Include="..\..\UI\SidePanel.cpp" />
     <ClCompile Include="..\..\UI\SitRepPanel.cpp" />
     <ClCompile Include="..\..\UI\Sound.cpp" />

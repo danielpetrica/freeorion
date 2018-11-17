@@ -19,13 +19,13 @@ required_boost_libraries = [
     "boost_iostreams",
     "boost_locale",
     "boost_log",
+    "boost_log_setup",
     "boost_python",
     "boost_regex",
     "boost_serialization",
     "boost_signals",
     "boost_system",
     "boost_thread",
-    "boost_zlib"
 ]
 
 
@@ -45,9 +45,15 @@ class Generator(object):
         if build_no == INVALID_BUILD_NO:
             print "WARNING: Can't determine git commit!"
 
-        if os.path.isfile(self.outfile) and not build_no == INVALID_BUILD_NO:
+        if os.path.isfile(self.outfile):
             with open(self.outfile) as check_file:
-                if build_no in check_file.read():
+                check_file_contents = check_file.read()
+                if build_no == INVALID_BUILD_NO:
+                    if version in check_file_contents:
+                        print "Version matches version in existing Version.cpp, skip regenerating it"
+                        return
+                elif build_no in check_file_contents:
+                    print "Build number matches build number in existing Version.cpp, skip regenerating it"
                     return
 
         try:
@@ -68,7 +74,7 @@ class NsisInstScriptGenerator(Generator):
         accepted_dll_files = set(["GiGi.dll", "GiGiSDL.dll"])
         for dll_file in all_dll_files:
             if dll_file.startswith("boost_"):
-                if dll_file.partition("-")[0] in required_boost_libraries:
+                if dll_file.partition(".")[0] in required_boost_libraries:
                     accepted_dll_files.add(dll_file)
             else:
                 accepted_dll_files.add(dll_file)
@@ -113,7 +119,7 @@ if system() == 'Windows':
 if system() == 'Darwin':
     generators.append(Generator('Xcode/Info.plist.in', 'Xcode/Info.plist'))
 
-version = "0.4.7+"
+version = "0.4.8+"
 branch = ""
 build_no = INVALID_BUILD_NO
 

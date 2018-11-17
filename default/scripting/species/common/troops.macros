@@ -1,5 +1,5 @@
 BASIC_DEFENSE_TROOPS
-'''EffectsGroup
+'''        EffectsGroup
             scope = Source
             activation = And [
                 Homeworld
@@ -7,9 +7,10 @@ BASIC_DEFENSE_TROOPS
             ]
             stackinggroup = "HOMEWORLD_TROOPS_STACK"
             priority = [[VERY_EARLY_PRIORITY]]
-            effects = SetMaxTroops value = Value + 4 accountinglabel = "HOMEWORLD_LABEL"
+            effects = SetMaxTroops value = Value + 4
+            accountinglabel = "HOMEWORLD_LABEL"
 
-EffectsGroup
+        EffectsGroup
             scope = Source
             activation = And [
                 Planet
@@ -17,16 +18,18 @@ EffectsGroup
             ]
             stackinggroup = "BASIC_TROOPS_STACK"
             priority = [[VERY_EARLY_PRIORITY]]
-            effects = SetMaxTroops value = Value + 10 accountinglabel = "INDEPENDENT_TROOP_LABEL"
+            effects = SetMaxTroops value = Value + 10
+            accountinglabel = "INDEPENDENT_TROOP_LABEL"
 
-EffectsGroup
+        EffectsGroup
             scope = Source
             activation = Planet
             stackinggroup = "POPULATION_TROOPS_STACK"
             priority = [[VERY_EARLY_PRIORITY]]
-            effects = SetMaxTroops Value = Value + Target.Population * [[TROOPS_PER_POP]] accountinglabel = "DEF_ROOT_DEFENSE"
+            effects = SetMaxTroops Value = Value + Target.Population * [[TROOPS_PER_POP]]
+            accountinglabel = "DEF_ROOT_DEFENSE"
             
-EffectsGroup      // gives human bonuses when AI Aggression set to Beginner
+        EffectsGroup      // gives human bonuses when AI Aggression set to Beginner
             scope = Source
             activation = And [
                 Human     // human player, not human species
@@ -36,10 +39,20 @@ EffectsGroup      // gives human bonuses when AI Aggression set to Beginner
             accountinglabel = "DIFFICULTY"
             priority = [[DEFAULT_PRIORITY]]
             effects = SetMaxTroops value = max(6, Value * 2)
+
+        EffectsGroup // increase 1 per turn, up to max
+            scope = Source
+            activation = And [
+                Planet
+                (Source.LastTurnConquered < CurrentTurn)
+                (Source.LastTurnAttackedByShip  < CurrentTurn)
+            ]
+            priority = [[AFTER_ALL_TARGET_MAX_METERS_PRIORITY]]
+            effects = SetTroops value = min(Value(Target.MaxTroops), Value + 1)
 '''
 
 AFTER_SPECIES_MULTIPLICATOR_TROOPS
-'''EffectsGroup
+'''        EffectsGroup
             scope = And [
                 Planet
                 OwnedBy empire = Source.Owner
@@ -47,7 +60,8 @@ AFTER_SPECIES_MULTIPLICATOR_TROOPS
             ]
             stackinggroup = "OUTPOST_TROOPS_STACK"
             priority = [[VERY_LATE_PRIORITY]]
-            effects = SetMaxTroops value = Value * .5 accountinglabel = "OUTPOST_TROOP_LABEL"
+            effects = SetMaxTroops value = Value * .5
+            accountinglabel = "OUTPOST_TROOP_LABEL"
 
 [[PROTECTION_FOCUS_TROOPS]]
 '''
@@ -72,7 +86,8 @@ EffectsGroup
             scope = Source
             activation = Planet
             priority = [[DEFAULT_PRIORITY]]
-            effects = SetMaxTroops value = Value * 0.5 accountinglabel = "BAD_TROOPS_LABEL"
+            effects = SetMaxTroops value = Value * 0.5
+            accountinglabel = "BAD_TROOPS_LABEL"
 
     [[AFTER_SPECIES_MULTIPLICATOR_TROOPS]]
 '''
@@ -91,7 +106,8 @@ EffectsGroup
             scope = Source
             activation = Planet
             priority = [[DEFAULT_PRIORITY]]
-            effects = SetMaxTroops value = Value * 1.5 accountinglabel = "GOOD_TROOPS_LABEL"
+            effects = SetMaxTroops value = Value * 1.5
+            accountinglabel = "GOOD_TROOPS_LABEL"
 
     [[AFTER_SPECIES_MULTIPLICATOR_TROOPS]]
 '''
@@ -104,7 +120,8 @@ EffectsGroup
             scope = Source
             activation = Planet
             priority = [[DEFAULT_PRIORITY]]
-            effects = SetMaxTroops value = Value * 2 accountinglabel = "GREAT_TROOPS_LABEL"
+            effects = SetMaxTroops value = Value * 2
+            accountinglabel = "GREAT_TROOPS_LABEL"
 
     [[AFTER_SPECIES_MULTIPLICATOR_TROOPS]]
 '''
@@ -117,7 +134,8 @@ EffectsGroup
             scope = Source
             activation = Planet
             priority = [[DEFAULT_PRIORITY]]
-            effects = SetMaxTroops value = Value * 3 accountinglabel = "ULTIMATE_TROOPS_LABEL"
+            effects = SetMaxTroops value = Value * 3
+            accountinglabel = "ULTIMATE_TROOPS_LABEL"
 
     [[AFTER_SPECIES_MULTIPLICATOR_TROOPS]]
 '''
@@ -131,7 +149,8 @@ PROTECTION_FOCUS_TROOPS
             ]
             stackinggroup = "FOCUS_PROTECTION_TROOPS_STACK"
             priority = [[VERY_LATE_PRIORITY]]
-            effects = SetMaxTroops value = Value * 2 accountinglabel = "FOCUS_PROTECTION_LABEL"
+            effects = SetMaxTroops value = Value * 2
+            accountinglabel = "FOCUS_PROTECTION_LABEL"
 '''
 
 NO_OFFENSE_TROOPS

@@ -22,7 +22,7 @@ namespace ValueRef {
     enum StatisticType {
         INVALID_STATISTIC_TYPE = -1,
         COUNT,  // returns the number of objects matching the condition
-        UNIQUE_COUNT,   // returns the number of distinct property values of objects matching the condition
+        UNIQUE_COUNT,   // returns the number of distinct property values of objects matching the condition. eg. if 3 objects have the property value "small", and two have "big", then this value is 2, as there are 2 unique property values.
         IF,     // returns T(1) if anything matches the condition, or T(0) otherwise
         SUM,    // returns the sum of the property values of all objects matching the condition
         MEAN,   // returns the mean of the property values of all objects matching the condition
@@ -54,7 +54,16 @@ namespace ValueRef {
         MAXIMUM,
         RANDOM_UNIFORM,
         RANDOM_PICK,
-        SUBSTITUTION
+        SUBSTITUTION,
+        COMPARE_EQUAL,
+        COMPARE_GREATER_THAN,
+        COMPARE_GREATER_THAN_OR_EQUAL,
+        COMPARE_LESS_THAN,
+        COMPARE_LESS_THAN_OR_EQUAL,
+        COMPARE_NOT_EQUAL,
+        ROUND_NEAREST,
+        ROUND_UP,
+        ROUND_DOWN
     };
 }
 

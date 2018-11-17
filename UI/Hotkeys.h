@@ -18,8 +18,9 @@
 #ifndef _Hotkey_h_
 #define _Hotkey_h_
 
-#include <GG/Wnd.h>
 #include <GG/GUI.h>
+#include <GG/Wnd.h>
+
 #include <boost/signals2/shared_connection_block.hpp>
 
 #include <functional>
@@ -58,11 +59,6 @@ public:
 
     /// Returns the name of all defined hotkeys
     static std::set<std::string> DefinedHotkeys();
-
-    /// Returns the names of all defined hotkeys, classified by
-    /// "sections" (ie "namespace"), converted into user string by
-    /// naming it HOTKEYS_uppercase)
-    static std::map<std::string, std::set<std::string>> ClassifyHotkeys();
 
     /// Returns the Hotkey of the given name, or raises an exception
     /// if there is no such hotkey.
@@ -157,8 +153,8 @@ public:
     {}
 
     bool operator()() const {
-        const GG::Wnd* foc = GG::GUI::GetGUI()->FocusWnd();
-        return target && target == foc;
+        const auto& foc = GG::GUI::GetGUI()->FocusWnd();
+        return target && target == foc.get();
     };
 
 private:
@@ -169,8 +165,8 @@ template<class W>
 class FocusWindowIsA {
 public:
     bool operator()() const {
-        const GG::Wnd* foc = GG::GUI::GetGUI()->FocusWnd();
-        return (nullptr != dynamic_cast<const W*>(foc));
+        const auto foc = GG::GUI::GetGUI()->FocusWnd();
+        return (nullptr != dynamic_cast<const W*>(foc.get()));
     };
 };
 
@@ -209,7 +205,7 @@ public:
 
     /// Connects a named shortcut to the target slot in the target instance.
     void Connect(std::function<bool()> func, const std::string& name, std::function<bool()> cond = nullptr)
-    { AddConditionalConnection(name, GG::Connect(NamedSignal(name), func), cond); };
+    { AddConditionalConnection(name, NamedSignal(name).connect(func), cond); };
 
 
 private:

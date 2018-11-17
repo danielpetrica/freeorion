@@ -42,6 +42,7 @@ public:
     TextBlock(X x, Y y, X w, const std::string& str, const std::shared_ptr<Font>& font, Clr color,
               Flags<TextFormat> format, Flags<WndFlag> flags);
 
+    void CompleteConstruction() override;
     void Render() override
     {};
 
@@ -49,7 +50,7 @@ public:
     Pt SetMaxWidth(X width) override;
 
 private:
-    TextControl* m_text; //! The text control used to handle the text.
+    std::shared_ptr<TextControl> m_text; //! The text control used to handle the text.
 };
 
 }

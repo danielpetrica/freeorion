@@ -5,10 +5,12 @@
 #include "EnumsFwd.h"
 #include "../util/Export.h"
 #include "../util/Serialize.h"
+#include "../util/Pending.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <boost/serialization/nvp.hpp>
 #include <boost/iterator/filter_iterator.hpp>
+#include <boost/optional/optional.hpp>
 
 #include <map>
 #include <memory>
@@ -43,7 +45,9 @@ public:
     {}
 
     FocusType(const std::string& name, const std::string& description,
-              const Condition::ConditionBase* location, const std::string& graphic);
+              std::unique_ptr<Condition::ConditionBase>&& location, const std::string& graphic);
+
+    ~FocusType();
     //@}
 
     /** \name Accessors */ //@{
@@ -51,16 +55,22 @@ public:
     const std::string&              Description() const { return m_description; }   ///< returns a text description of this focus type
     const Condition::ConditionBase* Location() const    { return m_location.get(); }///< returns the condition that determines whether an UniverseObject can use this FocusType
     const std::string&              Graphic() const     { return m_graphic; }       ///< returns the name of the grapic file for this focus type
-    std::string                     Dump() const;       ///< returns a data file format representation of this object
+    std::string                     Dump(unsigned short ntabs = 0) const;       ///< returns a data file format representation of this object
+
+    /** Returns a number, calculated from the contained data, which should be
+      * different for different contained data, and must be the same for
+      * the same contained data, and must be the same on different platforms
+      * and executions of the program and the function. Useful to verify that
+      * the parsed content is consistent without sending it all between
+      * clients and server. */
+    unsigned int                    GetCheckSum() const;
     //@}
 
 private:
-    std::string                                         m_name;
-    std::string                                         m_description;
-
+    std::string                                     m_name;
+    std::string                                     m_description;
     std::shared_ptr<const Condition::ConditionBase> m_location;
-
-    std::string                                         m_graphic;
+    std::string                                     m_graphic;
 };
 
 /** Used by parser due to limits on number of sub-items per parsed main item. */
@@ -113,29 +123,10 @@ public:
             const std::vector<FocusType>& foci,
             const std::string& preferred_focus,
             const std::map<PlanetType, PlanetEnvironment>& planet_environments,
-            const std::vector<std::shared_ptr<Effect::EffectsGroup>>& effects,
+            std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects,
             const SpeciesParams& params,
             const std::set<std::string>& tags,
-            const std::string& graphic) :
-        m_name(strings.name),
-        m_description(strings.desc),
-        m_gameplay_description(strings.gameplay_desc),
-        m_foci(foci),
-        m_preferred_focus(preferred_focus),
-        m_planet_environments(planet_environments),
-        m_effects(effects),
-        m_location(nullptr),
-        m_playable(params.playable),
-        m_native(params.native),
-        m_can_colonize(params.can_colonize),
-        m_can_produce_ships(params.can_produce_ships),
-        m_tags(),
-        m_graphic(graphic)
-    {
-        Init();
-        for (const std::string& tag : tags)
-            m_tags.insert(boost::to_upper_copy<std::string>(tag));
-    }
+            const std::string& graphic);
 
     ~Species();
     //@}
@@ -152,7 +143,7 @@ public:
 
     const Condition::ConditionBase* Location() const;
 
-    std::string                     Dump() const;                                           ///< returns a data file format representation of this object
+    std::string                     Dump(unsigned short ntabs = 0) const;                                           ///< returns a data file format representation of this object
     const std::vector<FocusType>&   Foci() const            { return m_foci; }              ///< returns the focus types this species can use
     const std::string&              PreferredFocus() const  { return m_preferred_focus; }   ///< returns the name of the planetary focus this species prefers. Default for new colonies and may affect happiness if on a different focus?
     const std::map<PlanetType, PlanetEnvironment>& PlanetEnvironments() const { return m_planet_environments; } ///< returns a map from PlanetType to the PlanetEnvironment this Species has on that PlanetType
@@ -168,8 +159,16 @@ public:
     bool                            Native() const          { return m_native; }            ///< returns whether this species is a suitable native species (for non player-controlled planets)
     bool                            CanColonize() const     { return m_can_colonize; }      ///< returns whether this species can colonize planets
     bool                            CanProduceShips() const { return m_can_produce_ships; } ///< returns whether this species can produce ships
-    const std::set<std::string>& Tags() const               { return m_tags; }
+    const std::set<std::string>&    Tags() const            { return m_tags; }
     const std::string&              Graphic() const         { return m_graphic; }           ///< returns the name of the grapic file for this species
+
+    /** Returns a number, calculated from the contained data, which should be
+      * different for different contained data, and must be the same for
+      * the same contained data, and must be the same on different platforms
+      * and executions of the program and the function. Useful to verify that
+      * the parsed content is consistent without sending it all between
+      * clients and server. */
+    unsigned int                    GetCheckSum() const;
     //@}
 
     /** \name Mutators */ //@{
@@ -199,7 +198,7 @@ private:
 
     std::vector<std::shared_ptr<Effect::EffectsGroup>> m_effects;
 
-    mutable Condition::ConditionBase*       m_location;
+    mutable std::unique_ptr<Condition::ConditionBase>       m_location;
 
     bool                                    m_playable;
     bool                                    m_native;
@@ -214,79 +213,94 @@ private:
 class FO_COMMON_API SpeciesManager {
 private:
     struct FO_COMMON_API PlayableSpecies
-    { bool operator()(const std::map<std::string, Species*>::value_type& species_map_iterator) const; };
+    { bool operator()(const std::map<std::string, std::unique_ptr<Species>>::value_type& species_entry) const; };
     struct FO_COMMON_API NativeSpecies
-    { bool operator()(const std::map<std::string, Species*>::value_type& species_map_iterator) const; };
+    { bool operator()(const std::map<std::string, std::unique_ptr<Species>>::value_type& species_entry) const; };
 
 public:
-    typedef std::map<std::string, Species*>::const_iterator     iterator;
+    using SpeciesTypeMap = std::map<std::string, std::unique_ptr<Species>>;
+    using CensusOrder = std::vector<std::string>;
+    using iterator = SpeciesTypeMap::const_iterator;
     typedef boost::filter_iterator<PlayableSpecies, iterator>   playable_iterator;
     typedef boost::filter_iterator<NativeSpecies, iterator>     native_iterator;
 
     /** \name Accessors */ //@{
     /** returns the building type with the name \a name; you should use the
       * free function GetSpecies() instead, mainly to save some typing. */
-    const Species*          GetSpecies(const std::string& name) const;
-    Species*                GetSpecies(const std::string& name);
+    const Species*      GetSpecies(const std::string& name) const;
+    Species*            GetSpecies(const std::string& name);
 
     /** returns a unique numeric id for reach species, or -1 for an invalid species name. */
-    int                     GetSpeciesID(const std::string& name) const;
+    int                 GetSpeciesID(const std::string& name) const;
 
     /** iterators for all species */
-    iterator                begin() const;
-    iterator                end() const;
+    iterator            begin() const;
+    iterator            end() const;
 
     /** iterators for playble species. */
-    playable_iterator       playable_begin() const;
-    playable_iterator       playable_end() const;
+    playable_iterator   playable_begin() const;
+    playable_iterator   playable_end() const;
 
     /** iterators for native species. */
-    native_iterator         native_begin() const;
-    native_iterator         native_end() const;
+    native_iterator     native_begin() const;
+    native_iterator     native_end() const;
+
+    /** returns an ordered list of tags that should be considered for census listings. */
+    const CensusOrder& census_order() const;
 
     /** returns true iff this SpeciesManager is empty. */
-    bool                    empty() const;
+    bool                empty() const;
 
     /** returns the number of species stored in this manager. */
-    int                     NumSpecies() const;
-    int                     NumPlayableSpecies() const;
-    int                     NumNativeSpecies() const;
+    int                 NumSpecies() const;
+    int                 NumPlayableSpecies() const;
+    int                 NumNativeSpecies() const;
 
     /** returns the name of a species in this manager, or an empty string if
       * this manager is empty. */
-    const std::string&      RandomSpeciesName() const;
+    const std::string&  RandomSpeciesName() const;
 
     /** returns the name of a playable species in this manager, or an empty
       * string if there are no playable species. */
-    const std::string&      RandomPlayableSpeciesName() const;
-    const std::string&      SequentialPlayableSpeciesName(int id) const;
+    const std::string&  RandomPlayableSpeciesName() const;
+    const std::string&  SequentialPlayableSpeciesName(int id) const;
 
     /** returns a map from species name to a set of object IDs that are the
       * homeworld(s) of that species in the current game. */
-    std::map<std::string, std::set<int>>                            GetSpeciesHomeworldsMap(int encoding_empire = ALL_EMPIRES) const;
+    std::map<std::string, std::set<int>>
+        GetSpeciesHomeworldsMap(int encoding_empire = ALL_EMPIRES) const;
 
     /** returns a map from species name to a map from empire id to each the
       * species' opinion of the empire */
-    const std::map<std::string, std::map<int, float>>&              GetSpeciesEmpireOpinionsMap(int encoding_empire = ALL_EMPIRES) const;
+    const std::map<std::string, std::map<int, float>>&
+        GetSpeciesEmpireOpinionsMap(int encoding_empire = ALL_EMPIRES) const;
 
     /** returns opinion of species with name \a species_name about empire with
       * id \a empire_id or 0.0 if there is no such opinion yet recorded. */
-    float                                                           SpeciesEmpireOpinion(const std::string& species_name,
-                                                                                         int empire_id) const;
+    float SpeciesEmpireOpinion(const std::string& species_name, int empire_id) const;
 
     /** returns a map from species name to a map from other species names to the
       * opinion of the first species about the other species. */
-    const std::map<std::string, std::map<std::string, float>>&      GetSpeciesSpeciesOpinionsMap(int encoding_empire = ALL_EMPIRES) const;
+    const std::map<std::string, std::map<std::string, float>>&
+        GetSpeciesSpeciesOpinionsMap(int encoding_empire = ALL_EMPIRES) const;
 
     /** returns opinion of species with name \a opinionated_species_name about
       * other species with name \a rated_species_name or 0.0 if there is no
       * such opinion yet recorded. */
-    float                                                           SpeciesSpeciesOpinion(const std::string& opinionated_species_name,
-                                                                                          const std::string& rated_species_name) const;
+    float SpeciesSpeciesOpinion(const std::string& opinionated_species_name,
+                                const std::string& rated_species_name) const;
 
     /** returns the instance of this singleton class; you should use the free
       * function GetSpeciesManager() instead */
     static SpeciesManager&  GetSpeciesManager();
+
+    /** Returns a number, calculated from the contained data, which should be
+      * different for different contained data, and must be the same for
+      * the same contained data, and must be the same on different platforms
+      * and executions of the program and the function. Useful to verify that
+      * the parsed content is consistent without sending it all between
+      * clients and server. */
+    unsigned int GetCheckSum() const;
     //@}
 
     /** \name Mutators */ //@{
@@ -312,17 +326,28 @@ public:
 
     std::map<std::string, std::map<int, float>>&        SpeciesObjectPopulations(int encoding_empire = ALL_EMPIRES);
     std::map<std::string, std::map<std::string, int>>&  SpeciesShipsDestroyed(int encoding_empire = ALL_EMPIRES);
+
+    /** Sets species types to the value of \p future. */
+    FO_COMMON_API void SetSpeciesTypes(Pending::Pending<std::pair<SpeciesTypeMap, CensusOrder>>&& future);
+
     //@}
 
 private:
     SpeciesManager();
-    ~SpeciesManager();
 
     /** sets the homeworld ids of species in this SpeciesManager to those
       * specified in \a species_homeworld_ids */
     void    SetSpeciesHomeworlds(const std::map<std::string, std::set<int>>& species_homeworld_ids);
 
-    std::map<std::string, Species*>                     m_species;
+    /** Assigns any m_pending_types to m_species. */
+    void CheckPendingSpeciesTypes() const;
+
+    /** Future types being parsed by parser.  mutable so that it can
+        be assigned to m_species_types when completed.*/
+    mutable boost::optional<Pending::Pending<std::pair<SpeciesTypeMap, CensusOrder>>> m_pending_types = boost::none;
+
+    mutable SpeciesTypeMap                              m_species;
+    mutable CensusOrder                                 m_census_order;
     std::map<std::string, std::map<int, float>>         m_species_empire_opinions;
     std::map<std::string, std::map<std::string, float>> m_species_species_opinions;
 

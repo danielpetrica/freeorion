@@ -24,17 +24,16 @@
 
 #include <GG/dialogs/FileDlg.h>
 
-#include <GG/GUI.h>
 #include <GG/Button.h>
-#include <GG/Edit.h>
-#include <GG/DropDownList.h>
+#include <GG/dialogs/ThreeButtonDlg.h>
 #include <GG/DrawUtil.h>
+#include <GG/DropDownList.h>
+#include <GG/Edit.h>
+#include <GG/GUI.h>
 #include <GG/StyleFactory.h>
 #include <GG/TextControl.h>
-#include <GG/WndEvent.h>
 #include <GG/utf8/checked.h>
-
-#include <GG/dialogs/ThreeButtonDlg.h>
+#include <GG/WndEvent.h>
 
 #include <boost/cast.hpp>
 #include <boost/format.hpp>
@@ -168,13 +167,79 @@ FileDlg::FileDlg(const std::string& directory, const std::string& filename, bool
     m_ok_button(nullptr),
     m_cancel_button(nullptr),
     m_files_label(nullptr),
-    m_file_types_label(nullptr)
+    m_file_types_label(nullptr),
+    m_init_directory(directory),
+    m_init_filename(filename)
 {
-    CreateChildren(multi);
-    Init(directory);
+    const auto& style = GetStyleFactory();
 
-    if (!filename.empty()) {
-        fs::path filename_path = fs::system_complete(fs::path(filename));
+    if (m_save)
+        multi = false;
+
+    // finally, we can create the listbox with the files in it, sized to fill the available space
+    m_files_list = style->NewListBox(m_border_color);
+    m_files_list->SetStyle(LIST_NOSORT | (multi ? LIST_NONE : LIST_SINGLESEL));
+}
+
+void FileDlg::CompleteConstruction()
+{
+    const auto& style = GetStyleFactory();
+
+    m_files_edit = style->NewEdit("", m_font, m_border_color, m_text_color);
+    m_filter_list = style->NewDropDownList(3, m_border_color);
+    m_filter_list->SetStyle(LIST_NOSORT);
+
+    m_curr_dir_text = style->NewTextControl("", m_font, m_text_color, FORMAT_NOWRAP);
+    m_files_label = style->NewTextControl(style->Translate("File(s):"), m_font, m_text_color, FORMAT_RIGHT | FORMAT_VCENTER);
+    m_file_types_label = style->NewTextControl(style->Translate("Type(s):"), m_font, m_text_color, FORMAT_RIGHT | FORMAT_VCENTER);
+
+    m_ok_button = style->NewButton(m_save ? m_save_str : m_open_str, m_font, m_color, m_text_color);
+    m_cancel_button = style->NewButton(style->Translate("Cancel"), m_font, m_color, m_text_color);
+
+    DoLayout();
+
+    AttachChild(m_files_edit);
+    AttachChild(m_filter_list);
+    AttachChild(m_ok_button);
+    AttachChild(m_cancel_button);
+    AttachChild(m_files_list);
+    AttachChild(m_curr_dir_text);
+    AttachChild(m_files_label);
+    AttachChild(m_file_types_label);
+
+    if (m_init_directory != "") {
+#if defined(_WIN32)
+        // convert UTF-8 file name to UTF-16
+        boost::filesystem::path::string_type directory_native;
+        utf8::utf8to16(m_init_directory.begin(), m_init_directory.end(), std::back_inserter(directory_native));
+        fs::path dir_path = fs::system_complete(fs::path(directory_native));
+#else
+        fs::path dir_path = fs::system_complete(fs::path(m_init_directory));
+#endif
+        if (!fs::exists(dir_path))
+            throw BadInitialDirectory("FileDlg::FileDlg() : Initial directory \"" + dir_path.string() + "\" does not exist.");
+        SetWorkingDirectory(dir_path);
+    }
+
+    UpdateDirectoryText();
+    PopulateFilters();
+    UpdateList();
+
+    m_ok_button->LeftClickedSignal.connect(
+        boost::bind(&FileDlg::OkClicked, this));
+    m_cancel_button->LeftClickedSignal.connect(
+        boost::bind(&FileDlg::CancelClicked, this));
+    m_files_list->SelRowsChangedSignal.connect(
+        boost::bind(&FileDlg::FileSetChanged, this, _1));
+    m_files_list->DoubleClickedRowSignal.connect(
+        boost::bind(&FileDlg::FileDoubleClicked, this, _1, _2, _3));
+    m_files_edit->EditedSignal.connect(
+        boost::bind(&FileDlg::FilesEditChanged, this, _1));
+    m_filter_list->SelChangedSignal.connect(
+        boost::bind(&FileDlg::FilterChanged, this, _1));
+
+    if (!m_init_filename.empty()) {
+        fs::path filename_path = fs::system_complete(fs::path(m_init_filename));
         m_files_edit->SetText(filename_path.leaf().string());
     }
 }
@@ -242,31 +307,6 @@ const boost::filesystem::path FileDlg::StringToPath(const std::string& str) {
 #endif
 }
 
-void FileDlg::CreateChildren(bool multi)
-{
-    if (m_save)
-        multi = false;
-
-    std::shared_ptr<StyleFactory> style = GetStyleFactory();
-
-    m_files_edit = style->NewEdit("", m_font, m_border_color, m_text_color);
-    m_filter_list = style->NewDropDownList(3, m_border_color);
-    m_filter_list->SetStyle(LIST_NOSORT);
-
-    m_curr_dir_text = style->NewTextControl("", m_font, m_text_color, FORMAT_NOWRAP);
-    m_files_label = style->NewTextControl(style->Translate("File(s):"), m_font, m_text_color, FORMAT_RIGHT | FORMAT_VCENTER);
-    m_file_types_label = style->NewTextControl(style->Translate("Type(s):"), m_font, m_text_color, FORMAT_RIGHT | FORMAT_VCENTER);
-
-    m_ok_button = style->NewButton(m_save ? m_save_str : m_open_str, m_font, m_color, m_text_color);
-    m_cancel_button = style->NewButton(style->Translate("Cancel"), m_font, m_color, m_text_color);
-
-    // finally, we can create the listbox with the files in it, sized to fill the available space
-    m_files_list = style->NewListBox(m_border_color);
-    m_files_list->SetStyle(LIST_NOSORT | (multi ? LIST_NONE : LIST_SINGLESEL));
-
-    DoLayout();
-}
-
 void FileDlg::DoLayout()
 {
     X button_width = Width() / 4 - H_SPACING;
@@ -302,47 +342,6 @@ void FileDlg::DoLayout()
     m_cancel_button->Resize(Pt(button_width, button_height));
 }
 
-void FileDlg::Init(const std::string& directory)
-{
-    AttachChild(m_files_edit);
-    AttachChild(m_filter_list);
-    AttachChild(m_ok_button);
-    AttachChild(m_cancel_button);
-    AttachChild(m_files_list);
-    AttachChild(m_curr_dir_text);
-    AttachChild(m_files_label);
-    AttachChild(m_file_types_label);
-
-    if (directory != "") {
-#if defined(_WIN32)
-        // convert UTF-8 file name to UTF-16
-        boost::filesystem::path::string_type directory_native;
-        utf8::utf8to16(directory.begin(), directory.end(), std::back_inserter(directory_native));
-        fs::path dir_path = fs::system_complete(fs::path(directory_native));
-#else
-        fs::path dir_path = fs::system_complete(fs::path(directory));
-#endif
-        if (!fs::exists(dir_path))
-            throw BadInitialDirectory("FileDlg::Init() : Initial directory \"" + dir_path.string() + "\" does not exist.");
-        SetWorkingDirectory(dir_path);
-    }
-
-    UpdateDirectoryText();
-    PopulateFilters();
-    UpdateList();
-    ConnectSignals();
-}
-
-void FileDlg::ConnectSignals()
-{
-    Connect(m_ok_button->LeftClickedSignal,     &FileDlg::OkClicked,        this);
-    Connect(m_cancel_button->LeftClickedSignal, &FileDlg::CancelClicked,    this);
-    Connect(m_files_list->SelChangedSignal,     &FileDlg::FileSetChanged,   this);
-    Connect(m_files_list->DoubleClickedSignal,  &FileDlg::FileDoubleClicked,this);
-    Connect(m_files_edit->EditedSignal,         &FileDlg::FilesEditChanged, this);
-    Connect(m_filter_list->SelChangedSignal,    &FileDlg::FilterChanged,    this);
-}
-
 void FileDlg::OkClicked()
 { OkHandler(false); }
 
@@ -357,7 +356,7 @@ void FileDlg::OkHandler(bool double_click)
     parse(m_files_edit->Text().c_str(), (+anychar_p)[append(files)], space_p);
     std::sort(files.begin(), files.end());
 
-    std::shared_ptr<StyleFactory> style = GetStyleFactory();
+    const auto& style = GetStyleFactory();
 
     if (m_save) { // file save case
         if (m_ok_button->Text() != m_save_str) {
@@ -394,9 +393,9 @@ void FileDlg::OkHandler(bool double_click)
             // check to see if file already exists; if so, ask if it's ok to overwrite
             if (fs::exists(p)) {
                 std::string msg_str = boost::str(boost::format(style->Translate("%1% exists.\nOk to overwrite it?")) % save_file);
-                std::shared_ptr<ThreeButtonDlg> dlg(
+                auto dlg =
                     style->NewThreeButtonDlg(X(300), Y(125), msg_str, m_font, m_color, m_border_color, m_color, m_text_color,
-                                             2, style->Translate("Ok"), style->Translate("Cancel")));
+                                             2, style->Translate("Ok"), style->Translate("Cancel"));
                 dlg->Run();
                 results_valid = (dlg->Result() == 0);
             }
@@ -418,9 +417,9 @@ void FileDlg::OkHandler(bool double_click)
                     bool p_is_directory = fs::is_directory(p);
                     if (!m_select_directories && p_is_directory) {
                         std::string msg_str = boost::str(boost::format(style->Translate("\"%1%\"\nis a directory.")) % file_name);
-                        std::shared_ptr<ThreeButtonDlg> dlg(
+                        auto dlg =
                             style->NewThreeButtonDlg(X(300), Y(125), msg_str, m_font, m_color, m_border_color, m_color,
-                                                     m_text_color, 1, style->Translate("Ok")));
+                                                     m_text_color, 1, style->Translate("Ok"));
                         dlg->Run();
                         results_valid = false;
                         break;
@@ -437,9 +436,9 @@ void FileDlg::OkHandler(bool double_click)
                     results_valid = true; // indicate validity only if at least one good file was found
                 } else {
                     std::string msg_str = boost::str(boost::format(style->Translate("File \"%1%\"\ndoes not exist.")) % file_name);
-                    std::shared_ptr<ThreeButtonDlg> dlg(
+                    auto dlg =
                         style->NewThreeButtonDlg(X(300), Y(125), msg_str, m_font, m_color, m_border_color, m_color,
-                                                 m_text_color, 1, style->Translate("Ok")));
+                                                 m_text_color, 1, style->Translate("Ok"));
                     dlg->Run();
                     results_valid = false;
                     break;
@@ -461,7 +460,7 @@ void FileDlg::FileSetChanged(const ListBox::SelectionSet& files)
 {
     std::string all_files;
     bool dir_selected = false;
-    for (const ListBox::SelectionSet::value_type& file : files) {
+    for (const auto& file : files) {
         std::string filename = !(**file).empty() ? boost::polymorphic_downcast<TextControl*>((**file).at(0))->Text() : "";
         if (filename[0] != '[') {
             if (!all_files.empty())
@@ -516,8 +515,8 @@ void FileDlg::PopulateFilters()
         m_file_types_label->Disable();
         m_filter_list->Disable();
     } else {
-        for (std::pair<std::string, std::string>& file_filter : m_file_filters) {
-            ListBox::Row* row = new ListBox::Row();
+        for (auto& file_filter : m_file_filters) {
+            auto row = Wnd::Create<ListBox::Row>();
             row->push_back(GetStyleFactory()->NewTextControl(file_filter.first, m_font, m_text_color, FORMAT_NOWRAP));
             m_filter_list->Insert(row);
         }
@@ -537,10 +536,12 @@ void FileDlg::UpdateList()
     // define file filters based on the filter strings in the filter drop list
     std::vector<rule<>> file_filters;
 
-    DropDownList::iterator it = m_filter_list->CurrentItem();
-    if (it != m_filter_list->end()) {
+    auto filter_it = m_filter_list->CurrentItem();
+    if (filter_it != m_filter_list->end()) {
         std::vector<std::string> filter_specs; // the filter specifications (e.g. "*.png")
-        parse(m_file_filters[std::distance(m_filter_list->begin(), it)].second.c_str(), *(!ch_p(',') >> (+(anychar_p - ','))[append(filter_specs)]), space_p);
+        parse(m_file_filters[std::distance(m_filter_list->begin(), filter_it)].second.c_str(),
+              *(!ch_p(',') >> (+(anychar_p - ','))[append(filter_specs)]),
+              space_p);
         file_filters.resize(filter_specs.size());
         for (std::size_t i = 0; i < filter_specs.size(); ++i) {
             auto non_wildcards = std::make_shared<std::vector<std::string>>(); // the parts of the filter spec that are not wildcards
@@ -573,13 +574,13 @@ void FileDlg::UpdateList()
              s_working_dir.branch_path().string() != "") ||
             Win32Paths())
         {
-            ListBox::Row* row = new ListBox::Row();
+            auto row = Wnd::Create<ListBox::Row>();
             row->push_back(GetStyleFactory()->NewTextControl("[..]", m_font, m_text_color, FORMAT_NOWRAP));
             m_files_list->Insert(row);
         }
         // current directory selector
         {
-            ListBox::Row* row = new ListBox::Row();
+            auto row = Wnd::Create<ListBox::Row>();
             row->push_back(GetStyleFactory()->NewTextControl("[.]", m_font, m_text_color, FORMAT_NOWRAP));
             m_files_list->Insert(row);
         }
@@ -594,11 +595,11 @@ void FileDlg::UpdateList()
             return;
         }
         // contained directories
-        std::multimap<std::string, ListBox::Row*> sorted_rows;
+        std::multimap<std::string, std::shared_ptr<ListBox::Row>> sorted_rows;
         for (fs::directory_iterator it(s_working_dir); it != end_it; ++it) {
             try {
                 if (fs::exists(*it) && fs::is_directory(*it) && it->path().filename().native()[0] != '.') {
-                    ListBox::Row* row = new ListBox::Row();
+                    auto row = Wnd::Create<ListBox::Row>();
 
 #if defined(_WIN32)
                     // convert UTF-16 path to UTF-8 for display
@@ -616,11 +617,11 @@ void FileDlg::UpdateList()
             }
         }
 
-        std::vector<ListBox::Row*> rows;
+        std::vector<std::shared_ptr<ListBox::Row>> rows;
         rows.reserve(sorted_rows.size());
-        for (std::multimap<std::string, ListBox::Row*>::value_type& row : sorted_rows)
+        for (auto& row : sorted_rows)
         { rows.push_back(row.second); }
-        m_files_list->Insert(rows, false);
+        m_files_list->Insert(rows);
 
         if (!m_select_directories) {
             sorted_rows.clear();
@@ -633,7 +634,7 @@ void FileDlg::UpdateList()
                                 meets_filters = true;
                         }
                         if (meets_filters) {
-                            ListBox::Row* row = new ListBox::Row();
+                            auto row = Wnd::Create<ListBox::Row>();
                             row->push_back(GetStyleFactory()->NewTextControl(it->path().filename().string(), m_font, m_text_color, FORMAT_NOWRAP));
                             sorted_rows.insert({it->path().filename().string(), row});
                         }
@@ -641,7 +642,7 @@ void FileDlg::UpdateList()
                 } catch (const fs::filesystem_error&) {
                 }
             }
-            for (const std::multimap<std::string, ListBox::Row*>::value_type& row : sorted_rows) {
+            for (const auto& row : sorted_rows) {
                 m_files_list->Insert(row.second);
             }
         }
@@ -650,7 +651,7 @@ void FileDlg::UpdateList()
             try {
                 fs::path path(c + std::string(":"));
                 if (fs::exists(path)) {
-                    ListBox::Row* row = new ListBox::Row();
+                    auto row = Wnd::Create<ListBox::Row>();
                     row->push_back(GetStyleFactory()->NewTextControl("[" + path.root_name().string() + "]", m_font, m_text_color, FORMAT_NOWRAP));
                     m_files_list->Insert(row);
                 }
@@ -690,7 +691,7 @@ void FileDlg::UpdateDirectoryText()
 
 void FileDlg::OpenDirectory()
 {
-    std::shared_ptr<StyleFactory> style = GetStyleFactory();
+    const auto& style = GetStyleFactory();
 
     // see if there is a directory selected; if so open the directory.
     // if more than one is selected, take the first one
@@ -745,19 +746,19 @@ void FileDlg::OpenDirectory()
             try {
                 SetWorkingDirectory(fs::path(directory + "\\"));
             } catch (const fs::filesystem_error& e) {
-                if (e.code() == boost::system::posix_error::io_error) {
+                if (e.code() == boost::system::errc::io_error) {
                     m_in_win32_drive_selection = true;
                     m_files_edit->Clear();
                     FilesEditChanged(m_files_edit->Text());
                     m_curr_dir_text->SetText("");
                     DoLayout();
                     UpdateList();
-                    std::shared_ptr<ThreeButtonDlg> dlg(
+                    auto dlg =
                         GetStyleFactory()->NewThreeButtonDlg(X(175), Y(75),
                                                              style->Translate("Device is not ready."),
                                                              m_font, m_color,
                                                              m_border_color, m_color,
-                                                             m_text_color, 1));
+                                                             m_text_color, 1);
                     dlg->Run();
                 } else {
                     throw;

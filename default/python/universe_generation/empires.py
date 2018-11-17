@@ -1,17 +1,15 @@
-import os.path
 import random
 
 import freeorion as fo
 
-from starsystems import star_types_real, pick_star_type
-from planets import calc_planet_size, calc_planet_type, planet_sizes_real, planet_types_real
+import universe_statistics
 from names import get_name_list, random_name
-from options import (HS_ACCEPTABLE_PLANET_TYPES, HS_MIN_PLANETS_IN_VICINITY_TOTAL,
-                     HS_MIN_PLANETS_IN_VICINITY_PER_SYSTEM, HS_MIN_DISTANCE_PRIORITY_LIMIT, HS_MAX_JUMP_DISTANCE_LIMIT,
-                     HS_VICINITY_RANGE, HS_MIN_SYSTEMS_IN_VICINITY, HS_ACCEPTABLE_PLANET_SIZES)
-
+from options import (HS_ACCEPTABLE_PLANET_SIZES, HS_ACCEPTABLE_PLANET_TYPES, HS_MAX_JUMP_DISTANCE_LIMIT,
+                     HS_MIN_DISTANCE_PRIORITY_LIMIT, HS_MIN_PLANETS_IN_VICINITY_PER_SYSTEM,
+                     HS_MIN_PLANETS_IN_VICINITY_TOTAL, HS_MIN_SYSTEMS_IN_VICINITY, HS_VICINITY_RANGE)
+from planets import calc_planet_size, calc_planet_type, planet_sizes_real, planet_types_real
+from starsystems import pick_star_type, star_types_real
 from util import report_error
-import statistics
 
 
 def get_empire_name_generator():
@@ -184,8 +182,9 @@ class HomeSystemFinder(object):
                 current_merit_lower_bound = merit
                 best_candidate = [s for (_, s) in merit_system]
 
-                # Quit sucessfully if the lowest merit system meets the minimum threshold
-                if merit >= min_planets_in_vicinity_limit(fo.systems_within_jumps_unordered(HS_VICINITY_RANGE, [system])):
+                # Quit successfully if the lowest merit system meets the minimum threshold
+                if merit >= min_planets_in_vicinity_limit(
+                        fo.systems_within_jumps_unordered(HS_VICINITY_RANGE, [system])):
                     break
 
         return best_candidate
@@ -463,7 +462,7 @@ def setup_empire(empire, empire_name, home_system, starting_species, player_name
         print "Picking random starting species for player", player_name
         starting_species = next(starting_species_pool)
     print "Starting species for player", player_name, "is", starting_species
-    statistics.empire_species[starting_species] += 1
+    universe_statistics.empire_species[starting_species] += 1
 
     # pick a planet from the specified home system as homeworld
     planet_list = fo.sys_get_planets(home_system)

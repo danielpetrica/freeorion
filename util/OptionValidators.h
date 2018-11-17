@@ -92,8 +92,10 @@ struct RangedValidator : public Validator<T>
     const T m_max;
 };
 
-/** a Validator that constrains valid values to certain step-values (eg: 0, 25, 50, ...).  The steps are assumed to
-    begin at the validated type's default-constructed value, unless another origin is specified. */
+/** a Validator that constrains valid values to certain step-values
+    (eg: 0, 25, 50, ...).  The steps are assumed to begin at the
+    validated type's default-constructed value, unless another origin
+    is specified. */
 template <class T>
 struct StepValidator : public Validator<T>
 {
@@ -165,7 +167,7 @@ struct DiscreteValidator : public Validator<T>
     boost::any Validate(const std::string& str) const override {
         T val = boost::lexical_cast<T>(str);
 
-        if (m_values.find(val) == m_values.end())
+        if (!m_values.count(val))
             throw boost::bad_lexical_cast();
 
         return boost::any(val);

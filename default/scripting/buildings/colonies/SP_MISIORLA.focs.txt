@@ -1,7 +1,9 @@
+// For long term changes - Do not modify this definition directly
+//                     Instead modify and execute col_bld_gen.py and use the result.
 BuildingType
     name = "BLD_COL_MISIORLA"
     description = "BLD_COL_MISIORLA_DESC"
-    buildcost = 50 * [[COLONY_UPKEEP_MULTIPLICATOR]]
+    buildcost = 50 * [[COLONY_UPKEEP_MULTIPLICATOR]] * [[BUILDING_COST_MULTIPLIER]]
     buildtime = 1.0 * max(5.0, 1.0 +
         (Statistic Min Value = ShortestPath Object = Target.SystemID Object = LocalCandidate.SystemID
             Condition = And [
@@ -30,12 +32,12 @@ BuildingType
                  OwnerHasTech name = "SHP_ORG_HULL"
                  OwnerHasTech name = "SHP_QUANT_ENRG_MAG"
              ])
-             + 20 * (Statistic If Condition = OwnerHasTech Name = "SHP_QUANT_ENRG_MAG")
-             + 10 * (Statistic If Condition = OwnerHasTech Name = "SHP_IMPROVED_ENGINE_COUPLINGS")
-             + 10 * (Statistic If Condition = OwnerHasTech Name = "SHP_N_DIMENSIONAL_ENGINE_MATRIX")
-             + 10 * (Statistic If Condition = OwnerHasTech Name = "SHP_SINGULARITY_ENGINE_CORE")
-             + 10 * (Statistic If Condition = OwnerHasTech Name = "SHP_TRANSSPACE_DRIVE")
-             + 10 * (Statistic If Condition = OwnerHasTech Name = "SHP_INTSTEL_LOG")
+             + 20 * (Statistic If Condition = OwnerHasTech name = "SHP_QUANT_ENRG_MAG")
+             + 10 * (Statistic If Condition = OwnerHasTech name = "SHP_IMPROVED_ENGINE_COUPLINGS")
+             + 10 * (Statistic If Condition = OwnerHasTech name = "SHP_N_DIMENSIONAL_ENGINE_MATRIX")
+             + 10 * (Statistic If Condition = OwnerHasTech name = "SHP_SINGULARITY_ENGINE_CORE")
+             + 10 * (Statistic If Condition = OwnerHasTech name = "SHP_TRANSSPACE_DRIVE")
+             + 10 * (Statistic If Condition = OwnerHasTech name = "SHP_INTSTEL_LOG")
         )
     )
     tags = [ "SP_MISIORLA" "CTRL_EXTINCT" ]
@@ -87,32 +89,8 @@ BuildingType
         ]
     ]
     effectsgroups = [
-        EffectsGroup
-            scope = And [
-                Object id = Source.PlanetID
-                Planet
-            ]
-            activation = And [
-                Not OwnerHasTech name = "GRO_LIFECYCLE_MAN"
-                Turn low = Source.CreationTurn + 1 high = Source.CreationTurn + 1
-            ]
-            effects = [
-                SetSpecies name = "SP_MISIORLA"
-                SetPopulation value = 1
-            ]
-        EffectsGroup
-            scope = And [
-                Object id = Source.PlanetID
-                Planet
-            ]
-            activation = And [
-                OwnerHasTech name = "GRO_LIFECYCLE_MAN"
-                Turn low = Source.CreationTurn + 1 high = Source.CreationTurn + 1
-            ]
-            effects = [
-                SetSpecies name = "SP_MISIORLA"
-                SetPopulation value = [[MIN_RECOLONIZING_SIZE]]
-            ]
+        [[LIFECYCLE_MANIP_POPULATION_EFFECTS("SP_MISIORLA")]]
+        
         EffectsGroup
             scope = And [
                 Object id = Source.PlanetID
@@ -130,6 +108,7 @@ BuildingType
                     ]
                     empire = Source.Owner
             ]
+            
         EffectsGroup
             scope = Source
             activation = Turn low = Source.CreationTurn + 2
@@ -138,5 +117,7 @@ BuildingType
     icon = "icons/species/misiorla.png"
 
 #include "/scripting/common/misc.macros"
-
 #include "/scripting/common/upkeep.macros"
+#include "/scripting/common/priorities.macros"
+#include "/scripting/common/base_prod.macros"
+#include "/scripting/species/common/population.macros"

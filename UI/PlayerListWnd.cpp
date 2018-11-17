@@ -9,7 +9,6 @@
 #include "../util/i18n.h"
 #include "../util/Logger.h"
 #include "../util/OptionsDB.h"
-#include "../util/MultiplayerCommon.h"
 #include "../universe/Ship.h"
 #include "../universe/Planet.h"
 #include "../universe/System.h"
@@ -48,10 +47,6 @@ namespace {
     }
     std::shared_ptr<GG::Texture> WaitingIcon() {
         static std::shared_ptr<GG::Texture> retval = ClientUI::GetTexture(ClientUI::ArtDir() / "icons" / "ready.png");
-        return retval;
-    }
-    std::shared_ptr<GG::Texture> CombatIcon() {
-        static std::shared_ptr<GG::Texture> retval = ClientUI::GetTexture(ClientUI::ArtDir() / "icons" / "combat.png");
         return retval;
     }
     std::shared_ptr<GG::Texture> WarIcon() {
@@ -119,16 +114,20 @@ namespace {
             m_host(false),
             m_win_status(NEITHER),
             m_selected(false)
-        {
+        {}
+
+        void CompleteConstruction() override {
+            GG::Control::CompleteConstruction();
+
             SetChildClippingMode(ClipToClient);
 
-            //m_player_name_text = new CUILabel("", GG::FORMAT_LEFT);
-            m_empire_name_text = new CUILabel("", GG::FORMAT_LEFT);
-            m_empire_ship_text = new CUILabel("", GG::FORMAT_LEFT);
-            m_empire_planet_text = new CUILabel("", GG::FORMAT_LEFT);
-            m_empire_production_text = new CUILabel("", GG::FORMAT_LEFT);
-            m_empire_research_text = new CUILabel("", GG::FORMAT_LEFT);
-            m_empire_detection_text = new CUILabel("", GG::FORMAT_LEFT);
+            //m_player_name_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
+            m_empire_name_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
+            m_empire_ship_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
+            m_empire_planet_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
+            m_empire_production_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
+            m_empire_research_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
+            m_empire_detection_text = GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT);
 
             //AttachChild(m_player_name_text);
             AttachChild(m_empire_name_text);
@@ -194,7 +193,6 @@ namespace {
             // render player status icon
             switch (m_player_status) {
             case Message::PLAYING_TURN:     PlayingIcon()->OrthoBlit(UpperLeft() + m_player_status_icon_ul, UpperLeft() + m_player_status_icon_ul + ICON_SIZE); break;
-            case Message::RESOLVING_COMBAT: CombatIcon()->OrthoBlit( UpperLeft() + m_player_status_icon_ul, UpperLeft() + m_player_status_icon_ul + ICON_SIZE); break;
             case Message::WAITING:          WaitingIcon()->OrthoBlit(UpperLeft() + m_player_status_icon_ul, UpperLeft() + m_player_status_icon_ul + ICON_SIZE); break;
             default:    break;
             }
@@ -207,7 +205,7 @@ namespace {
             case Networking::CLIENT_TYPE_HUMAN_MODERATOR:   ModeratorIcon()->OrthoBlit(UpperLeft() + m_player_type_icon_ul, UpperLeft() + m_player_type_icon_ul + ICON_SIZE); break;
             default:    break;
             }
- 
+
             if (m_host)
                 HostIcon()->OrthoBlit(UpperLeft() + m_host_icon_ul, UpperLeft() + m_host_icon_ul + ICON_SIZE);
 
@@ -239,7 +237,7 @@ namespace {
 
             const std::map<int, PlayerInfo>& players = app->Players();
 
-            std::map<int, PlayerInfo>::const_iterator player_it = players.find(m_player_id);
+            auto player_it = players.find(m_player_id);
             if (player_it == players.end()) {
                 ErrorLogger() << "PlayerDataPanel::Update couldn't find player with id " << m_player_id;
                 return;
@@ -280,17 +278,17 @@ namespace {
             const std::set<int>& this_client_known_destroyed_objects = GetUniverse().EmpireKnownDestroyedObjectIDs(HumanClientApp::GetApp()->EmpireID());
             const std::set<int>& this_client_stale_object_info       = GetUniverse().EmpireStaleKnowledgeObjectIDs(HumanClientApp::GetApp()->EmpireID());
 
-            for (std::shared_ptr<const Ship> ship : objects.FindObjects<Ship>()) {
+            for (auto& ship : objects.FindObjects<Ship>()) {
                 if (empire) {
                     if (ship->Owner() == empire->EmpireID()
-                        && this_client_known_destroyed_objects.find(ship->ID()) == this_client_known_destroyed_objects.end()
-                        && this_client_stale_object_info.find(ship->ID()) == this_client_stale_object_info.end()) {
+                        && !this_client_known_destroyed_objects.count(ship->ID())
+                        && !this_client_stale_object_info.count(ship->ID())) {
                             empires_ship_count += 1;
                     }
                 }
             }
 
-            for (std::shared_ptr<const Planet> planet : objects.FindObjects<Planet>()) {
+            for (auto& planet : objects.FindObjects<Planet>()) {
                 if (empire) {
                     if (planet->Owner() == empire->EmpireID()) {
                         empires_planet_count      += 1;
@@ -416,13 +414,13 @@ namespace {
         }
 
         int                     m_player_id;
-        //GG::Label*            m_player_name_text;
-        GG::Label*              m_empire_name_text;
-        GG::Label*              m_empire_ship_text;
-        GG::Label*              m_empire_planet_text;
-        GG::Label*              m_empire_production_text;
-        GG::Label*              m_empire_research_text;
-        GG::Label*              m_empire_detection_text;
+        //std::shared_ptr<GG::Label>            m_player_name_text;
+        std::shared_ptr<GG::Label>              m_empire_name_text;
+        std::shared_ptr<GG::Label>              m_empire_ship_text;
+        std::shared_ptr<GG::Label>              m_empire_planet_text;
+        std::shared_ptr<GG::Label>              m_empire_production_text;
+        std::shared_ptr<GG::Label>              m_empire_research_text;
+        std::shared_ptr<GG::Label>              m_empire_detection_text;
 
         GG::Pt                  m_diplo_status_icon_ul;
         GG::Pt                  m_ship_icon_ul;
@@ -461,7 +459,12 @@ namespace {
         {
             SetName("PlayerRow");
             SetChildClippingMode(ClipToClient);
-            m_panel = new PlayerDataPanel(w, h, m_player_id);
+        }
+
+        void CompleteConstruction() override {
+
+            GG::ListBox::Row::CompleteConstruction();
+            m_panel = GG::Wnd::Create<PlayerDataPanel>(Width(), Height(), m_player_id);
             push_back(m_panel);
         }
 
@@ -491,7 +494,7 @@ namespace {
 
     private:
         int                 m_player_id;
-        PlayerDataPanel*    m_panel;
+        std::shared_ptr<PlayerDataPanel>    m_panel;
     };
 }
 
@@ -517,7 +520,7 @@ public:
         if (old_size != Size()) {
             const GG::Pt row_size = ListRowSize();
             //std::cout << "PlayerListBox::SizeMove list row size: (" << Value(row_size.x) << ", " << Value(row_size.y) << ")" << std::endl;
-            for (GG::ListBox::Row* row : *this)
+            for (auto& row : *this)
                 row->Resize(row_size);
         }
     }
@@ -538,18 +541,26 @@ PlayerListWnd::PlayerListWnd(const std::string& config_name) :
            GG::INTERACTIVE | GG::DRAGABLE | GG::ONTOP | GG::RESIZABLE | CLOSABLE | PINABLE,
            config_name),
     m_player_list(nullptr)
-{
-    m_player_list = new PlayerListBox();
+{}
+
+void PlayerListWnd::CompleteConstruction() {
+    CUIWnd::CompleteConstruction();
+
+    m_player_list = GG::Wnd::Create<PlayerListBox>();
     m_player_list->SetHiliteColor(GG::CLR_ZERO);
     m_player_list->SetStyle(GG::LIST_NOSORT);
-    GG::Connect(m_player_list->SelChangedSignal,            &PlayerListWnd::PlayerSelectionChanged, this);
-    GG::Connect(m_player_list->DoubleClickedSignal,         &PlayerListWnd::PlayerDoubleClicked,    this);
-    GG::Connect(m_player_list->RightClickedSignal,          &PlayerListWnd::PlayerRightClicked,     this);
+    m_player_list->SelRowsChangedSignal.connect(
+        boost::bind(&PlayerListWnd::PlayerSelectionChanged, this, _1));
+    m_player_list->DoubleClickedRowSignal.connect(
+        boost::bind(&PlayerListWnd::PlayerDoubleClicked, this, _1, _2, _3));
+    m_player_list->RightClickedRowSignal.connect(
+        boost::bind(&PlayerListWnd::PlayerRightClicked, this, _1, _2, _3));
     AttachChild(m_player_list);
 
-    boost::function<void(int, int)> update_this = boost::bind(&PlayerListWnd::Update, this);
-    GG::Connect(Empires().DiplomaticStatusChangedSignal,    update_this);
-    GG::Connect(Empires().DiplomaticMessageChangedSignal,   update_this);
+    Empires().DiplomaticStatusChangedSignal.connect(
+        boost::bind(&PlayerListWnd::Update, this));
+    Empires().DiplomaticMessageChangedSignal.connect(
+        boost::bind(&PlayerListWnd::Update, this));
     DoLayout();
 
     Refresh();
@@ -557,7 +568,7 @@ PlayerListWnd::PlayerListWnd(const std::string& config_name) :
 
 std::set<int> PlayerListWnd::SelectedPlayerIDs() const {
     std::set<int> retval;
-    for (GG::ListBox::iterator it = m_player_list->begin(); it != m_player_list->end(); ++it) {
+    for (auto it = m_player_list->begin(); it != m_player_list->end(); ++it) {
         if (!m_player_list->Selected(it))
             continue;
 
@@ -569,8 +580,8 @@ std::set<int> PlayerListWnd::SelectedPlayerIDs() const {
 }
 
 void PlayerListWnd::HandlePlayerStatusUpdate(Message::PlayerStatus player_status, int about_player_id) {
-    for (CUIListBox::Row* row : *m_player_list) {
-        if (PlayerRow* player_row = dynamic_cast<PlayerRow*>(row)) {
+    for (auto& row : *m_player_list) {
+        if (PlayerRow* player_row = dynamic_cast<PlayerRow*>(row.get())) {
             if (about_player_id == Networking::INVALID_PLAYER_ID) {
                 player_row->SetStatus(player_status);
             } else if (player_row->PlayerID() == about_player_id) {
@@ -582,8 +593,8 @@ void PlayerListWnd::HandlePlayerStatusUpdate(Message::PlayerStatus player_status
 }
 
 void PlayerListWnd::Update() {
-    for (CUIListBox::Row* row : *m_player_list) {
-        if (PlayerRow* player_row = dynamic_cast<PlayerRow*>(row))
+    for (auto& row : *m_player_list) {
+        if (PlayerRow* player_row = dynamic_cast<PlayerRow*>(row.get()))
             player_row->Update();
     }
 }
@@ -602,9 +613,9 @@ void PlayerListWnd::Refresh() {
 
     const GG::Pt row_size = m_player_list->ListRowSize();
 
-    for (const std::map<int, PlayerInfo>::value_type& player : players) {
+    for (const auto& player : players) {
         int player_id = player.first;
-        PlayerRow* player_row = new PlayerRow(row_size.x, row_size.y, player_id);
+        auto player_row = GG::Wnd::Create<PlayerRow>(row_size.x, row_size.y, player_id);
         m_player_list->Insert(player_row);
         player_row->Resize(row_size);
     }
@@ -613,7 +624,7 @@ void PlayerListWnd::Refresh() {
 }
 
 void PlayerListWnd::SetSelectedPlayers(const std::set<int>& player_ids) {
-    const GG::ListBox::SelectionSet initial_selections = m_player_list->Selections();
+    const auto initial_selections = m_player_list->Selections();
 
     m_player_list->DeselectAll();
 
@@ -624,15 +635,15 @@ void PlayerListWnd::SetSelectedPlayers(const std::set<int>& player_ids) {
     }
 
     // loop through players, selecting any indicated
-    for (GG::ListBox::iterator it = m_player_list->begin(); it != m_player_list->end(); ++it) {
-        PlayerRow* row = dynamic_cast<PlayerRow*>(*it);
+    for (auto it = m_player_list->begin(); it != m_player_list->end(); ++it) {
+        PlayerRow* row = dynamic_cast<PlayerRow*>(it->get());
         if (!row) {
             ErrorLogger() << "PlayerRow::SetSelectedPlayers couldn't cast a listbow row to PlayerRow?";
             continue;
         }
 
         // if this row's player should be selected, so so
-        if (player_ids.find(row->PlayerID()) != player_ids.end()) {
+        if (player_ids.count(row->PlayerID())) {
             m_player_list->SelectRow(it);
             m_player_list->BringRowIntoView(it);  // may cause earlier rows brought into view to be brought out of view... oh well
         }
@@ -654,7 +665,10 @@ void PlayerListWnd::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
 }
 
 void PlayerListWnd::DoLayout()
-{ m_player_list->SizeMove(GG::Pt(), GG::Pt(ClientWidth(), ClientHeight() - GG::Y(INNER_BORDER_ANGLE_OFFSET))); }
+{
+    if (m_player_list)
+        m_player_list->SizeMove(GG::Pt(), GG::Pt(ClientWidth(), ClientHeight() - GG::Y(INNER_BORDER_ANGLE_OFFSET)));
+}
 
 void PlayerListWnd::CloseClicked()
 { ClosingSignal(); }
@@ -662,10 +676,8 @@ void PlayerListWnd::CloseClicked()
 void PlayerListWnd::PlayerSelectionChanged(const GG::ListBox::SelectionSet& rows) {
     // mark as selected all PlayerDataPanel that are in \a rows and mark as not
     // selected all PlayerDataPanel that aren't in \a rows
-    for (GG::ListBox::iterator it = m_player_list->begin(); it != m_player_list->end(); ++it) {
-        bool select_this_row = (rows.find(it) != rows.end());
-
-        GG::ListBox::Row* row = *it;
+    for (auto it = m_player_list->begin(); it != m_player_list->end(); ++it) {
+        auto& row = *it;
         if (!row) {
             ErrorLogger() << "PlayerListWnd::PlayerSelectionChanged couldn't get row";
             continue;
@@ -684,7 +696,7 @@ void PlayerListWnd::PlayerSelectionChanged(const GG::ListBox::SelectionSet& rows
             ErrorLogger() << "PlayerListWnd::PlayerSelectionChanged couldn't get PlayerDataPanel from control";
             continue;
         }
-        data_panel->Select(select_this_row);
+        data_panel->Select(rows.count(it));
     }
 
     SelectedPlayersChangedSignal();
@@ -694,6 +706,18 @@ void PlayerListWnd::PlayerDoubleClicked(GG::ListBox::iterator it, const GG::Pt& 
     int player_id = PlayerInRow(it);
     if (player_id != Networking::INVALID_PLAYER_ID)
         PlayerDoubleClickedSignal(player_id);
+}
+
+namespace {
+    std::function<void()> MakeSendDiplomaticAction(
+        const int client_empire_id, const int clicked_empire_id,
+        const std::function<DiplomaticMessage(int, int)>& message)
+    {
+        auto premade_message = DiplomacyMessage(message(client_empire_id, clicked_empire_id));
+        auto &networking = HumanClientApp::GetApp()->Networking();
+        return std::bind(&ClientNetworking::SendMessage, &networking, premade_message);
+    }
+
 }
 
 void PlayerListWnd::PlayerRightClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys) {
@@ -713,7 +737,7 @@ void PlayerListWnd::PlayerRightClicked(GG::ListBox::iterator it, const GG::Pt& p
 
     // get empire id of clicked player
     const std::map<int, PlayerInfo>& players = app->Players();
-    std::map<int, PlayerInfo>::const_iterator clicked_player_it = players.find(clicked_player_id);
+    auto clicked_player_it = players.find(clicked_player_id);
     if (clicked_player_it == players.end()) {
         ErrorLogger() << "PlayerListWnd::PlayerRightClicked couldn't find player with id " << clicked_player_id;
         return;
@@ -728,7 +752,26 @@ void PlayerListWnd::PlayerRightClicked(GG::ListBox::iterator it, const GG::Pt& p
         return;
     }
 
-    GG::MenuItem menu_contents;
+    // Actions
+    auto war_declaration_action = MakeSendDiplomaticAction(
+        client_empire_id, clicked_empire_id, WarDeclarationDiplomaticMessage);
+    auto peace_proposal_action = MakeSendDiplomaticAction(
+        client_empire_id, clicked_empire_id, PeaceProposalDiplomaticMessage);
+    auto peace_accept_action = MakeSendDiplomaticAction(
+        client_empire_id, clicked_empire_id, AcceptPeaceDiplomaticMessage);
+    auto allies_proposal_action = MakeSendDiplomaticAction(
+        client_empire_id, clicked_empire_id, AlliesProposalDiplomaticMessage);
+    auto allies_accept_action = MakeSendDiplomaticAction(
+        client_empire_id, clicked_empire_id, AcceptAlliesDiplomaticMessage);
+    auto end_alliance_declaration_action = MakeSendDiplomaticAction(
+        client_empire_id, clicked_empire_id, EndAllianceDiplomaticMessage);
+    auto proposal_cancel_action = MakeSendDiplomaticAction(
+        client_empire_id, clicked_empire_id, CancelDiplomaticMessage);
+    auto proposal_reject_action = MakeSendDiplomaticAction(
+        client_empire_id, clicked_empire_id, RejectProposalDiplomaticMessage);
+    auto pedia_lookup_action = [clicked_empire_id]() { ClientUI::GetClientUI()->ZoomToEmpire(clicked_empire_id); };
+
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
     if (app->GetClientType() == Networking::CLIENT_TYPE_HUMAN_PLAYER &&
         client_empire_id != ALL_EMPIRES &&
         clicked_empire_id != ALL_EMPIRES)
@@ -784,92 +827,37 @@ void PlayerListWnd::PlayerRightClicked(GG::ListBox::iterator it, const GG::Pt& p
 
 
         if (show_peace_propose)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("PEACE_PROPOSAL"),           2, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("PEACE_PROPOSAL"),           false, false, peace_proposal_action));
         if (show_peace_cancel)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("PEACE_PROPOSAL_CANCEL"),    4, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("PEACE_PROPOSAL_CANCEL"),    false, false, proposal_cancel_action));
         if (show_peace_accept)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("PEACE_ACCEPT"),             3, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("PEACE_ACCEPT"),             false, false, peace_accept_action));
         if (show_peace_reject)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("PEACE_REJECT"),             9, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("PEACE_REJECT"),             false, false, proposal_reject_action));
         if (show_allies_end)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("END_ALLIANCE_DECLARATION"), 8, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("END_ALLIANCE_DECLARATION"), false, false, end_alliance_declaration_action));
         if (show_allies_propose)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("ALLIES_PROPOSAL"),          6, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("ALLIES_PROPOSAL"),          false, false, allies_proposal_action));
         if (show_allies_accept)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("ALLIES_ACCEPT"),            7, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("ALLIES_ACCEPT"),            false, false, allies_accept_action));
         if (show_allies_cancel)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("ALLIES_PROPOSAL_CANCEL"),   4, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("ALLIES_PROPOSAL_CANCEL"),   false, false, proposal_cancel_action));
         if (show_allies_reject)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("ALLIES_REJECT"),            9, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("ALLIES_REJECT"),            false, false, proposal_reject_action));
         if (show_declare_war)
-            menu_contents.next_level.push_back(GG::MenuItem(UserString("WAR_DECLARATION"),          1, false, false));
+            popup->AddMenuItem(GG::MenuItem(UserString("WAR_DECLARATION"),          false, false, war_declaration_action));
     }
 
-    menu_contents.next_level.push_back(GG::MenuItem(str(FlexibleFormat(UserString("ENC_LOOKUP")) % GetEmpire(clicked_empire_id)->Name()), 5, false, false));
+    popup->AddMenuItem(GG::MenuItem(str(FlexibleFormat(UserString("ENC_LOOKUP")) % GetEmpire(clicked_empire_id)->Name()), false, false, pedia_lookup_action));
 
-    ClientNetworking& net = HumanClientApp::GetApp()->Networking();
-
-    CUIPopupMenu popup(pt.x, pt.y, menu_contents);
-    if (popup.Run()) {
-        switch (popup.MenuID()) {
-        case 1: {   // WAR_DECLARATION
-            net.SendMessage(DiplomacyMessage(client_player_id, clicked_player_id,
-                                             WarDeclarationDiplomaticMessage(client_empire_id, clicked_empire_id)));
-            break;
-        }
-        case 2: {   // PEACE_PROPOSAL
-            net.SendMessage(DiplomacyMessage(client_player_id, clicked_player_id,
-                                             PeaceProposalDiplomaticMessage(client_empire_id, clicked_empire_id)));
-            break;
-        }
-        case 3: {   // PEACE_ACCEPT
-            net.SendMessage(DiplomacyMessage(client_player_id, clicked_player_id,
-                                             AcceptPeaceDiplomaticMessage(client_empire_id, clicked_empire_id)));
-            break;
-        }
-
-        case 6: {   // ALLIES_PROPOSAL
-            net.SendMessage(DiplomacyMessage(client_player_id, clicked_player_id,
-                                             AlliesProposalDiplomaticMessage(client_empire_id, clicked_empire_id)));
-            break;
-        }
-        case 7: {   // ALLIES_ACCEPT
-            net.SendMessage(DiplomacyMessage(client_player_id, clicked_player_id,
-                                             AcceptAlliesDiplomaticMessage(client_empire_id, clicked_empire_id)));
-            break;
-        }
-        case 8: {   // END_ALLIANCE_DECLARATION
-            net.SendMessage(DiplomacyMessage(client_player_id, clicked_player_id,
-                                             EndAllianceDiplomaticMessage(client_empire_id, clicked_empire_id)));
-            break;
-        }
-
-        case 4: {   // PROPOSAL_CANCEL
-            net.SendMessage(DiplomacyMessage(client_player_id, clicked_player_id,
-                                             CancelDiplomaticMessage(client_empire_id, clicked_empire_id)));
-            break;
-        }
-        case 9: {   // PROPOSAL_REJECT
-            net.SendMessage(DiplomacyMessage(client_player_id, clicked_player_id,
-                                             RejectProposalDiplomaticMessage(client_empire_id, clicked_empire_id)));
-            break;
-        }
-
-        case 5: { // Pedia lookup
-            ClientUI::GetClientUI()->ZoomToEmpire(clicked_empire_id);
-            break;
-        }
-        default:
-            break;
-        }
-    }
+    popup->Run();
 }
 
 int PlayerListWnd::PlayerInRow(GG::ListBox::iterator it) const {
     if (it == m_player_list->end())
         return Networking::INVALID_PLAYER_ID;
 
-    if (PlayerRow* player_row = dynamic_cast<PlayerRow*>(*it))
+    if (PlayerRow* player_row = dynamic_cast<PlayerRow*>(it->get()))
         return player_row->PlayerID();
 
     return Networking::INVALID_PLAYER_ID;

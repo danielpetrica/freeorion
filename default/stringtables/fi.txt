@@ -385,12 +385,6 @@ Tekoälyvastustajien määrä pelissä.
 OPTIONS_DB_STRINGTABLE_FILENAME
 Asettaa käännöstiedoston.
 
-OPTIONS_DB_AUTOSAVE_SINGLE_PLAYER
-Jos päällä peli tallentaa itsensä automaattisesti tietyin väliajoin yksinpelissä.
-
-OPTIONS_DB_AUTOSAVE_MULTIPLAYER
-Jos päällä peli tallentaa itsensä automaattisesti tietyin väliajoin moninpelissä.
-
 OPTIONS_DB_AUTOSAVE_TURNS
 Asettaa automaattitallennusten välillä kuluvan ajan (vuoroissa).
 
@@ -695,12 +689,6 @@ Nopeasti suljettavat ikkunat*
 
 OPTIONS_MISC_UI
 Sekalaiset käyttöliittymäasetukset
-
-OPTIONS_SINGLEPLAYER
-Yksinpeli
-
-OPTIONS_MULTIPLAYER
-Moninpeli
 
 OPTIONS_AUTOSAVE_TURNS_BETWEEN
 Vuoroja automaattitallennusten välillä
@@ -2244,9 +2232,6 @@ Avaa aktiivitutkan, aluksen osa.
 SHP_DEUTERIUM_TANK
 Deuteriumtankki
 
-SHP_DEUTERIUM_TANK_DESC
-Avaa Deuteriumtankin, aluksen osa.
-
 
 ##
 ## Technology refinement
@@ -2313,12 +2298,6 @@ Aktiivitutka
 DT_DETECTOR_2_DESC
 Keskinkertainen havainnointikyky, suuri häiverangaistus alukselle
 
-FU_DEUTERIUM_TANK
-Deuteriumtankki
-
-FU_ANTIMATTER_TANK
-Antimateriatankki
-
 SH_DEFENSE_GRID
 Puolustusverkko
 
@@ -2380,6 +2359,5 @@ Heikko puolustus, joka ei tuo lisämassaa
 ## Name lists
 ##
 
-#include "../global_settings.txt"
 #include "../content_specific_parameters.txt"
 #include "../customizations/common_user_customizations.txt"

@@ -2,7 +2,7 @@ Français
 
 # This is the French String Table file for FreeOrion.
 #
-# Traduction par alchemy, shivu, zareif, nilstilar et Ouaz. Traduction terminée le 12 Juillet 2015 et couramment maintenue/améliorée par Ouaz (http://github.com/Ouaz/freeorion).
+# Traduction par alchemy, shivu, zareif, nilstilar et Ouaz. Traduction achevée le 12 Juillet 2015 et couramment maintenue/améliorée par Ouaz (http://github.com/Ouaz/freeorion).
 #
 # Notes: to avoid potential conflict with functional keys in other files, do not make
 # any stringtable keys beginning with "FUNCTIONAL_".
@@ -52,7 +52,7 @@ NO
 Non
 
 # Used as a placeholder for unexpanded content in the combat log window.
-#ELLIPSIS  
+#ELLIPSIS
 #...
 
 EMPIRE  # translated
@@ -158,7 +158,7 @@ Flotte
 # Name for a newly created monster-only fleet.
 # %1% represents a unique number.
 NEW_MONSTER_FLEET_NAME
-Meute %1%
+Horde %1%
 
 # Name for a newly created colony-only fleet.
 # %1% represents a unique number.
@@ -255,6 +255,21 @@ Ne peut pas être produit
 POPUP_MENU_PEDIA_PREFIX
 '''Aide: '''
 
+GENERAL
+Général
+
+TEST  # translated
+Test
+
+BALANCE
+Équilibrage
+
+CONTENT
+Contenu
+
+MULTIPLAYER
+Multijoueurs
+
 
 ##
 ## Major errors
@@ -318,6 +333,28 @@ FORMAT_LIST_10_ITEMS
 
 
 ##
+## Build Projects
+##
+
+PROJECT_BT_STOCKPILE
+Transfert Stock
+
+PROJECT_BT_STOCKPILE_SHORT_DESC
+Transfère les PP vers le stock impérial
+
+PROJECT_BT_STOCKPILE_DESC
+'''Les PP alloués au projet de Transfert Stock sont ajoutés au Stock Impérial. La quantité à transférer et le nombre de répétitions du transfert peuvent être spécifiés.
+
+Seuls les PP produits au sein du même Groupe Ressource (soit aucun du Stock Impérial) sont alloués au projet de Transfert Stock.
+
+L'excédent de PP (PP non-alloués à un projet dans la file d'attente) sur cette planète ou tout autre emplacement, sera transféré vers le Stock, qu'un projet de Transfert Stock soit présent ou pas dans la file d'attente. Les PP alloués à un projet de Transfert Stock sont invariablement envoyés vers le Stock, même si d'autres items de production sont ajoutés ultérieurement à la file d'attente.
+
+Exemple: Un empire désire puiser des PP dans le Stock au sein d'un Groupe Ressource secondaire, car ce dernier ne génère pas un nombre de PP suffisant. Dans cette optique, le stock nécessite d'être approvisionné à partir du Groupe Ressource principal. L'empire dispose de 100 PP d'Industrie dans le Groupe Ressource principal, sa limite d'usage du Stock est de 10 PP et l'empire désire avoir 10 PP toujours disponible dans le Stock. La file d'attente de Production contient des items sur les planètes du Groupe Ressource principal nécessitant 120 PP par tour, ce qui signifie que tous les PP disponibles seront utilisés.
+Afin de pouvoir utiliser les PP dans le Groupe Ressource secondaire, l'empire ajoute en tête de la file d'attente un projet de Transfert Stock d'une valeur de 10x sur une planète du Groupe Ressource principal.
+Étant donné que le projet de Transfert Stock est placé au-dessus des autres projets dans la file d'attente du Groupe Ressource principal, le projet est entièrement financé et augmentera donc le Stock de 10 PP au tour suivant. Pour assurer un transfert continu à chaque tour, la valeur de répétition du projet est réglée sur 99 fois.'''
+
+
+##
 ## Predefined Ship Designs (located in default/scripting/ship_designs/)
 ##
 
@@ -327,10 +364,10 @@ Porteur d'Escorte
 SD_CARRIER_DESC
 Porteur conçu pour défendre les autres vaisseaux armés via le lancement d'escadrons d'Intercepteurs.
 
-SD_FLAK
+SD_CARRIER_2
 Porteur de Flotte
 
-SD_FLAK_DESC
+SD_CARRIER_2_DESC
 Porteur conçu pour prendre part aux actions offensives de flotte, à l'aide d'escadrons de Bombardiers et de Canons Mitrailleurs.
 
 SD_SCOUT
@@ -379,25 +416,25 @@ SD_LARGE_MARK_1
 Croiseur Ms
 
 SD_LARGE_MARK1_DESC
-Croiseur équipé de lasers améliorés et d'un blindage standard pour missions indépendantes de longue portée. [[BLD_SHIPYARD_BASE_REQUIRED]]
+Croiseur équipé d'un armement amélioré et d'un blindage standard pour opérations indépendantes de longue portée. [[BLD_SHIPYARD_BASE_REQUIRED]]
 
 SD_LARGE_MARK_2
 Croiseur Lz
 
 SD_LARGE_MARK2_DESC
-Croiseur conçu pour missions indépendantes de longue portée. [[BLD_SHIPYARD_BASE_REQUIRED]]
+Croiseur conçu pour opérations indépendantes de longue portée. [[BLD_SHIPYARD_BASE_REQUIRED]]
 
 SD_LARGE_MARK_3  # translated
 Destroyer Ms
 
 SD_LARGE_MARK3_DESC
-Destroyer conçu pour missions au sein de flottes. [[BLD_SHIPYARD_BASE_REQUIRED]]
+Destroyer conçu pour opérer au sein de flottes. [[BLD_SHIPYARD_BASE_REQUIRED]]
 
 SD_LARGE_MARK_4  # translated
 Destroyer Lz
 
 SD_LARGE_MARK4_DESC
-Destroyer équipé de Canons Laser et Blindage améliorés pour missions au sein de flottes. [[BLD_SHIPYARD_BASE_REQUIRED]]
+Destroyer équipé de Canons Laser et Blindage améliorés pour opérations au sein de flottes. [[BLD_SHIPYARD_BASE_REQUIRED]]
 
 SD_ROBOTIC_OUTPOST
 Bâtisseur Robotique
@@ -415,7 +452,7 @@ SD_ROBO_FLUX_TROOPS
 Transport Flux d'Infanterie
 
 SD_ROBO_FLUX_TROOPS_DESC
-Transporteur rapide d'infanterie 
+Transporteur rapide d'infanterie
 
 SD_ROBO_FLUX_TROOPS_HVY
 Transport Flux d'Infanterie Lourde
@@ -427,28 +464,46 @@ SD_ROBOTIC1
 Robocroiseur Mfs
 
 SD_ROBOTIC1_DESC
-Croiseur conçu pour missions indépendantes ou au sein de flottes. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]
+Croiseur conçu pour opérer au sein de flottes ou pour opérations indépendantes. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]
 
 SD_ROBOTIC2  # translated
-Destroyer Mfs-DG
+Destroyer Mfs DG
 
 SD_ROBOTIC2_DESC
-Destroyer à coque robotique conçu pour missions au sein de flottes. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]
+Destroyer à coque robotique conçu pour opérer au sein de flottes. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]
 
 SD_ROBOTIC3
 Robocroiseur Lzi
 
 SD_ROBOTIC3_DESC
-Astronef robotique conçu pour missions indépendantes de longue portée. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]
+Astronef robotique conçu pour opérations indépendantes de longue portée. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]
+
+SD_ROBOTIC_CARRIER1
+Transporteur Flotte MBs
+
+SD_ROBOTIC_CARRIER1_DESC
+Transporteur offensif conçu pour opérer au sein de flottes. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]
+
+SD_ROBOTIC_CARRIER2
+Transporteur Flotte LBz
+
+SD_ROBOTIC_CARRIER2_DESC
+Transporteur offensif conçu pour opérer au sein de flottes. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]
+
+SD_ROBOTIC_CARRIER3
+Transporteur d'Escorte MIs
+
+SD_ROBOTIC_CARRIER3_DESC
+Transporteur d'escorte conçu pour opérer au sein de convois et opérations de  protection. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]
 
 SD_GRAVITATING1
-Cuirassé Pfd-DS
+Cuirassé Pfd DS
 
 SD_GRAVITATING1_DESC
-Cuirassé auto-gravitationnel conçu pour missions au sein de larges flottes. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_CON_GEOINT_REQUIRED]]
+Cuirassé auto-gravitationnel conçu pour opérer au sein de larges flottes. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_CON_GEOINT_REQUIRED]]
 
 SD_GRAVITATING2
-Cuirassé Dfx-BS
+Cuirassé Dfx BS
 
 SD_GRAVITATING2_DESC
 Cuirassé de grand standing équipé des toutes dernières technologies de pointe en matière d'armement et de protection. Prix en conséquence. [[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_CON_GEOINT_REQUIRED]]
@@ -463,7 +518,7 @@ SD_AST_1
 Destroyer Rock (L)
 
 SD_AST_1_DESC
-Destroyer à coque astéroïdale conçu pour missions au sein de flottes. [[BLD_SHIPYARD_BASE_AST_REQUIRED]]
+Destroyer à coque astéroïdale conçu pour opérer au sein de flottes. [[BLD_SHIPYARD_BASE_AST_REQUIRED]]
 
 SD_COLONY_SHIP
 Colon Galactique
@@ -585,7 +640,7 @@ SM_FLOATER
 Flotteur
 
 SM_FLOATER_DESC
-Un bulbe de contenu gazeux dérivant sur les Voies spatiales, relâché sous forme de graine par une [[predefinedshipdesign SM_TREE]] afin de fonder une nouvelle forêt autour d'autres étoiles. Il est généralement conseillé de de détruire les [[SM_FLOATER]]s dès que possible. Cependant, de par leur petite taille, ils s'avèrent difficiles à détecter et requièrent la technologie [[tech SPY_DETECT_2]] afin d'y parvenir.
+Un bulbe de contenu gazeux dérivant sur les Voies spatiales, relâché sous forme de graine par une [[predefinedshipdesign SM_TREE]] afin de fonder une nouvelle forêt autour d'autres étoiles. Il est généralement conseillé de détruire les [[SM_FLOATER]]s dès que possible. Cependant, de par leur petite taille, ils s'avèrent difficiles à détecter et requièrent la technologie [[tech SPY_DETECT_2]] afin d'y parvenir.
 
 SM_DRAGON
 Dragon du Vide
@@ -641,7 +696,7 @@ SM_KRAKEN_2  # translated
 Kraken
 
 SM_KRAKEN_2_DESC
-'''Un redoutable monstre de l'espace de taille intermédiaire. Ses proies naturelles sont les essaims de Krill. Un Kraken bien nourri peut se transformer en un spécimen encore plus massif et dangereux.
+'''Un redoutable monstre spatial de taille intermédiaire. Ses proies naturelles sont les essaims de Krill. Un Kraken bien nourri peut se transformer en un spécimen encore plus massif et dangereux.
 
 [[SM_KRAKEN_ENVIRONMENT]]'''
 
@@ -649,7 +704,7 @@ SM_KRAKEN_3
 Kraken Massif
 
 SM_KRAKEN_3_DESC
-'''Un redoutable monstre de l'espace de grande taille.
+'''Un redoutable monstre spatial de grande taille.
 
 [[SM_KRAKEN_ENVIRONMENT]]'''
 
@@ -657,7 +712,7 @@ SM_WHITE_KRAKEN
 Kraken Blanc
 
 SM_WHITE_KRAKEN_DESC
-Le Kraken Blanc, logiquement reconnaissable à la blancheur de son corps, est un ancêtre préhistorique du monstre de l'espace Kraken.
+Le Kraken Blanc, logiquement reconnaissable à la blancheur de son corps, est un ancêtre préhistorique du monstre spatial Kraken.
 
 SM_BLACK_KRAKEN
 Kraken Noir
@@ -671,7 +726,7 @@ SM_SNOWFLAKE_1
 Flocon de Neige Juvénile
 
 SM_SNOWFLAKE_1_DESC
-'''Un petit monstre de l'espace inoffensif, doté une exceptionnelle vision.
+'''Un petit monstre spatial inoffensif, doté une exceptionnelle vision.
 
 [[SM_SNOWFLAKE_ENVIRONMENT]]'''
 
@@ -679,7 +734,7 @@ SM_SNOWFLAKE_2
 Flocon de Neige
 
 SM_SNOWFLAKE_2_DESC
-'''Un monstre de l'espace de petite masse, doté une exceptionnelle vision.
+'''Un monstre spatial de petite masse, doté une exceptionnelle vision.
 
 [[SM_SNOWFLAKE_ENVIRONMENT]]'''
 
@@ -687,7 +742,7 @@ SM_SNOWFLAKE_3
 Flocon de Neige Massif
 
 SM_SNOWFLAKE_3_DESC
-'''Un redoutable monstre de l'espace de petite masse.
+'''Un redoutable monstre spatial de petite masse.
 
 [[SM_SNOWFLAKE_ENVIRONMENT]]'''
 
@@ -703,7 +758,7 @@ SM_JUGGERNAUT_1
 Mastodonte Juvénile
 
 SM_JUGGERNAUT_1_DESC
-'''Un redoutable monstre de l'espace de masse importante, muni d'un bouclier de protection.
+'''Un redoutable monstre spatial de masse importante, muni d'un bouclier de protection.
 
 [[SM_JUGGERNAUT_ENVIRONMENT]]'''
 
@@ -711,7 +766,7 @@ SM_JUGGERNAUT_2
 Mastodonte
 
 SM_JUGGERNAUT_2_DESC
-'''Un redoutable monstre de l'espace de masse importante, muni d'un bouclier de protection assez résistant.
+'''Un redoutable monstre spatial de masse importante, muni d'un bouclier de protection assez résistant.
 
 [[SM_JUGGERNAUT_ENVIRONMENT]]'''
 
@@ -719,7 +774,7 @@ SM_JUGGERNAUT_3
 Mastodonte Massif
 
 SM_JUGGERNAUT_3_DESC
-'''Un redoutable monstre de l'espace de masse importante, muni d'un bouclier de protection très résistant.
+'''Un redoutable monstre spatial de masse importante, muni d'un bouclier de protection très résistant.
 
 [[SM_JUGGERNAUT_ENVIRONMENT]]'''
 
@@ -727,7 +782,7 @@ SM_BLOATED_JUGGERNAUT
 Mastodonte Déformé
 
 SM_BLOATED_JUGGERNAUT_DESC
-'''Un monstre de l'espace massif à l'allure repoussante.
+'''Un monstre spatial massif à l'allure repoussante.
 
 Les Mastodontes Déformés sont des monstres spatiaux issus de la bio-ingénierie, incroyablement résistants, d'une grande [[metertype METER_STEALTH]], et munis d'armes dangereuses. Une flotte puissante et une bonne [[encyclopedia DETECTION_TITLE]] seront nécessaires pour en découdre avec ces organismes, ces derniers attaquant les populations des planètes où les structures et bâtiments sont facilement détectables.'''
 
@@ -785,7 +840,7 @@ SM_COSMIC_DRAGON
 Dragon Cosmique
 
 SM_COSMIC_DRAGON_DESC
-'''Un terrifiant montre de l'espace capable de détruire des systèmes stellaires entiers.
+'''Un terrifiant monstre spatial capable de détruire des systèmes stellaires entiers.
 
 Les Dragons Cosmiques sont des monstres spatiaux issus de la bio-ingénierie, incroyablement résistants, d'une grande [[metertype METER_STEALTH]], et munis d'armes dangereuses. Une flotte très puissante et une [[encyclopedia DETECTION_TITLE]] très performante seront nécessaires pour en découdre avec ces organismes. Ils recherchent et attaquent les planètes habitées, et sont capables de réduire à néant des systèmes stellaires entiers s'ils ne sont pas combattus.'''
 
@@ -804,7 +859,7 @@ FLD_MOLECULAR_CLOUD
 Nuage Moléculaire
 
 FLD_MOLECULAR_CLOUD_DESC
-Nuage diffus de molécules complexes pouvant perturber le champ de protection des astronefs, ces derniers voyant la solidité de leurs [[metertype METER_SHIELD]] diminuer de 15. 
+Nuage diffus de molécules complexes pouvant perturber le champ de protection des astronefs, ces derniers voyant la solidité de leurs [[metertype METER_SHIELD]] diminuer de 15.
 
 FLD_NEBULA_1
 Nébuleuse
@@ -864,6 +919,9 @@ Le serveur ne répond pas.
 SERVER_LOST
 La connexion au serveur a été perdue.
 
+LOCAL_SERVER_ALREADY_RUNNING_ERROR
+Impossible de démarrer le serveur. Un serveur local est déjà activé.
+
 PLAYER_DISCONNECTED
 Le joueur %1% n'est plus connecté au serveur.
 
@@ -890,8 +948,11 @@ Erreur de lecture du fichier config.xml. Les options par défaut seront utilisé
 UNABLE_TO_READ_PERSISTENT_CONFIG_XML
 Erreur de lecture du fichier optionnel persistent_config.xml (normal si ce dernier n'existe pas).
 
+UNABLE_TO_WRITE_PERSISTENT_CONFIG_XML
+Erreur lors de l'écriture du fichier persistent_config.xml.
+
 UNABLE_TO_WRITE_SAVE_FILE
-Erreur dans l'écriture du fichier de sauvegarde.
+Erreur lors de l'écriture du fichier de sauvegarde.
 
 UNABLE_TO_READ_SAVE_FILE
 Erreur de lecture du fichier de sauvegarde.
@@ -909,10 +970,10 @@ ABORT_SAVE_AND_EXIT
 Quitter FreeOrion sans sauvegarder.
 
 EMPIRE_NOT_FOUND_CANT_HANDLE_ORDERS
-Vous ne contrôlez aucun empire et ne pouvez émettre aucun ordre.
+Aucun empire n'est contrôlé par ce client; les ordres ne peuvent pas être exécutés.
 
 ORDERS_FOR_WRONG_EMPIRE
-Des ordres ont été transmis à un empire que vous ne contrôlez pas.
+Des ordres ont été transmis à un empire que ce client ne contrôle pas.
 
 SERVER_ALREADY_HOSTING_GAME
 Ce serveur héberge déjà une partie.
@@ -929,31 +990,262 @@ L'Univers généré contient des erreurs. Consultez le fichier log pour le déta
 SERVER_TURN_EVENTS_ERRORS
 Les événements de tour scriptés contiennent des erreurs. Consultez le fichier log pour le détail des messages d'erreur. La partie peut continuer, mais le gameplay en sera probablement impacté.
 
+SERVER_ALREADY_PLAYING_GAME
+Le serveur n'accepte pas de nouveaux joueurs car une partie est actuellement en cours.
+
 ERROR_PYTHON_AI_CRASHED
 L'IA Python pour %1% a rencontré une erreur fatale.
 
 ERROR_PLAYER_NAME_ALREADY_USED
 %1% : nom de joueur déjà utilisé.
 
+ERROR_WRONG_PASSWORD
+Mot de passe erroné pour le joueur %1%.
+
+ERROR_CLIENT_TYPE_NOT_ALLOWED
+Type de client non autorisé.
+
+ERROR_NOT_ENOUGH_AI_PLAYERS
+Pas assez de joueurs IA.
+
+ERROR_TOO_MANY_AI_PLAYERS
+Trop de joueurs IA.
+
+ERROR_NOT_ENOUGH_HUMAN_PLAYERS
+Pas assez de joueurs humains.
+
+ERROR_TOO_MANY_HUMAN_PLAYERS
+Trop de joueurs humains.
+
+ERROR_CONNECTION_WAS_REPLACED
+Votre connection a été mise à jour.
+
+ERROR_NONPLAYER_CANNOT_CONCEDE
+Seuls les joueurs peuvent capituler.
+
+ERROR_CONCEDE_DISABLED
+Capituler n'est pas autorisé.
+
+ERROR_CONCEDE_EXCEED_COLONIES
+Impossible de capituler; l'empire contrôle trop de colonies.
+
+ERROR_CONCEDE_LAST_HUMAN_PLAYER
+Impossible de capituler dans une partie avec un seul joueur humain.
+
+
+##
+## Game Rules
+##
+
+RULE_PRODUCTION_QUEUE_FRONTLOAD_FACTOR
+Surengagement de PP par Tour
+
+RULE_PRODUCTION_QUEUE_FRONTLOAD_FACTOR_DESC
+Pourcentage de surengagement de PP par tour de production d'un item afin de le produire dans les temps.
+
+RULE_PRODUCTION_QUEUE_TOPPING_UP_FACTOR
+Surengagement final de PP
+
+RULE_PRODUCTION_QUEUE_TOPPING_UP_FACTOR_DESC
+Pourcentage de surengagement de PP pour le tour final de production d'un item afin de le produire dans les temps.
+
+RULE_CHEAP_AND_FAST_TECH_RESEARCH
+Technologies gratuites et immédiates
+
+RULE_CHEAP_AND_FAST_TECH_RESEARCH_DESC
+Les technologies coûtent seulement 1 PR et 1 tour de recherche.
+
+RULE_CHEAP_AND_FAST_BUILDING_PRODUCTION
+Structures gratuites et immédiates
+
+RULE_CHEAP_AND_FAST_BUILDING_PRODUCTION_DESC
+Les structures coûtent seulement 1 PP et 1 tour de production.
+
+RULE_CHEAP_AND_FAST_SHIP_PRODUCTION
+Astronefs gratuits et immédiats
+
+RULE_CHEAP_AND_FAST_SHIP_PRODUCTION_DESC
+Les astronefs coûtent seulement 1 PP et 1 tour de production.
+
+RULE_NUM_COMBAT_ROUNDS
+Passes de Combat
+
+RULE_NUM_COMBAT_ROUNDS_DESC
+Nombre de passes de combat se déroulant à chaque tour.
+
+RULE_RESEED_PRNG_SERVER
+Regénération aléatoire
+
+RULE_RESEED_PRNG_SERVER_DESC
+Avec la regénération aléatoire, rejouer la même sauvegarde ou utiliser les mêmes réglages et Graine de hasard, ne doivent pas produire les mêmes effets aléatoires. Cela est préférable si les joueurs veulent s'assurer qu'aucun d'entre eux ne puissent prédire les événements aléatoires selon les expériences antérieures ou si un joueur désire 're-jouer' l'issue d'un combat ou d'un effet aléatoire en relançant un tour, et ne pas obtenir les mêmes résultats que lors du précédent essai.
+
+RULE_SHIP_SPEED_FACTOR
+Ajustement Vitesse des Astronefs
+
+RULE_SHIP_SPEED_FACTOR_DESC
+Définit les vitesses des coques et équipements d'astronef
+
+RULE_SHIP_STRUCTURE_FACTOR
+Ajustement Résistance des Astronefs
+
+RULE_SHIP_STRUCTURE_FACTOR_DESC
+Définit les résistances des coques et blindages d'astronef
+
+RULE_SHIP_HULL_COST_FACTOR
+Ajustement Coût des Coques
+
+RULE_SHIP_HULL_COST_FACTOR_DESC
+Définit les coûts des coques d'astronef
+
+RULE_SHIP_PART_COST_FACTOR
+Ajustement Coût des Équipements
+
+RULE_SHIP_PART_COST_FACTOR_DESC
+Définit les coûts des équipements d'astronef
+
+RULE_BUILDING_COST_FACTOR
+Ajustement Coût des Structures
+
+RULE_BUILDING_COST_FACTOR_DESC
+Définit les coûts des structures
+
+RULE_TECH_COST_FACTOR
+Ajustement Coût des Technologies
+
+RULE_TECH_COST_FACTOR_DESC
+Définit les coûts des technologies
+
+RULE_ENABLE_EXPERIMENTORS
+Activer Expérimentateurs
+
+RULE_ENABLE_EXPERIMENTORS_DESC
+Active les Expérimentateurs lors de la génération de la galaxie
+
+RULE_ENABLE_SUPER_TESTER
+Activer Invasion Super-Testeurs
+
+RULE_ENABLE_SUPER_TESTER_DESC
+Active la structure [[BLD_SUPER_TEST]]
+
+RULE_STOCKPILE_IMPORT_LIMITED
+Limite Import Stock
+
+RULE_STOCKPILE_IMPORT_LIMITED_DESC
+Active la limite d'import du stock par tour
+
+RULE_TEST_INT
+Test des Entiers (Integer)
+
+RULE_TEST_INT_DESC  # translated
+Test
+
+RULE_TEST_STRING
+Test des Chaînes (String)
+
+RULE_TEST_STRING_DESC  # translated
+Test
+
+RULE_STARLANES_EVERYWHERE
+Voies Spatiales Systématiques
+
+RULE_STARLANES_EVERYWHERE_DESC
+Les Voies spatiales sont générées entre chaque paire de systèmes, indépendamment de toute géométrie. Toutefois, ces Voies peuvent toujours être supprimées durant une partie. Dans ce mode, les Voies ne sont pas affichées sur la carte galactique.
+
+RULE_HABITABLE_SIZE_TINY
+Zone habitable Minuscules Planètes
+
+RULE_HABITABLE_SIZE_SMALL
+Zone habitable Petites Planètes
+
+RULE_HABITABLE_SIZE_MEDIUM
+Zone habitable Moyennes Planètes
+
+RULE_HABITABLE_SIZE_LARGE
+Zone habitable Grandes Planètes
+
+RULE_HABITABLE_SIZE_HUGE
+Zone habitable Immenses Planètes
+
+RULE_HABITABLE_SIZE_ASTEROIDS
+Zone habitable Astéroïdes
+
+RULE_HABITABLE_SIZE_GASGIANT
+Zone habitable Géantes Gazeuses
+
+RULE_HABITABLE_SIZE_DESC
+Valeur utilisée pour ajuster les variations de [[encyclopedia POPULATION_TITLE_SHORT_DESC]] sur une planète de cette taille.
+
+RULE_ALLOW_CONCEDE
+Autoriser Capitulation
+
+RULE_ALLOW_CONCEDE_DESC
+Autorise les empires à capituler dans une partie. Si un empire capitule, tout ce qu'il possède dans l'univers sera automatiquement détruit. La partie continue avec les joueurs restants.
+
+RULE_CONCEDE_COLONIES_THRESHOLD
+Nombre maximum de colonies pour capituler
+
+RULE_CONCEDE_COLONIES_THRESHOLD_DESC
+Les empires contrôlant un nombre de colonies supérieur à cette valeur ne peuvent pas capituler.
+
+RULE_THRESHOLD_HUMAN_PLAYER_WIN
+Maximum de joueurs humains vainqueurs
+
+RULE_THRESHOLD_HUMAN_PLAYER_WIN_DESC
+Nombre maximum de joueurs humains pouvant gagner collectivement dans une partie multijoueurs s'il n'y a pas d'autres joueurs humains survivants.
+
+RULE_ONLY_ALLIANCE_WIN
+Seuls les joueurs alliés gagnent
+
+RULE_ONLY_ALLIANCE_WIN_DESC
+Les joueurs alliés peuvent gagner collectivement si le nombre de joueurs humains au sein de leur alliance n'est pas supérieur au maximum de joueurs humains vainqueurs et s'il n'y a pas d'autres joueurs humains survivants.
+
+RULE_SHIP_PART_BASED_UPKEEP
+Activer Entretien des Équipements
+
+RULE_SHIP_PART_BASED_UPKEEP_DESC
+Calculer le coût d'entretien selon les équipements de l'astronef plutôt que selon le modèle d'astronef lui-même.
+
 
 ##
 ## Command-line and options database entries
 ##
 
+COMMAND_LINE_NOT_FOUND
+'''Aucune option ou section correspondante trouvée'''
+
 COMMAND_LINE_USAGE
-'''Usage : '''
+'''Usage: -h | --help [nom groupe | nom option]'''
 
 COMMAND_LINE_DEFAULT
-'''Défaut : '''
+'''Défaut'''
+
+COMMAND_LINE_SECTIONS
+'''Groupes d'Options'''
+
+COMMAND_LINE_OPTIONS  # translated
+'''Options'''
 
 OPTIONS_DB_HELP
-Copier ce message d'aide.
+'''Afficher ce message d'aide.
+Accepte un argument pour un nom partiel ou complet d'option.
+Des arguments spéciaux sont prévus pour:
+all - [[OPTIONS_DB_SECTION_ALL]]
+raw - [[OPTIONS_DB_SECTION_RAW]]'''
 
 OPTIONS_DB_VERSION
 Copier le numéro de version et quitter.
 
 OPTIONS_DB_SINGLEPLAYER
 Démarre le serveur en mode hébergement d'une partie solo. Seuls les clients du serveur local peuvent se connecter.
+
+OPTIONS_DB_HOSTLESS
+Démarre le serveur en mode sans hôte. Le serveur accepte les joueurs dans le salon multijoueur, et retourne au salon lorsque la session de jeu est terminée.
+
+OPTIONS_DB_SKIP_CHECKSUM
+Ignore le contrôle du dossier de ressources. Ceci permet un démarrage plus rapide lorsque le client et le serveur se trouve sur la même machine, utilisant le même dossier de ressources.
+
+OPTIONS_DB_TESTING
+Linux uniquement. L'IA enverra le fichier journal vers la console au lieu de créer un fichier externe.
 
 OPTIONS_DB_GENERATE_CONFIG_XML
 Génère un fichier config.xml à partir des réglages contenus dans les fichiers config.xml existants et donnés dans la ligne de commande. Ceci écrasera le fichier config.xml actuel, s'il existe.
@@ -988,10 +1280,10 @@ OPTIONS_DB_UI_SAVE_DIALOG_COLUMNS
 Colonnes valides: time, turn, player, empire, systems, seed, galaxy_age, galaxy_shape, planet_freq, native_freq, specials_freq, starlane_freq'''
 
 OPTIONS_DB_UI_SAVE_DIALOG_COLUMN_WIDE_AS
-Si UI.save-file-dialog.[name].wide-as est activé, la colonne sera toujours assez large pour contenir tout le texte.
+Si ui.dialog.save.columns.[name].width.chars est activé, la colonne sera toujours assez large pour contenir tout le texte.
 
 OPTIONS_DB_UI_SAVE_DIALOG_COLUMN_STRETCH
-Si UI.save-file-dialog.[name].stretch est activé, la colonne permettra ce facteur d'agrandissement si visible.
+Si ui.dialog.save.columns.[name].stretch est activé, la colonne permettra ce facteur d'agrandissement si visible.
 
 OPTIONS_DB_GALAXY_MAP_GAS
 Rendu de la densité gazeuse qui donne sa forme à la galaxie. Peut ralentir l'affichage sur les machines les plus anciennes.
@@ -1038,6 +1330,15 @@ Fixe l'espacement des points indiquant la trajectoire des flottes.
 OPTIONS_DB_FLEET_SUPPLY_LINE_DOT_RATE
 Fixe la vitesse de défilement des points indiquant la trajectoire des flottes.
 
+OPTIONS_DB_FLEET_EXPLORE_IGNORE_HOSTILE
+Ignorer les astronefs hostiles lorsqu'une flotte est en mode exploration
+
+OPTIONS_DB_FLEET_EXPLORE_SYSTEM_ROUTE_LIMIT
+Limite le nombre de flottes évaluant la meilleure route vers chaque système, pour les flottes réglées en exploration automatique. Une limite basse permet un calcul plus rapide mais peut causer un routage moins optimal. Une valeur de -1 désactive la limite.
+
+OPTIONS_DB_FLEET_EXPLORE_SYSTEM_KNOWN_MULTIPLIER
+Multiplicateur de la valeur de priorité des systèmes inexplorés ayant été déjà vus par l'empire. Une valeur inférieure à 1.0 donnera la priorité aux systèmes connus sur ceux inconnus.
+
 OPTIONS_DB_GALAXY_MAP_DETECTION_RANGE
 Afficher/Cacher, sur la carte galactique, les zones circulaires autour des objets figurant leur Champ de Détection.
 
@@ -1055,6 +1356,24 @@ Adresse à laquelle se connecter pour rejoindre une partie multijoueurs.
 
 OPTIONS_DB_MP_PLAYER_NAME
 Nom utilisé par le joueur lorsqu'il héberge ou rejoint une partie multijoueurs.
+
+OPTIONS_DB_MP_AI_MIN
+Définit le nombre minimum de joueurs IA requis pour démarrer une partie multijoueurs.
+
+OPTIONS_DB_MP_AI_MAX
+Limite le nombre de joueurs IA dans une partie multijoueurs. Une valeur de -1 correspond à un nombre illimité.
+
+OPTIONS_DB_MP_HUMAN_MIN
+Définit le nombre minimum de joueurs humains requis pour démarrer une partie multijoueurs.
+
+OPTIONS_DB_MP_HUMAN_MAX
+Limite le nombre de joueurs humains dans une partie multijoueurs. Une valeur de -1 correspond à un nombre illimité.
+
+OPTIONS_DB_COOKIES_EXPIRE
+Valeur en minutes au-delà de laquelle le cookie enregistré sera considéré comme expiré.
+
+OPTIONS_DB_PUBLISH_STATISTICS
+Activer l'envoi des statistiques d'empire au joueur.
 
 OPTIONS_DB_UI_MAIN_MENU_X
 Position horizontale du centre du menu principal de l'écran d'introduction, en pourcentage de la largeur totale de la fenêtre de jeu ou du plein écran.
@@ -1090,7 +1409,7 @@ OPTIONS_DB_MAX_FPS
 Fixe la valeur limite du Ni/s (nombre d'images par seconde) lorsque sa limitation est activée avec l'option Limitation Ni/s.
 
 OPTIONS_DB_LIMIT_FPS_NO_FOCUS
-Active/désactive la limitation du Ni/s lorsque la fenêtre principale de jeu n'est pas sélectionnée. La limite est définie avec l'option Ni/s Maximal (hors-fenêtre).
+Active/Désactive la limitation du Ni/s lorsque la fenêtre principale de jeu n'est pas sélectionnée. La limite est définie avec l'option Ni/s Maximal (hors-fenêtre).
 
 OPTIONS_DB_MAX_FPS_NO_FOCUS
 Fixe la valeur limite du Ni/s (nombre d'images par seconde) lorsque la fenêtre principale de jeu n'est pas sélectionnée, si la limitation est activée avec l'option Limitation Ni/s (hors-fenêtre).
@@ -1108,7 +1427,7 @@ OPTIONS_DB_UI_SOUND_TURN_BUTTON_CLICK
 Adresse du fichier son à jouer lorsque le bouton de Tour est cliqué.
 
 OPTIONS_DB_UI_SOUND_NEWTURN_TOGGLE
-Active/désactive la lecture d'un fichier son au début d'un nouveau tour.
+Active/Désactive la lecture d'un fichier son au début d'un nouveau tour.
 
 OPTIONS_DB_UI_SOUND_NEWTURN_FILE
 Le fichier son joué au début d'un nouveau tour, si activé.
@@ -1294,7 +1613,7 @@ OPTIONS_DB_UI_SMALL_FLEET_BUTTON_MIN_ZOOM
 Fixe le niveau minimal de zoom auquel les icônes de petite taille des flottes apparaissent sur la carte galactique.
 
 OPTIONS_DB_UI_TINY_FLEET_BUTTON_MIN_ZOOM
-Fixe le niveau minimal de zoom auquel les icônes de taille minimale des flottes apparaissent sur la carte galactique. À un niveau de zoom inférieur, aucune icône de flotte n'est visible sur la carte galactique.
+Fixe le niveau minimal de zoom auquel les icônes de taille minimum des flottes apparaissent sur la carte galactique. À un niveau de zoom inférieur, aucune icône de flotte n'est visible sur la carte galactique.
 
 OPTIONS_DB_UI_FLEET_SELECTION_INDICATOR_SIZE
 Fixe la taille sur la carte galactique de l'indicateur de sélection d'une flotte, relativement à la taille des icônes de flotte.
@@ -1315,7 +1634,7 @@ OPTIONS_DB_UI_SYSTEM_SELECTION_INDICATOR_FPS
 Fixe la vitesse de rotation (en tours par minute) de l'indicateur de sélection d'un système stellaire.
 
 OPTIONS_DB_UI_SYSTEM_TINY_ICON_SIZE_THRESHOLD
-Fixe la taille des icônes de système stellaire au-dessous de laquelle les icônes minimales affichées auront une taille fixe.
+Fixe la taille des icônes de système stellaire au-dessous de laquelle les icônes minimales de taille fixe seront affichées.
 
 OPTIONS_DB_UI_TOOLTIP_DELAY
 Fixe le délai d'apparition dans l'interface utilisateur des bulles d'information, en millisecondes.
@@ -1325,6 +1644,20 @@ Fixe le délai d'apparition dans l'interface utilisateur des bulles d'informatio
 
 OPTIONS_DB_UI_ENC_SEARCH_ARTICLE
 Lors d'une recherche dans l'Encyclopédie, vérifier les correspondances dans le contenu des articles.
+
+# Section title for options window logging
+OPTIONS_DB_UI_LOGGER_THRESHOLDS
+Seuils de journalisation
+
+OPTIONS_DB_UI_LOGGER_THRESHOLD_TOOLTIP
+'''Chaque fichier journal (freeorion.log, freeoriond.log, and AI_x.log) collecte les événements à partir de différentes sources (sections de code).
+Régler le seuil pour une source rendra possible l'enregistrement des événements pour ce niveau et au-delà quant à la source en question.
+Chaque processus client, serveur, et IA dispose d'une source générale et peut avoir des sources détaillées additionnelles (eg. log de résolution de combat).'''
+
+# This is a label to designate the logger as the general or default logger for a process
+# %1% is the name of a process logger, client, server or ai
+#OPTIONS_DB_UI_LOGGER_PER_PROCESS_GENERAL
+#%1% general
 
 OPTIONS_DB_KEYPRESS_REPEAT_DELAY
 Fixe le délai entre le maintien d'une touche et l'activation de la répétition de la même touche.
@@ -1338,6 +1671,9 @@ Fixe le délai entre le maintien d'un bouton de la souris et l'activation de la 
 OPTIONS_DB_MOUSE_REPEAT_INTERVAL
 Fixe le délai de répétition de clics quand un bouton de la souris est maintenu.
 
+OPTIONS_DB_DISPLAY_TIMESTAMP
+Active l'horodatage des messages dans la fenêtre de messagerie.
+
 OPTIONS_DB_UI_MULTIPLE_FLEET_WINDOWS
 Si activé, cliquer sur plusieurs boutons de flotte ouvrent plusieurs Fenêtres Flottes en même temps. Si désactivé, toute ouverture d'une Fenêtre Flottes ferme celle précédemment affichée.
 
@@ -1348,7 +1684,10 @@ OPTIONS_DB_UI_AUTO_REPOSITION_WINDOWS
 Active/Désactive le repositionnement automatique des fenêtres lorsque la taille d'affichage de l'application est modifiée.
 
 OPTIONS_DB_AUTO_ADD_SAVED_DESIGNS
-Ajoute automatiquement tous les modèles d'astronef conçus et sauvegardés par le joueur à la liste des modèles connus de l'Empire du joueur, si et seulement si la fenêtre Conception est consultée au Tour 1.
+Ajoute automatiquement tous les modèles d'astronef conçus et sauvegardés par le joueur à la liste des modèles connus de l'Empire du joueur.
+
+OPTIONS_DB_ADD_DEFAULT_DESIGNS
+Ajoute automatiquement tous les modèles d'astronef par défaut à la liste des modèles connus de l'Empire du joueur.
 
 OPTIONS_DB_DESIGN_PEDIA_DYNAMIC
 Dans la Fenêtre Conception, met à jour dynamiquement l'article de l'Encyclopédie lorsque le nom du modèle est modifié.
@@ -1421,7 +1760,7 @@ Certaines espèces indigènes peuvent être technologiquement avancées et crée
 OPTIONS_DB_GAMESETUP_AI_MAX_AGGRESSION
 '''Le niveau maximal d'agressivité des adversaires gérés par l'ordinateur.
 
-La plupart des IAs seront réglées sur la valeur définie, certaines pourront se situer à un niveau inférieur. Tous les adversaires se manifesteront dans la Fenêtre Messages lors du premier tour, vous indiquant ainsi leur niveau.'''
+La plupart des IAs seront réglées sur la valeur définie, certaines pourront se situer à un niveau inférieur. Tous les adversaires se manifesteront dans la Fenêtre Messages lors du premier tour, indiquant ainsi leur niveau.'''
 
 OPTIONS_DB_GAMESETUP_EMPIRE_NAME
 Le nom de votre empire dans le jeu.
@@ -1457,13 +1796,25 @@ OPTIONS_DB_UI_TECH_CTRL_ICON_SIZE
 Ajuste la taille des icônes de la barre d'affichage des technologies dans la Fenêtre Recherche.
 
 OPTIONS_DB_SAVE_DIR
-L'adresse du répertoire où sauvegarder (et d'où charger) les parties.
+L'adresse du répertoire où sauvegarder et à partir duquel charger les parties.
+
+OPTIONS_DB_SERVER_SAVE_DIR
+Le répertoire public pour les parties sauvegardées sur le serveur.
 
 OPTIONS_DB_RESOURCE_DIR
 L'adresse du répertoire où sont localisées les ressources du jeu (fichiers exécutables et fichiers de données).
 
 OPTIONS_DB_LOG_LEVEL
-Fixe le niveau d'importance à partir duquel les messages du journal seront affichés (niveaux par ordre croissant de verbosité: FATAL, ERROR, WARN, INFO, DEBUG, TRACE).
+Outrepasse tous les seuils d'enregistrement à ce niveau ou au-delà, à partir duquel les messages du journal seront créés.
+
+OPTIONS_DB_LOG_FILE
+Outrepasse l'emplacement par défaut du fichier journal.
+
+OPTIONS_DB_LOGGER_FILE_SINK_LEVEL
+Fixe le seuil à partir duquel les messages du journal seront générés pour la source par défaut de ce processus.
+
+OPTIONS_DB_LOGGER_SOURCE_LEVEL
+Fixe le seuil à partir duquel les messages du journal seront générés pour cette source.
 
 OPTIONS_DB_STRINGTABLE_FILENAME
 L'adresse du fichier contenant la langue choisie pour l'interface utilisateur. Une fois le fichier sélectionné, cliquez sur 'Réinitialiser le fichier langue en mémoire' puis validez.
@@ -1472,7 +1823,7 @@ OPTIONS_DB_AI_FOLDER_PATH
 Définit le chemin du dossier contenant les fichiers de script de l'IA, pour l'exécution en cours uniquement, par rapport au dossier principal; par défaut "AI". A pour but de faciliter le test de l'IA.
 
 OPTIONS_DB_AI_CONFIG
-Est disponible pour l'IA via l'interface freeorion, et utilisé pour l'éxécution en cours uniquement.  Permet de nommer un fichier de configuration optionnel de l'IA à l'intérieur du dossier de scripts de l'IA; par défaut une valeur nulle. A pour but de faciliter le test de l'IA.
+Est disponible pour l'IA via l'interface freeorion, et utilisé pour l'éxécution en cours uniquement. Permet de nommer un fichier de configuration optionnel de l'IA à l'intérieur du dossier de scripts de l'IA; par défaut une valeur nulle. A pour but de faciliter le test de l'IA.
 
 OPTIONS_DB_AI_CONFIG_TRAIT_AGGRESSION_FORCED
 Valeur boléenne pour test d'IA indiquant si toutes les IAs ont forcément le même Niveau d'Agressivité.
@@ -1486,17 +1837,32 @@ Valeur boléenne pour test d'IA indiquant si toutes les IAs ont forcément le m�
 OPTIONS_DB_AI_CONFIG_TRAIT_EMPIREID_FORCED_VALUE
 Valeur forcée pour le Niveau selon l'EmpireID. Une valeur de 0 à 39.
 
-OPTIONS_DB_AUTOSAVE_SINGLE_PLAYER
-Si activé, les parties solo bénéficieront d'une sauvegarde automatique régulière.
+OPTIONS_DB_AUTOSAVE_SINGLE_PLAYER_TURN_START
+Active la sauvegarde automatique au début de chaque tour pour les parties solo.
 
-OPTIONS_DB_AUTOSAVE_MULTIPLAYER
-Si activé, les parties multijoueurs bénéficieront d'une sauvegarde automatique régulière.
+OPTIONS_DB_AUTOSAVE_SINGLE_PLAYER_TURN_END
+Active la sauvegarde automatique à la fin de chaque tour pour les parties solo.
+
+OPTIONS_DB_AUTOSAVE_MULTIPLAYER_TURN_START
+Active la sauvegarde automatique au début de chaque tour pour les parties multijoueurs.
+
+OPTIONS_DB_AUTOSAVE_MULTIPLAYER_TURN_END
+Active la sauvegarde automatique à la fin de chaque tour pour les parties multijoueurs.
 
 OPTIONS_DB_AUTOSAVE_TURNS
 Fixe le nombre de tours séparant les sauvegardes automatiques.
 
 OPTIONS_DB_AUTOSAVE_LIMIT
 Fixe le nombre maximal de sauvegardes automatiques à conserver.
+
+OPTIONS_DB_AUTOSAVE_GALAXY_CREATION
+Active une sauvegarde automatique dès que la galaxie est créée et avant toute action de jeu.
+
+OPTIONS_DB_AUTOSAVE_GAME_CLOSE
+Active une sauvegarde automatique lors d'un abandon ou de la fermeture du jeu.
+
+OPTIONS_DB_AUTOSAVE_HOSTLESS
+Active la sauvegarde automatique en mode sans hôte.
 
 OPTIONS_DB_UI_MOUSE_LR_SWAP
 Si activé, les effets des clics droit et gauche de la souris seront inversés.
@@ -1506,6 +1872,9 @@ Fixe le volume sonore de la musique (de 0 à 255).
 
 OPTIONS_DB_QUICKSTART
 Lance une nouvelle partie en court-circuitant le menu principal.
+
+OPTIONS_DB_CONTINUE
+Reprend une partie depuis la sauvegarde la plus récente, sans passer par le menu principal.
 
 OPTIONS_DB_AUTO_N_TURNS
 Clique le bouton "Tour" automatiquement pour les N premiers tours (jusqu'à 400 tours, valeur défaut à zéro); utile pour le débogage notamment avec --quickstart ou --load, et éventuellement --auto-quit.
@@ -1519,20 +1888,11 @@ Enregistre ou réinitialise la résolution en plein écran. Si non, la valeur en
 OPTIONS_DB_DUMP_EFFECTS_GROUPS_DESC
 Active/Désactive l'affichage des effets groupés dans les descriptions des technologies, des structures ou des équipements d'astronef.
 
-OPTIONS_DB_VERBOSE_LOGGING_DESC
-Active/Désactive les journaux détaillés des éléments de l'univers et l'évaluation des effets (pour développeurs).
-
-OPTIONS_DB_VERBOSE_COMBAT_LOGGING_DESC
-Active/Désactive les journaux détaillés de l'information des résolutions de combat.
-
 OPTIONS_DB_VERBOSE_SITREP_DESC
 Active/Désactive l'affichage des rapports d'erreurs (pour développeurs).
 
 OPTIONS_DB_EFFECT_ACCOUNTING
 Active/Désactive la tabulation de la comptabilité des effets lors de l'actualisation des statistiques de jeu.
-
-OPTIONS_DB_PRNG_RESEEDING
-Active/Désactive la re-génération d'un nombre de graine aléatoire lors de chaque tour, avec des caractéristiques prévisibles et reproductibles.
 
 OPTIONS_DB_UI_SITREP_ICONSIZE
 Définit la largeur et la hauteur des icônes du Rapport de Situation; par défaut 16 (min 12, max 64).
@@ -1554,6 +1914,9 @@ Quitter automatiquement une fois au tour spécifié par --auto-advance-n-turns (
 
 OPTIONS_DB_BINARY_SERIALIZATION
 Utilise la sérialisation binaire pour les fichiers de sauvegarde. La sérialisation binaire est plus rapide lors de la sauvegarde et du chargement, mais peut rencontrer des problèmes de compatibilité si le fichier de sauvegarde est utilisé sur un système d'exploitation différent.
+
+OPTIONS_DB_XML_ZLIB_SERIALIZATION
+Lors d'une sauvegarde utilisant la sérialisation XML, compresser une grande partie du code XML avant de créer le fichier. La compression réduit substantiellement la taille du fichier de sauvegarde, mais peut rendre impossible le chargement dudit fichier en raison de la quantité de mémoire nécessaire pour décompresser les données de sauvegarde.
 
 OPTIONS_DB_UI_WINDOWS_EXISTS
 Vrai si une fenêtre avec ce nom spécifique existe, faux si une fenêtre a été créée puis effacée, n'existe pas si une fenêtre n'a pas encore été créée avec ce nom.
@@ -1583,7 +1946,7 @@ OPTIONS_DB_UI_WINDOWS_HEIGHT_WINDOWED
 La hauteur d'une fenêtre en mode fenêtré.
 
 OPTIONS_DB_UI_WINDOWS_VISIBLE
-Active/désactive l'affiche d'une fenêtre, lorsque celle-ci est disponible.
+Active/Désactive l'affichage d'une fenêtre, lorsque celle-ci est disponible.
 
 OPTIONS_DB_UI_WINDOWS_PINNED
 Définit si une fenêtre est ancrée.
@@ -1641,6 +2004,89 @@ Port réseau à utiliser pour la découverte du serveur.
 
 OPTIONS_DB_NETWORK_MESSAGE_PORT
 Port réseau à utiliser pour la communication client-serveur.
+
+
+##
+## Option sections
+##
+
+OPTIONS_DB_SECTION_ALL
+Toutes les options
+
+OPTIONS_DB_SECTION_AUDIO  # translated
+Audio
+
+OPTIONS_DB_SECTION_AUDIO_MUSIC
+Musique de fond
+
+OPTIONS_DB_SECTION_AUDIO_EFFECTS
+Effets sonores
+
+OPTIONS_DB_SECTION_AUDIO_EFFECTS_PATHS
+Chemins des Effets sonores
+
+OPTIONS_DB_SECTION_EFFECTS
+Effets
+
+OPTIONS_DB_SECTION_LOGGING
+Connexion
+
+OPTIONS_DB_SECTION_MISC
+Divers
+
+OPTIONS_DB_SECTION_NETWORK
+Réseau et serveur
+
+OPTIONS_DB_SECTION_RAW
+Toutes les options avec seulement les descriptions brutes des clés
+
+OPTIONS_DB_SECTION_RESOURCE
+Ressources des données de jeu
+
+OPTIONS_DB_SECTION_SAVE
+Sauvegarde de partie
+
+OPTIONS_DB_SECTION_SETUP
+Réglages de départ pour une nouvelle partie
+
+OPTIONS_DB_SECTION_UI
+Interface utilisateur
+
+OPTIONS_DB_SECTION_UI_COLORS
+Couleurs
+
+OPTIONS_DB_SECTION_UI_CONTROL
+Contrôle (générique)
+
+OPTIONS_DB_SECTION_UI_HOTKEYS
+Raccourcis clavier
+
+OPTIONS_DB_SECTION_UI_MAP
+Carte principale
+
+OPTIONS_DB_SECTION_UI_MAP_FLEET
+Flottes (carte)
+
+OPTIONS_DB_SECTION_UI_FLEET
+Fenêtre Flottes
+
+OPTIONS_DB_UI_WINDOW
+Fenêtre (générique)
+
+OPTIONS_DB_SECTION_VERSION  # translated
+Version
+
+OPTIONS_DB_SECTION_VIDEO
+Vidéo
+
+OPTIONS_DB_SECTION_VIDEO_FPS
+Frames par seconde
+
+OPTIONS_DB_SECTION_VIDEO_FULLSCREEN
+Mode plein écran
+
+OPTIONS_DB_SECTION_VIDEO_WINDOWED
+Mode fenêtré
 
 
 ##
@@ -1708,6 +2154,9 @@ A
 INTRO_WINDOW_TITLE
 Menu principal
 
+INTRO_BTN_CONTINUE
+Continuer
+
 INTRO_BTN_SINGLE_PLAYER
 Partie solo
 
@@ -1753,22 +2202,36 @@ SCONNECT_WINDOW_TITLE
 Connexion au Serveur
 
 LAN_GAME_LABEL
-Partie locale chez :
+Session locale chez :
 
 INTERNET_GAME_LABEL
-Partie Internet chez :
+Session Internet chez :
 
 PLAYER_NAME_LABEL
 Nom du joueur
 
 HOST_GAME_BN
-Héberger une partie
+Héberger une nouvelle partie
 
 JOIN_GAME_BN
-Rejoindre une partie
+Rejoindre partie en
 
 REFRESH_LIST_BN
 Rafraîchir
+
+
+##
+## Password Dialog
+##
+
+AUTHENTICATION_WINDOW_TITLE
+Authentification
+
+AUTHENTICATION_DESC
+Ce nom de joueur requiert une authentification. Rappel! Le mot de passe sera transmis en simple format texte.
+
+PASSWORD_LABEL
+Mot de Passe
 
 
 ##
@@ -1799,6 +2262,12 @@ Joueur précédent
 MULTIPLAYER_PLAYER_LIST_STARTING_SPECIES
 Espèce de départ
 
+EDITABLE_GALAXY_SETTINGS
+Réglages modifiables par tous
+
+EDITABLE_GALAXY_SETTINGS_DESC
+Tous les joueurs peuvent modifier les réglages de la galaxie et de l'IA.
+
 NEW_GAME_BN
 Nouvelle partie
 
@@ -1814,6 +2283,9 @@ Accepter
 NOT_READY_BN
 Refuser
 
+# %1% is a turn progress phase
+PLAYING_GAME
+Partie en cours: %1%
 
 ##
 ## Galaxy Setup Screen
@@ -1841,7 +2313,7 @@ GSETUP_SEED
 Graine de hasard
 
 GSETUP_RANDOM_SEED
-Génère une Graine de hasard aléatoire
+Active/Désactive la génération d'une Graine de hasard aléatoire
 
 GSETUP_STARS
 Systèmes
@@ -1998,7 +2470,10 @@ GAME_MENU_LOAD
 Charger
 
 GAME_MENU_RESIGN
-Abandonner
+Quitter
+
+GAME_MENU_CONCEDE
+Capituler
 
 GAME_MENU_SAVE_FILES
 Fichiers de sauvegarde
@@ -2007,7 +2482,10 @@ BUTTON_DISABLED
 Bouton désactivé
 
 SAVE_DISABLED_BROWSE_TEXT
-Le bouton "Sauvegarder" est désactivé, soit parce qu'il s'agit d'une partie multijoueurs dont vous n'êtes ni l'Hôte ni le Modérateur, soit parce que le menu a été ouvert alors qu'au moins une des IAs n'a pas encore terminé son tour de jeu (indiqué par un triangle vert à gauche de l'icône représentant le type de joueur dans la fenêtre Empires).
+Le bouton "Sauvegarder" est désactivé, soit parce qu'il s'agit d'une partie multijoueurs dont ce client n'est ni l'Hôte ni le Modérateur, soit parce que le menu a été ouvert alors qu'au moins une des IAs n'a pas encore terminé son tour de jeu (indiqué par un triangle vert à gauche de l'icône représentant le type de joueur dans la fenêtre Empires).
+
+GAME_MENU_REALLY_CONCEDE
+Confirmer la capitulation? Cet empire sera supprimé de cette partie.
 
 
 ##
@@ -2092,11 +2570,11 @@ Chemin:
 
 # %1% entered path to the save game file that should be deleted.
 SAVE_REALLY_DELETE
-Êtes-vous sûr(e) de vouloir supprimer %1%?
+Supprimer définitivement %1%?
 
 # %1% entered path to the save game file that should be overwritten.
 SAVE_REALLY_OVERRIDE
-Êtes-vous sûr(e) de vouloir écraser %1%?
+Écraser définitivement %1%?
 
 
 ##
@@ -2118,14 +2596,11 @@ Affichage des planètes dans le panneau latéral
 OPTIONS_AUTO_REPOSITION_WINDOWS
 Repositionnement automatique des fenêtres
 
+OPTIONS_DISPLAY_TIMESTAMP
+Afficher horodatage messagerie
+
 OPTIONS_MISC_UI
 Options diverses de l'interface utilisateur
-
-OPTIONS_SINGLEPLAYER
-Parties solo
-
-OPTIONS_MULTIPLAYER
-Parties multijoueurs
 
 OPTIONS_AUTOSAVE_LIMIT
 Nombre maximal de sauvegardes automatiques
@@ -2284,13 +2759,13 @@ OPTIONS_FLEET_ICONS
 Icônes de Flotte
 
 OPTIONS_UI_TINY_FLEET_BUTTON_MIN_ZOOM
-Zoom minimal de l'icône d'une flotte minuscule
+Zoom minimal icône minuscule d'une flotte
 
 OPTIONS_UI_SMALL_FLEET_BUTTON_MIN_ZOOM
-Zoom minimal de l'icône d'une petite flotte
+Zoom minimal petite icône d'une flotte
 
 OPTIONS_UI_MEDIUM_FLEET_BUTTON_MIN_ZOOM
-Zoom minimal de l'icône d'une flotte moyenne
+Zoom minimal icône moyenne d'une flotte
 
 OPTIONS_UI_FLEET_SELECTION_INDICATOR_SIZE
 Taille relative du sélecteur de flottes
@@ -2505,6 +2980,9 @@ Couleurs
 OPTIONS_PAGE_DIRECTORIES
 Répertoires
 
+OPTIONS_PAGE_LOGS
+Journaux
+
 OPTIONS_PAGE_MISC
 Autres
 
@@ -2537,6 +3015,9 @@ Fichiers de ressources
 
 OPTIONS_FOLDER_SAVE
 Fichiers de sauvegarde
+
+OPTIONS_SERVER_FOLDER_SAVE
+Fichiers de sauvegarde Serveur
 
 OPTIONS_LANGUAGE_FILE
 Fichiers de langue
@@ -2577,8 +3058,37 @@ Threads de rendu d'effets (serveur)
 OPTIONS_ADD_SAVED_DESIGNS
 Ajouter tous les modèles d'astronef sauvegardés au démarrage d'une partie
 
+OPTIONS_ADD_DEFAULT_DESIGNS
+Ajouter tous les modèles d'astronef par défaut au démarrage d'une partie
+
 OPTIONS_USE_BINARY_SERIALIZATION
 Utiliser des fichiers de sauvegarde binaire
+
+OPTIONS_USE_XML_ZLIB_SERIALIZATION
+Compresser les fichiers de sauvegarde XML
+
+OPTIONS_CREATE_PERSISTENT_CONFIG
+Écrire Fichier de Configuration Persistante
+
+OPTIONS_CREATE_PERSISTENT_CONFIG_TOOLTIP_TITLE
+Créer Configuration Persistante (Option Avancée)
+
+OPTIONS_CREATE_PERSISTENT_CONFIG_TOOLTIP_DESC
+'''Sauvegarde les réglages actuels de configuration comme réglages persistants par défaut.
+Ces réglages sont prioritaires sur tout réglage du fichier config.xml, mais pas sur la ligne de commande.
+N'enregistre que les réglages dont la valeur par défaut a été modifiée.
+Tout fichier de configuration persistante déjà existant est remplacé.
+
+Les réglages peuvent ne plus être valides d'une version à l'autre de Freeorion.
+Les réglages définis pour une fenêtre du jeu peuvent ne pas être conservés si cette dernière n'a pas été ouverte lors de la session de jeu en cours.
+
+Se référer à l'article [[CONFIG_GUIDE_TITLE]] pour davantage d'informations.'''
+
+OPTIONS_CREATE_PERSISTENT_CONFIG_SUCCESS
+Fichier persistent_config.xml (re)créé avec succès.
+
+OPTIONS_CREATE_PERSISTENT_CONFIG_FAILURE
+Impossible de créer le fichier persistent_config.xml, consultez le fichier log pour plus de détails.
 
 
 ##
@@ -2588,6 +3098,10 @@ Utiliser des fichiers de sauvegarde binaire
 # %1% current turn number.
 MAP_BTN_TURN_UPDATE
 Tour %1%
+
+# %1% current turn number.
+MAP_BTN_TURN_UNREADY
+Réviser Ordres %1%
 
 # %1% number of frames currently displayed per second.
 MAP_INDICATOR_FPS
@@ -2678,39 +3192,43 @@ MAP_BTN_MESSAGES_DESC
 MAP_PRODUCTION_TITLE  # translated
 Production
 
-MAP_PROD_WASTED_TITLE
-Production inutilisée
+MAP_PRODUCTION_WASTED_TITLE
+Production gaspillée
 
-# %1% number of production points generated.
-# %2% number of production points currently not used for production.
-MAP_PROD_WASTED_TEXT
-'''Production totale : %1%
-Production gaspillée : %2%
-
-Cliquer pour ouvrir le menu de production'''
-
-RESOURCE_TT_USED
-Utilisée
-
-RESOURCE_TT_OUTPUT
-Capacité actuelle
-
-RESOURCE_TT_TARGET_OUTPUT
-Capacité prévue
+MAP_PROD_CLICK_TO_OPEN
+'''
+Cliquez ici pour ouvrir le menu de Production'''
 
 MAP_RESEARCH_TITLE
 Recherche
 
-MAP_RES_WASTED_TITLE
-Recherche inutilisée
+MAP_RESEARCH_WASTED_TITLE
+Recherche gaspillée
 
-# %1% number of research points generated.
-# %2% number of research points currently not used for research.
-MAP_RES_WASTED_TEXT
-'''Recherche totale : %1%
-Recherche gaspillée : %2%
+MAP_RES_CLICK_TO_OPEN
+'''
+Cliquez ici pour ouvrir le menu de Recherche'''
 
-Cliquer pour ouvrir le menu de recherche'''
+MAP_STOCKPILE_TITLE
+Stock Impérial
+
+RESOURCE_TT_OUTPUT
+Capacité
+
+RESOURCE_TT_TARGET_OUTPUT
+Capacité prévue
+
+RESOURCE_TT_USED
+Utilisée
+
+RESOURCE_TT_EXCESS
+Excédent
+
+RESOURCE_TT_TO_STOCKPILE
+Vers Stock
+
+RESOURCE_TT_WASTED
+Gaspillée
 
 MAP_POPULATION_DISTRIBUTION
 Population
@@ -2770,7 +3288,7 @@ Système - %1% : %2%
 # %1% resource type currently consumed by the system.
 # %2% amount of the resource currently consumed by the system.
 RESOURCE_ALLOCATION_TOOLTIP
-Syst. - %1% : %2%
+Système - %1% : %2%
 
 INDUSTRY_PRODUCTION
 Capacité industrielle
@@ -2781,6 +3299,9 @@ Capacité scientifique
 TRADE_PRODUCTION
 Capacité commerciale
 
+STOCKPILE_GENERATION
+Génération Stock
+
 INDUSTRY_CONSUMPTION
 Consommation industrielle
 
@@ -2789,6 +3310,9 @@ Consommation scientifique
 
 TRADE_CONSUMPTION
 Consommation commerciale
+
+STOCKPILE_USE
+Usage Stock
 
 IMPORT_EXPORT_TOOLTIP  # translated
 Import / Export
@@ -3254,6 +3778,9 @@ Créer une Flotte pour chaque type d'astronef
 FW_ORDER_DISMISS_SENSOR_GHOST
 Supprimer les données obsolètes de Détection
 
+FW_ORDER_DISMISS_SENSOR_GHOST_ALL
+Supprimer ici toutes les données obsolètes de Détection
+
 ORDER_SHIP_SCRAP
 Envoyer l'astronef à la casse
 
@@ -3283,6 +3810,20 @@ Offrir la planète à...
 
 ORDER_CANCEL_GIVE_PLANET
 Annuler l'offre de la planète
+
+
+##
+## Fleet Button
+##
+
+FB_TOOLTIP_BLOCKADE_WITH_EXIT
+Cette flotte est actuellement soumise au blocus d'une flotte hostile, et ne peut donc voyager que vers les systèmes suivants:
+
+FB_TOOLTIP_BLOCKADE_NO_EXIT
+Cette flotte est actuellement soumise au blocus d'une flotte hostile, et ne peut plus voyager.
+
+FB_TOOLTIP_BLOCKADE_MONSTER
+Cette flotte de monstres est soumise au blocus d'une flotte de l'empire. Les monstres bloqués par des flottes impériales ne peuvent plus se déplacer.
 
 
 ##
@@ -3447,13 +3988,31 @@ PRODUCTION_INFO_EMPIRE
 %1% %2%
 
 PRODUCTION_INFO_TOTAL_PS_LABEL
-Total Points disponibles
+Points disponibles
 
 PRODUCTION_INFO_WASTED_PS_LABEL
-Points gaspillés
+Excédent
 
-PRODUCTION_INFO_LOCAL_PS_LABEL
-Points disponibles ici
+PRODUCTION_INFO_STOCKPILE_PS_LABEL
+Points stockés
+
+PRODUCTION_INFO_STOCKPILE_USE_MAX_LABEL
+Usage maximum
+
+PRODUCTION_INFO_STOCKPILE_USE_PS_LABEL
+Usage Stock
+
+STOCKPILE_LABEL
+Stock
+
+STOCKPILE_USE_LABEL
+Usage Stock
+
+STOCKPILE_USE_LIMIT
+Limite Usage Stock
+
+STOCKPILE_CHANGE_LABEL
+Stock prochain tour
 
 
 ##
@@ -3493,11 +4052,18 @@ Structures
 PRODUCTION_WND_CATEGORY_BT_SHIP
 Astronefs
 
+PRODUCTION_WND_AVAILABILITY_OBSOLETE
+Obsolètes
+
 PRODUCTION_WND_AVAILABILITY_AVAILABLE
 Disponibles
 
 PRODUCTION_WND_AVAILABILITY_UNAVAILABLE
 Indisponibles
+
+PRODUCTION_WND_AVAILABILITY_OBSOLETE_AND_UNAVAILABLE
+'''Obsolètes
+Indisponibles'''
 
 PRODUCTION_WND_REDUNDANT
 Redondants
@@ -3553,10 +4119,10 @@ La Fenêtre Production permet d'interagir directement avec la carte de la  [[enc
 
 (position par défaut: en haut à gauche)
 Le panneau "Récapitulation de Production" affiche les Points de Production disponibles.
-"Total Points disponibles" fait référence aux PP disponibles à travers tout l'empire.
-"Points disponibles ici" concerne le maximum de points disponibles pour le système sélectionné. Cette valeur peut être inférieure au total des points disponibles lorsque tous les systèmes de votre empire ne sont pas reliés par lignes d'[[metertype METER_SUPPLY]].
-"Points gaspillés" indique le nombre de points qui seront perdus si ceux-ci ne sont pas alloués avant la fin du tour.
-
+Si un système est sélectionné, deux colonnes sont visibles. La colonne de gauche correspond aux points de production à travers tout l'empire. La colonne de droite affiche les points de production pour le système sélectionné (absente si aucun système n'est sélectionné).
+"Points disponibles" fait référence aux PP disponibles pour la Production. La valeur de droite correspond au maximum de points disponibles pour le système sélectionné. Cette valeur peut être inférieure au total disponible lorsque tous les systèmes de votre empire ne sont pas reliés par lignes d'[[metertype METER_SUPPLY]].
+Le Stock correspond aux PP disponibles pour la Production, et provenant du Stock Impérial. Les Projets de Production sont autorisés à puiser par défaut dans le Stock Impérial, excepté si son usage a été individuellement bloqué pour un projet.
+Les PP non-alloués à un projet dans la file d'attente de Production seront automatiquement ajoutés au Stock Impérial.
 
 <u>Panneau Projets de Production</u>
 
@@ -3575,7 +4141,7 @@ Les objets indisponibles, si affichés, permettront par un survol de souris d'ac
 Le panneau "File d'Attente de Production" contient les Commandes de Production de l'empire.
 Les Points de Production sont alloués aux Commandes de Production en partant du haut de la file d'attente.
 Toute commande ayant pour lieu le système sélectionné sur la carte galactique affichera le nom du système de la même couleur que celle de votre empire (en haut à droite de la commande).
-Ces commandes peuvent être déplacées dans la file d'attente à l'aide d'un glisser/déposer vers une nouvelle position.
+Ces commandes peuvent être déplacées dans la file d'attente à l'aide d'un glisser-déposer vers une nouvelle position.
 Un clic-droit sur une commande affichera un menu permettant de déplacer, retirer, ou mettre en pause une commande (d'autres actions sont disponibles, telle <i>Rechercher dans l'Encyclopédie</i>).
 Lorsqu'une commande est retirée de la file d'attente, tout point déjà dépensé est perdu, aucun n'est récupéré ou réaffecté sur une autre commande.
 Mettre en pause une commande empêche toute nouvelle dépense de points sur ce projet, jusqu'à ce que la commande soit remise en route.
@@ -3602,7 +4168,7 @@ Un Astronef Furtif coûte 36 PP avec un minimum de 3 tours (max 12 PP/tour).
                 Vous lancez une autre commande d'un Astronef Furtif avec une répétition de 2. (commande #2)
                 Vous lancez une autre commande d'un Astronef Furtif et réglez la quantité sur 2.
 
--Tour  2: Commande #1 progresse de 10 PP, 26 PP restants.  10 PP sont prévus pour le tour suivant.
+-Tour  2: Commande #1 progresse de 10 PP, 26 PP restants. 10 PP sont prévus pour le tour suivant.
 
     (PP complétés / PP restants -> Prévus tour suivant)
 
@@ -3672,7 +4238,11 @@ PRODUCTION_WND_PROGRESS
 
 # %1% location where the item is produced.
 PRODUCTION_QUEUE_ITEM_LOCATION
-sur %1%
+Sur %1%
+
+# %1% location where the item is produced.
+PRODUCTION_QUEUE_ITEM_RALLIED_FROM_LOCATION
+Provenant de %1%
 
 # %1% location where the item is enqueued for production.
 PRODUCTION_QUEUE_ENQUEUED_ITEM_LOCATION
@@ -3683,6 +4253,18 @@ Peut être construit ici
 
 PRODUCTION_LOCATION_INVALID
 NE PEUT PAS être construit ici
+
+IMPERIAL_STOCKPILE
+Stock Impérial
+
+PRODUCTION_QUEUE_ITEM_STOCKPILE_ENABLED
+(l'usage du [[IMPERIAL_STOCKPILE]] est Autorisé pour ce Projet)
+
+ALLOW_IMPERIAL_PP_STOCKPILE_USE
+Autoriser l'usage du [[IMPERIAL_STOCKPILE]] pour ce projet
+
+DISALLOW_IMPERIAL_PP_STOCKPILE_USE
+Bloquer l'usage du [[IMPERIAL_STOCKPILE]] pour ce projet
 
 # %1% name of the system this item production should be relocated to.
 PRODUCTION_QUEUE_RALLIED_TO
@@ -3701,11 +4283,17 @@ Déplacer en haut de la file
 MOVE_DOWN_QUEUE_ITEM
 Déplacer en bas de la file
 
+SPLIT_INCOMPLETE
+Dissocier Répétition actuelle
+
+DUPLICATE
+Dupliquer
+
 PRODUCTION_WND_TOOLTIP_PROD_COST
-Coût production
+Coût production: %1%
 
 PRODUCTION_WND_TOOLTIP_PROD_TIME
-Temps production
+Temps production: %1%
 
 PRODUCTION_WND_TOOLTIP_PARTS
 Équipements Astronef
@@ -3723,13 +4311,43 @@ SHIP_DESIGN_FILES
 Fichiers Modèle
 
 DESIGN_SAVE
-Sauvegarder Fichier Modèle
+Sauvegarder Modèle
 
 DESIGN_ADD
 Ajouter Modèle aux Modèles de l'Empire
 
-DESIGN_ADD_ALL
-Ajouter tous les Modèles sauvegardés à l'Empire
+DESIGN_WND_DELETE_SAVED
+Supprimer Modèle Sauvegardé
+
+DESIGN_WND_ADD_ALL_SAVED_NOW
+Ajouter tous les Modèles sauvegardés à l'Empire maintenant
+
+DESIGN_WND_ADD_ALL_SAVED_START
+Ajouter tous les Modèles sauvegardés au démarrage d'une partie
+
+DESIGN_WND_ADD_ALL_DEFAULT_START
+Ajouter tous les Modèles par défaut au démarrage d'une partie
+
+DESIGN_WND_OBSOLETE_DESIGN
+Modèle obsolète
+
+DESIGN_WND_UNOBSOLETE_DESIGN
+Modèle non-obsolète
+
+DESIGN_WND_OBSOLETE_HULL
+Coque obsolète
+
+DESIGN_WND_UNOBSOLETE_HULL
+Coque non-obsolète
+
+DESIGN_WND_OBSOLETE_PART
+Équipement obsolète
+
+DESIGN_WND_UNOBSOLETE_PART
+Équipement non-obsolète
+
+DESIGN_WND_DELETE_DESIGN
+Supprimer Modèle
 
 DESIGN_NAME_DEFAULT
 Modèle d'astronef personnalisé
@@ -3752,6 +4370,9 @@ Sauvegardés
 DESIGN_WND_MONSTERS
 Monstres
 
+DESIGN_WND_ALL
+Connus
+
 DESIGN_WND_PART_PALETTE_TITLE
 Équipements d'Astronef
 
@@ -3768,7 +4389,7 @@ DESIGN_WND_CLEAR
 Effacer Équipements
 
 DESIGN_RENAME
-Renommer le Modèle
+Renommer Modèle
 
 DESIGN_ENTER_NEW_DESIGN_NAME
 Entrer le nouveau nom du modèle:
@@ -3785,50 +4406,97 @@ Démarrer la conception d'un astronef par le choix de la coque.
 DESIGN_INV_NO_NAME
 La dénomination du modèle d'astronef ne peut pas rester vide.
 
-DESIGN_KNOWN
+DESIGN_WND_KNOWN
 Modèle déjà existant
 
 # %1% name of the equivalent ship design.
-DESIGN_KNOWN_DETAIL
+DESIGN_WND_KNOWN_DETAIL
 Ce modèle est une réplique de "%1%".
 
-DESIGN_COMPONENT_CONFLICT
+DESIGN_WND_RENAME_FINISHED
+Renommer Modèle Finalisé
+
+# %1% name of the equivalent ship design.
+# %2% new name of the ship design.
+DESIGN_WND_RENAME_FINISHED_DETAIL
+'''Renommer modèle finalisé
+"%1%"
+en 
+"%2%"'''
+
+DESIGN_WND_COMPONENT_CONFLICT
 Modèle incompatible
 
 # %1% first conflicting ship part name.
 # %2% second conflicting ship part name.
-DESIGN_COMPONENT_CONFLICT_DETAIL
+DESIGN_WND_COMPONENT_CONFLICT_DETAIL
 Un modèle d'astronef ne peut contenir à la fois les équipements %1% et %2%.
 
-DESIGN_OBSOLETE
-Modèle obsolète
-
-DESIGN_WND_ADD
-Ajouter nouv. Modèle
+DESIGN_WND_ADD_FINISHED
+Ajouter Modèle Finalisé
 
 # %1% name of the new ship design.
-DESIGN_WND_ADD_DETAIL
+DESIGN_WND_ADD_FINISHED_DETAIL
 '''Ajouter nouveau modèle nommé
 "%1%"
 aux modèles finalisés.'''
 
-DESIGN_WND_UPDATE
-Actualiser anc. Modèle
+DESIGN_WND_UPDATE_FINISHED
+Actualiser Modèle Finalisé
 
-# %1% old name of the existing design.
+# %1% previous name of the existing design.
 # %2% new name of the existing design.
-DESIGN_WND_UPDATE_DETAIL
-'''Remplacer ancien modèle
+DESIGN_WND_UPDATE_FINISHED_DETAIL
+'''Remplacer modèle finalisé
 "%1%"
 avec nouveau modèle
 "%2%"
 dans modèles finalisés.'''
 
+DESIGN_WND_ADD_SAVED
+Ajouter Modèle Sauvegardé
+
+# %1% name of the new ship design.
+DESIGN_WND_ADD_SAVED_DETAIL
+'''Ajouter un modèle nommé
+"%1%"
+aux modèles sauvegardés.'''
+
+DESIGN_WND_UPDATE_SAVED
+Actualiser Modèle Sauvegardé
+
+# %1% old name of the saved design.
+# %2% new name of the saved design.
+DESIGN_WND_UPDATE_SAVED_DETAIL
+'''Remplacer modèle sauvegardé
+"%1%"
+avec nouveau modèle
+"%2%"
+dans modèles sauvegardés.'''
+
 DESIGN_UPDATE_INVALID_NO_CANDIDATE
 Choisir un modèle existant à actualiser.
 
 ADD_FIRST_DESIGN_DESIGN_QUEUE_PROMPT
-Choisissez une coque, ajoutez des équipements, puis cliquez sur "[[DESIGN_WND_ADD]]" pour créer un modèle utilisable.
+Choisissez une coque, ajoutez des équipements, puis cliquez sur "[[DESIGN_WND_ADD_FINISHED]]" pour créer un modèle utilisable.
+
+ADD_FIRST_DESIGN_HULL_QUEUE_PROMPT
+Activez/Désactivez les filtres Obsolètes, Disponibles et Indisponibles pour afficher plus de coques.
+
+ADD_FIRST_SAVED_DESIGN_QUEUE_PROMPT
+Sélectionnez un Modèle Finalisé existant, clic-droit puis cliquez sur "[[DESIGN_SAVE]]" pour créer un modèle sauvegardé.
+
+ALL_AVAILABILITY_FILTERS_BLOCKING_PROMPT
+Activez/Désactivez les filtres Obsolètes, Disponibles et Indisponibles pour afficher les items
+
+NO_SAVED_OR_DEFAULT_DESIGNS_ADDED_PROMPT
+'''Choisissez une coque, ajoutez des équipements puis cliquez sur "[[DESIGN_WND_ADD_FINISHED]]" pour créer un modèle utilisable.
+
+Aucun Modèle Sauvegardé ou Modèle par Défaut n'ont été ajoutés à l'empire au démarrage de la partie. Les options pour ajouter ces modèles au démarrage d'une partie peuvent être modifiées dans Options->Autres. En cours de partie, il est possible d'ajouter directement les Modèles Sauvegardés à l'aide du menu contextuel de n'importe quel modèle dans l'onglet "Sauvegardés".'''
+
+# %1% File path of unwritable file
+ERROR_UNABLE_TO_WRITE_FILE
+Impossible de créer le fichier:\n"%1%"
 
 
 ##
@@ -3886,6 +4554,9 @@ Planètes impériales dépeuplées
 PLANETS_INVADED
 Planètes envahies
 
+TOTAL_POPULATION_STAT  # translated
+Population
+
 #STATISTICS_TEST_1
 #Statistics Test 1
 
@@ -3902,14 +4573,14 @@ Planètes envahies
 
 # %1% name of the species.
 ENC_SPECIES_PLANET_TYPE_SUITABILITY_COLUMN1
-'''%1% :	'''
+'''%1%:'''
 
 # %1% content of ENC_SPECIES_PLANET_TYPE_SUITABILITY_COLUMN1 expanded to match
 #     column width.
 # %2% the planet environment for a species.
 # %3% the planet population capacity for a species.
 ENC_SPECIES_PLANET_TYPE_SUITABILITY  # translated
-%1%	%2% (%3%)
+%1%        %2% (%3%)
 
 # %1% name of the planet.
 ENC_SUITABILITY_REPORT_POSITIVE_HEADER
@@ -3945,6 +4616,7 @@ ENC_GALAXY_SETUP
 # %8% monster frequency in the current galaxy.
 # %9% natives frequency in the current galaxy.
 # %10% upper AI aggression level in this galaxy.
+# %11% game UID
 ENC_GALAXY_SETUP_SETTINGS
 '''Graine: %1%
 Nombre de systèmes: %2%
@@ -3956,16 +4628,20 @@ Planètes: %6%
 Monstres: %8%
 Indigènes: %9%
 Agressivité max de l'IA: %10%
+UID Partie: %11%
 '''
 
+ENC_GAME_RULES
+[Partie - Règles]
+
 ENC_SHIP_PART
--[Équipement Astronef]
+Equipement Astronef
 
 ENC_SHIP_PART_DESC
 Un Équipement d'Astronef peut être monté sur une <encyclopedia ENC_SHIP_HULL>Coque d'Astronef</encyclopedia> (dans une [[encyclopedia SLOT_TITLE]]) lors de la conception d'un astronef, afin d'améliorer ses statistiques. Certains équipements d'entrée de gamme sont disponibles par défaut, mais [[encyclopedia RESEARCH_TECH_GUIDE_TITLE]] permet de débloquer de meilleures versions ou de nouveaux types d'équipement. Chaque équipement d'astronef appartient à l'une des catégories listées ci-dessous.
 
 ENC_SHIP_HULL
--[Coque Astronef]
+Coque Astronef
 
 ENC_SHIP_HULL_DESC
 Une Coque d'Astronef est l'élément de base de l'architecture d'un astronef, et définit les statistiques basiques d'un modèle d'astronef (si aucun <encyclopedia ENC_SHIP_PART>Équipement d'Astronef</encyclopedia> n'est encore monté). Certaines coques d'entrée de gamme sont disponibles par défaut, mais [[encyclopedia RESEARCH_TECH_GUIDE_TITLE]] permet de débloquer de meilleures versions ou de nouvelles classes de coque. Les coques d'astronef sont classées selon les catégories listées ci-dessous.
@@ -3989,13 +4665,13 @@ ENC_SPECIES
 Espèce
 
 ENC_SPECIES_DESC
-Chaque espèce est classifiée selon son [[encyclopedia METABOLISM_TITLE]]. 
+Chaque espèce est classifiée selon son [[encyclopedia METABOLISM_TITLE]].
 
 ENC_FIELD_TYPE
 Type de Régions
 
 ENC_SHIP_DESIGN
--[Modèle Astronef]
+[Partie - Modèle Astronef]
 
 SHIPS_OF_DESIGN
 '''Astronefs de ce modèle : '''
@@ -4021,11 +4697,41 @@ ID Empire
 EMPIRE_METERS
 Indicateurs :
 
+RESEARCHED_TECHS
+'''Technologies recherchées : '''
+
+BEFORE_FIRST_TURN
+Avant Tour initial
+
+TURN
+Tour
+
+NO_TECHS_RESEARCHED
+Aucune Technologie recherchée
+
+AVAILABLE_PARTS
+'''Équipements disponibles : '''
+
+NO_PARTS_AVAILABLE
+Aucun Équipement disponible
+
+AVAILABLE_HULLS
+'''Coques disponibles : '''
+
+NO_HULLS_AVAILABLE
+Aucune Coque disponible
+
+AVAILABLE_BUILDINGS
+'''Structures disponibles : '''
+
+NO_BUILDINGS_AVAILABLE
+Aucune Structure disponible
+
 OWNED_PLANETS
 '''Planètes impériales : '''
 
 NO_OWNED_PLANETS_KNOWN
-Aucune planète impériale connue
+Aucune Planète impériale connue
 
 OWNED_FLEETS
 '''Flottes impériales : '''
@@ -4036,7 +4742,7 @@ OWNED_FLEET_AT_SYSTEM
 %1% dans %2%
 
 NO_OWNED_FLEETS_KNOWN
-Aucune flotte impériale connue
+Aucune Flotte impériale connue
 
 EMPIRE_SHIPS_DESTROYED
 Astronefs impériaux détruits
@@ -4087,7 +4793,7 @@ ENC_MONSTER
 [Partie - Monstres]
 
 ENC_MONSTER_TYPE
-Type de Monstres
+[Partie - Type de Monstres]
 
 ENC_FLEET
 [Partie - Flottes]
@@ -4109,6 +4815,15 @@ ENC_HOMEWORLDS
 
 ENC_TEXTURES  # translated
 [Test - Textures]
+
+ENC_POP_CENTER
+Centre Population
+
+ENC_PROD_CENTER
+Centre Production
+
+ENC_FIGHTER
+Chasseur
 
 #ENC_TEXTURE_INFO
 #%4% -- %1% x %2% px @ %3% BPP<img src = "%4%"></img>
@@ -4298,7 +5013,6 @@ percés
 ENC_COMBAT_ATTACK_SIMPLE_STR
 %1% attaque %2%
 
-
 # %1% number of repeated events.
 # %2% link to the attacking unit or empire.
 # %3% link to the attacking unit or empire.
@@ -4393,7 +5107,7 @@ ENC_COMBAT_PLATFORM_TARGET_AND_DAMAGE
 ENC_COMBAT_PLATFORM_NO_DAMAGE_1_EVENTS
 %2% n'a pas pu endommagé
 
-# %1% number of targets 
+# %1% number of targets
 # %2% name of ship unable to damage targets
 ENC_COMBAT_PLATFORM_NO_DAMAGE_MANY_EVENTS
 %2% n'a pas pu endommagé %1% cibles :
@@ -4512,8 +5226,14 @@ CATEGORY_GAME_CONCEPTS
 GROWTH_ARTICLE_SHORT_DESC
 Croissance
 
+STOCKPILE_ARTICLE_SHORT_DESC
+Stock
+
 OUTPOSTS_ARTICLE_SHORT_DESC
 Avant-Poste
+
+HOMEWORLDS_ARTICLE_SHORT_DESC
+Planète Natale
 
 PRODUCTION_ARTICLE_SHORT_DESC  # translated
 Production
@@ -4586,6 +5306,16 @@ Attributs d'Espèce
 
 SPECIES_TRAITS_TEXT
 Liste non-exhaustive des Attributs d'Espèce :
+
+SYSTEM_BLOCKADE_TITLE
+Blocus Système
+
+SYSTEM_BLOCKADE_TEXT
+'''Une flotte armée et en mode Agression arrivant dans un système, établira un blocus de ce système contre tous les empires ennemis (si ce système n'est pas déjà soumis à un blocus). Une fois le blocus établi, la propagation de l'[[metertype METER_SUPPLY]] est interrompue pour l'empire soumis au blocus. De plus, si cet empire possède des colonies au sein de ce système, la production générée par ces colonies peut être utilisée seulement sur la planète dont elle est originaire. Si un combat a lieu simultanément au blocus, les effets fonctionnant seulement si aucun combat n'est en cours, tels que la [[encyclopedia ORBITAL_DRYDOCK_REPAIR_TITLE]] et l'augmentation de l'indicateur [[metertype METER_TROOPS]], sont suspendus pour le tour en cours.
+Lors d'un blocus, tous les accès par Voies spatiales au système bloqué seront gardés par la force appliquant le blocus. Par conséquent, toutes forces hostiles entrant dans le système ne pourra en sortir que par la Voie spatiale empruntée pour y entrer. Toutefois, si des flottes supplémentaires de l'empire bloqué entrent dans le système par d'autres Voies spatiales, ces entrées deviendront alors également disponibles comme sorties. Si toutes les flottes armées appartenant à l'empire bloqué sont détruites ou quittent le système avant l'arrivée de nouvelles flottes de l'empire, les points de sortie précédemment ouverts seront à nouveau bloqués.
+Les flottes alliées n'ont pas d'impact direct sur l'interruption de l'Approvisionnement et la disponibilité des Voies spatiales, si ce n'est aider à l'élimination des forces de l'empire exerçant le blocus.
+Si des flottes de deux empires hostiles ou plus arrivent simultanément dans un système non soumis à un blocus, aucun des deux empires ou plus n'établira un blocus à l'encontre de l'autre, mais ces derniers bloqueront le système contre tout autre empire hostile voulant éventuellement accéder au système par la suite.
+Les Monstres spatiaux peuvent également établir des blocus. Cependant, si une flotte de l'empire est bloquée par un monstre spatial, le blocus sera interrompu dès qu'un combat aura eu lieu, permettant ainsi à la flotte de l'empire de quitter le système par n'importe quelle Voie spatiale, ou bien d'établir à son tour un blocus à l'encontre du monstre. De plus, si la flotte bloquée est armée et en mode Agression, la propagation de l'Approvisionnement sera rétablie. Si un Monstre spatial et une flotte de l'empire entrent dans le système simultanément, la flotte de l'empire pourra agir en premier et établir un blocus contre le Monstre.'''
 
 
 ##
@@ -4670,6 +5400,12 @@ METER_MAX_SUPPLY_VALUE_LABEL
 METER_MAX_SUPPLY_VALUE_DESC
 [[METER_SUPPLY_VALUE_DESC]]
 
+METER_MAX_STOCKPILE_VALUE_LABEL
+[[METER_STOCKPILE_VALUE_LABEL]]
+
+METER_MAX_STOCKPILE_VALUE_DESC
+[[METER_STOCKPILE_VALUE_DESC]]
+
 METER_MAX_TROOPS_VALUE_LABEL
 [[METER_TROOPS_VALUE_LABEL]]
 
@@ -4688,7 +5424,7 @@ Industrie
 METER_INDUSTRY_VALUE_DESC
 '''L'Industrie, mesurée en Points de Production (PP), représente la capacité de production et de transformation de biens matériels de l'ensemble des planètes de l'empire. Elle est nécessaire pour la construction des structures, des astronefs et tout autre projet.
 
-L'Industrie d'une planète peut participer à tout projet lancé sur les planètes qui lui sont reliées par lignes d'[[metertype METER_SUPPLY]] de l'empire. L'Industrie qui n'est affectée à aucun projet durant un tour est perdue (production gaspillée).
+L'Industrie d'une planète peut participer à tout projet lancé sur les planètes qui lui sont reliées par lignes d'[[metertype METER_SUPPLY]] de l'empire. L'Industrie n'étant affectée à aucun projet durant un tour est ajoutée au Stock Impérial.
 
 Pour davantage d'informations sur l'interface de Production, consultez l'article [[encyclopedia PRODUCTION_WINDOW_ARTICLE_TITLE]].
 '''
@@ -4699,8 +5435,8 @@ Recherche
 METER_RESEARCH_VALUE_DESC
 '''La Recherche, mesurée en Points de Recherche (PR), est utilisée par toutes les planètes de l'empire pour la découverte de nouvelles [[encyclopedia ENC_TECH]].
 
-La Recherche qui n'est allouée à aucune technologie durant un tour est perdue (recherche gaspillée). L'assimilation complète de chaque technologie nécessite un nombre minimal de tours. Par exemple, si une technologie consomme 20 PR et requiert 5 tours, un maximum de 4 PR seulement par tour peut lui être consacré.
-Les PR sont affectés aux technologies à acquérir selon leur position dans la file d'attente : la technologie en tête de file est prioritaire. Les PR restants sont alloués au projet suivant dans la file et ainsi de suite, jusqu'à épuisement des points disponibles. L'ordre des technologies dans la file d'attente peut être modifié : les technologies que vous jugez prioritaires peuvent ainsi être déplacées en tête de file.
+L'assimilation complète de chaque technologie nécessite un nombre minimal de tours. Par exemple, si une technologie coûte 15 PR et requiert un minimum de 3 tours, seulement 5 PR par tour peuvent lui être alloués.
+Les PR sont affectés aux technologies à assimiler selon leur position dans la file d'attente : la technologie en tête de file est prioritaire. Les PR restants sont alloués au projet suivant dans la file et ainsi de suite, jusqu'à épuisement des points disponibles. L'ordre des technologies dans la file d'attente peut être modifié : les technologies que vous jugez prioritaires peuvent ainsi être déplacées en tête de file. Si des PR restent non-alloués après que chaque technologie ait reçu son maximum autorisé de PR, ces PR en excédent sont automatiquement attribués à une ou plusieurs technologies déverrouillées et présentant le moins de PR nécessaires ou restants avant assimilation.
 
 À l'inverse de l'Industrie, la Recherche n'impose pas d'échanges matériels entre planètes et n'est donc pas dépendante des lignes d'[[metertype METER_SUPPLY]] de l'empire.'''
 
@@ -4778,6 +5514,14 @@ Les Voies spatiales d'approvisionnement essentielles d'un empire (les lignes les
 
 Les lignes d'approvisionnement peuvent également servir à ravitailler en [[metertype METER_FUEL]] les astronefs.'''
 
+METER_STOCKPILE_VALUE_LABEL
+Stock
+
+METER_STOCKPILE_VALUE_DESC
+'''La capacité du Stock Impérial indique la compétence d'un empire à gérer les surplus de production et à utiliser les points de production stockés. Le Stock total d'un empire correspond à la somme des indicateurs Stock de toutes les planètes de l'empire, plus les éventuels bonus de technologie. Ce total détermine combien de PP peuvent être puisés dans le Stock à chaque tour afin d'être utilisés pour la production.
+
+La compétence de gestion du Stock varie selon les espèces.'''
+
 METER_TROOPS_VALUE_LABEL
 Infanterie
 
@@ -4812,7 +5556,7 @@ Champ de Détection
 METER_DETECTION_VALUE_DESC
 '''L'indicateur 'Champ de Détection' indique, en nombre d'uus, la portée des capteurs. Un empire ne peut voir que les objets ayant une [[metertype METER_STEALTH]] inférieure ou égale à sa [[encyclopedia DETECTION_TITLE]], et qui se trouvent dans le Champ de Détection d'un astronef ou d'une planète qu'il contrôle.
 
-Les astronefs et les planètes ont un indicateur 'Champ de Détection'. Dans le Menu d'Options, le réglage 'Cercles de détection' permet d'afficher sur la carte galactique les zones circulaires (en uu) figurant les Champs de Détection.  Afin de faciliter la mesure de ce qui se trouve à l'intérieur d'un Champ de Détection, le réglage 'Barre d'échelle des distances' permet d'afficher l'échelle de la carte (en uu) tandis que le réglage 'Cercle d'échelle des distances' permet de figurer la même distance que la barre d'échelle lorsqu'un système stellaire est sélectionné. Ces deux indicateurs d'échelle s'adaptent au niveau de zoom sur la carte et peuvent être activés/désactivés via des raccourcis claviers.
+Les astronefs et les planètes ont un indicateur 'Champ de Détection'. Dans le Menu d'Options, le réglage 'Cercles de détection' permet d'afficher sur la carte galactique les zones circulaires (en uu) figurant les Champs de Détection. Afin de faciliter la mesure de ce qui se trouve à l'intérieur d'un Champ de Détection, le réglage 'Barre d'échelle des distances' permet d'afficher l'échelle de la carte (en uu) tandis que le réglage 'Cercle d'échelle des distances' permet de figurer la même distance que la barre d'échelle lorsqu'un système stellaire est sélectionné. Ces deux indicateurs d'échelle s'adaptent au niveau de zoom sur la carte et peuvent être activés/désactivés via des raccourcis claviers.
 
 Certains objets ou aptitudes permettent la vision de zones situées en dehors du Champ de Détection, telles les compétences spéciales des espèces [[species SP_TRITH]] ou [[species SP_GEORGE]], ou en raison des effets induits par la structure [[buildingtype BLD_SCRYING_SPHERE]].'''
 
@@ -4840,6 +5584,12 @@ Avant-Poste
 OUTPOSTS_TEXT
 Les Avant-Postes sont des stations inhabitées pouvant être implantées en des lieux trop hostiles pour la survie d'une colonie. Ils n'ont pas de population et ne produisent en principe aucune ressource, mais peuvent cependant contribuer aux lignes d'[[metertype METER_SUPPLY]] de l'empire (à l'aide de la technologie appropriée) et augmenter sa zone de détection. Des colonies peuvent être fondées sur les planètes déjà pourvues d'un Avant-Poste. Pour construire un Avant-Poste, il suffit de placer un [[shippart CO_OUTPOST_POD]] sur un astronef. Des Avant-Postes sont également créés lorsque la population d'une colonie tombe à zéro, quelle qu'en soit la raison.
 
+HOMEWORLDS_TITLE
+Planète Natale
+
+HOMEWORLDS_TEXT
+Les Planètes Natales sont les mondes d'origine où se situent les espèces au démarrage d'une partie (à noter qu'une espèce peut avoir plusieurs Planètes Natales). La technologie [[tech SPY_CUSTOM_ADVISORIES]] révèle leur existence et leur nombre, mais pas leur localisation. Une Planète Natale dispose de plusieurs avantages, tant que celle-ci est toujours habitée par l'espèce d'origine: les indicateurs [[metertype METER_TARGET_POPULATION]], [[metertype METER_MAX_TROOPS]], et [[metertype METER_TARGET_HAPPINESS]] sont accrus, et le [[encyclopedia GROWTH_FOCUS_TITLE]] est activé (à moins que l'espèce soit de type [[encyclopedia SELF_SUSTAINING_SPECIES_CLASS]]), augmentant ainsi la [[metertype METER_TARGET_POPULATION]] des autres colonies habitées par la même espèce.
+
 FOCUS_TITLE
 Focus
 
@@ -4866,13 +5616,21 @@ TRADE_FOCUS_TITLE
 Focus Commerce
 
 TRADE_FOCUS_TEXT
-Le Commerce est encore sans effet. Il s'agit juste d'un espace réservé indiquant que d'autres ressources sont prévues.
+Le Commerce est sans effet. Il s'agit juste d'un espace réservé indiquant que d'autres ressources sont prévues.
 
 PROTECTION_FOCUS_TITLE
 Focus Protection
 
 PROTECTION_FOCUS_TEXT
 Privilégier la Protection consiste pour une planète à se consacrer entièrement à sa propre défense. Ses effectifs d'[[metertype METER_TROOPS]], sa capacité de [[metertype METER_DEFENSE]], et la solidité de ses [[metertype METER_SHIELD]] sont par conséquent doublés.
+
+STOCKPILE_FOCUS_TITLE
+Focus Stock
+
+STOCKPILE_FOCUS_TEXT
+'''Le Focus Stock augmente le [[metertype METER_STOCKPILE]] d'une planète.
+
+[[METER_STOCKPILE_VALUE_DESC]]'''
 
 ARMOR_TITLE
 Blindage
@@ -4908,7 +5666,7 @@ Le rapport d'Habitabilité d'une planète peut être affiché par un clic-droit 
 
 Lors de la terraformation d'une planète dans le but de mieux l'adapter aux préférences environnementales de l'espèce (via la [[metertype METER_RESEARCH]] ou si la planète dispose de la Particularité [[special GAIA_SPECIAL]]), l'Environnement d'origine de la planète est modifié par paliers, jusqu'à que ce dernier atteigne l'Habitabilité [[PE_GOOD]] pour l'espèce désirant vivre sur la planète. Les étapes de terraformation d'une planète peuvent être consultées ci-dessous sous la forme d'une représentation circulaire des différents types d'Environnement.
 
-Depuis midi dans le sens horaire: [[PT_TERRAN]], [[PT_OCEAN]], [[PT_SWAMP]], [[PT_TOXIC]], [[PT_INFERNO]], [[PT_RADIATED]], [[PT_BARREN]], [[PT_TUNDRA]], [[PT_DESERT]] 
+Depuis midi dans le sens horaire: [[PT_TERRAN]], [[PT_OCEAN]], [[PT_SWAMP]], [[PT_TOXIC]], [[PT_INFERNO]], [[PT_RADIATED]], [[PT_BARREN]], [[PT_TUNDRA]], [[PT_DESERT]]
 
 <img src="encyclopedia/EP_wheel.png"></img>'''
 
@@ -4954,6 +5712,12 @@ Métabolisme Autosuffisant
 SELF_SUSTAINING_SPECIES_TEXT
 Les espèces de type [[encyclopedia SELF_SUSTAINING_SPECIES_CLASS]] sont des organismes cristallins, voire purement énergétiques, et peut-être même d'une physiologie encore plus étrange. Leur constitution est telle qu'ils n'ont pas besoin d'apports vitaux, leur population maximale étant de ce fait très élevée. Tandis qu'aucune Particularité n'augmente leur Croissance, leur population maximale évolue plutôt à la manière d'une espèce profitant simultanément des trois Particularités basées sur le [[encyclopedia GROWTH_FOCUS_TITLE]].
 
+GASEOUS_SPECIES_TITLE
+Métabolisme Gazeux
+
+GASEOUS_SPECIES_TEXT
+Les espèces de type [[encyclopedia GASEOUS_SPECIES_CLASS]] ont un métabolisme basé sur les éléments rencontrés sous forme gazeuse dans un environnement de type terrestre. La plupart des chercheurs s'accordent pourtant sur le fait qu'une vie complexe dotée d'un métabolisme gazeux est physiquement impossible. Par conséquent, la recherche de vie sur le plus probable des habitats, les géantes gazeuses, est généralement négligée. Bien que les géantes gazeuses soient immenses, la zone habitable est similaire à celle d'une planète de taille moyenne. Par ailleurs, il n'existe pas de Particularités ayant une influence sur la croissance des espèces gazeuses.
+
 TELEPATHIC_TITLE
 Télépathie
 
@@ -4987,7 +5751,7 @@ Niveaux d'Agressivité de l'IA
 AI_LEVELS_TEXT
 '''Les niveaux d'agressivité de l'IA correspondent plus ou moins aux niveaux de difficulté, mais pas entièrement. Ils varient sur des aspects comme la prise de risque et l'hostilité, avec des seules limitations étant appliquées au niveaux les plus bas. Alors qu'ils peuvent toujours se comporter de manière intelligente, les plus bas niveaux d'agressivité sont plus faciles à gérer, même s'il n'est pas nécessairement plus aisé de les soumettre totalement. Les niveaux les plus agressifs font bien mieux à mesure que la partie progresse.
 
-L'IA renomme sa capitale d'empire au tour 1, en y ajoutant un préfixe. Une fois que vous avez découvert son système natal, vous pouvez déterminer sa personnalité.
+L'IA renomme sa capitale d'empire au tour 1, en y ajoutant un préfixe. Une fois que son système natal est découvert, la personnalité de l'IA peut être identifiée.
 Liste des préfixes:
 
 Balbutiant:
@@ -5020,7 +5784,7 @@ MAP_WINDOW_ARTICLE_TITLE
 Fenêtre Carte
 
 MAP_WINDOW_ARTICLE_TEXT
-'''La Fenêtre Carte peut être considérée comme l'écran de jeu 'principal' de FreeOrion. Ce dernier affiche la carte de la galaxie et permet d'accéder à toutes les autres fenêtres ou menus du jeu.  La barre supérieure réunit les éléments principaux de contrôle.
+'''La Fenêtre Carte peut être considérée comme l'écran de jeu 'principal' de FreeOrion. Ce dernier affiche la carte de la galaxie et permet d'accéder à toutes les autres fenêtres ou menus du jeu. La barre supérieure réunit les éléments principaux de contrôle.
 
 Dans le coin supérieur gauche se trouve le Bouton Tour, indiquant "Tour n" (n étant le numéro du tour en cours); un clic-gauche sur le Bouton Tour permet de faire avancer la partie d'un tour. Immédiatement à droite se trouve le bouton d'Avance Automatique; lorsque ce dernier affiche une icône double flèche, la partie n'avancera pas automatiquement; un clic modifie l'icône en flèches circulaires et la partie avancera automatiquement au tour suivant une fois que tous les empires auront donné leurs ordres pour le tour en cours.
 
@@ -5034,32 +5798,34 @@ Fenêtre Conception
 DESIGN_WINDOW_ARTICLE_TEXT
 '''La [[DESIGN_WINDOW_ARTICLE_TITLE]] permet de visualiser ou de modifier les modèles de monstres ou d'astronefs.
 
-Cette dernière est composée de quatre panneaux: [[DESIGN_WND_STARTS]], [[DESIGN_WND_PART_PALETTE_TITLE]], [[DESIGN_WND_MAIN_PANEL_TITLE]], [[MAP_BTN_PEDIA]].
+Les modèles et équipements d'astronef peuvent être [[PRODUCTION_WND_AVAILABILITY_AVAILABLE]], [[PRODUCTION_WND_AVAILABILITY_UNAVAILABLE]] ou [[PRODUCTION_WND_AVAILABILITY_OBSOLETE]]. Les modèles et équipements [[PRODUCTION_WND_AVAILABILITY_AVAILABLE]] sont libres d'utilisation pour l'empire. L'accès aux modèles et équipements [[PRODUCTION_WND_AVAILABILITY_UNAVAILABLE]] est soumis à certaines conditions. Certains modèles et équipements indisponibles peuvent être débloqués via la [[METER_RESEARCH]] des [[encyclopedia ENC_TECH]] associées. Les modèles, coques et équipements [[PRODUCTION_WND_AVAILABILITY_OBSOLETE]] sont déclarés obsolètes/non-obsolètes selon les besoins de l'empire. Les modèles [[PRODUCTION_WND_AVAILABILITY_OBSOLETE]] n'apparaîtront pas dans la [[encyclopedia PRODUCTION_WINDOW_ARTICLE_TITLE]] mais seulement dans la [[DESIGN_WINDOW_ARTICLE_TITLE]] lorsque le filtre "[[PRODUCTION_WND_AVAILABILITY_OBSOLETE]]" est activé. Les équipements d'astronef ne peuvent pas être déclarés obsolètes.
+
+La [[DESIGN_WINDOW_ARTICLE_TITLE]] est composée de quatre panneaux: [[DESIGN_WND_STARTS]], [[DESIGN_WND_PART_PALETTE_TITLE]], [[DESIGN_WND_MAIN_PANEL_TITLE]], [[MAP_BTN_PEDIA]].
 
 
-Le panneau [[DESIGN_WND_STARTS]] propose quatre onglets différents: les [[DESIGN_WND_HULLS]] de départ, les modèles [[DESIGN_WND_FINISHED_DESIGNS]], les modèles [[DESIGN_WND_SAVED_DESIGNS]] lors de précédentes parties, et enfin les modèles de [[DESIGN_WND_MONSTERS]] pour consultation. Glissez-déposez ou double-cliquez sur une coque, un modèle ou un monstre pour les examiner plus en détails ou les modifier sur le plan de travail.
+Le panneau [[DESIGN_WND_STARTS]] propose quatre onglets différents: les [[DESIGN_WND_HULLS]] de départ, les modèles [[DESIGN_WND_FINISHED_DESIGNS]], les modèles [[DESIGN_WND_SAVED_DESIGNS]] lors de précédentes parties, et enfin les modèles de [[DESIGN_WND_MONSTERS]] pour consultation. Glissez-déposez ou double-cliquez sur une coque, un modèle ou un monstre pour les examiner plus en détails ou les modifier sur le plan de travail. L'ordre des modèles et des coques dans la liste peut être également modifié par un glisser-déposer.
 
-Les modèles [[DESIGN_WND_FINISHED_DESIGNS]] sont affichés dans un ordre identique à celui de la Fenêtre Production. L'ordre des différents modèles peut être modifié par un glisser-déposer. Un modèle peut être supprimé de la liste par un clic-droit en sélectionnant "[[DESIGN_OBSOLETE]]" dans le menu contextuel. Les astronefs déjà placés en file d'attente de production seront cependant toujours construits sur la base de l'ancien modèle. Un nouveau modèle d'astronef peut être sauvegardé sur le disque dur via la commande "[[DESIGN_SAVE]]" du menu contextuel, afin de pouvoir le réutiliser sans passer à nouveau par l'étape de conception lors de futures parties.
+Les modèles [[DESIGN_WND_FINISHED_DESIGNS]] sont affichés dans un ordre identique à celui de la Fenêtre Production. Le menu contextuel suite à un clic-droit propose plusieurs options. Déclarer un modèle obsolète/non-obsolète avec l'entrée "[[DESIGN_WND_OBSOLETE_DESIGN]]" (ctrl + clic sur un modèle ou une coque permettra de basculer directement entre les deux états). Supprimer un modèle avec l'entrée "[[DESIGN_WND_DELETE_DESIGN]]" ; les modèles supprimés ne peuvent pas être récupérés (les astronefs déjà placés en file d'attente de production seront cependant toujours construits sur la base du modèle obsolète ou supprimé). Renommer un modèle avec l'entrée "[[DESIGN_RENAME]]". Sauvegarder un modèle sur le disque dur avec l'entrée "[[DESIGN_SAVE]]", afin de pouvoir le réutiliser sans passer à nouveau par l'étape de conception lors de futures parties. Activez/désactivez l'option "[[DESIGN_WND_ADD_ALL_DEFAULT_START]]" pour utiliser/ne pas utiliser les modèles par défaut lors d'une nouvelle partie.
 
-Au lancement d'une nouvelle partie, un clic-droit sur les modèles [[DESIGN_WND_SAVED_DESIGNS]] les ajoute à l'unité ou en totalité aux modèles d'astronefs de l'empire. Si "[[OPTIONS_ADD_SAVED_DESIGNS]]" est activée dans les options de jeu, tous les modèles [[DESIGN_WND_SAVED_DESIGNS]] seront automatiquement importés à chaque lancement d'une toute nouvelle partie.
+Un clic-droit sur les modèles [[DESIGN_WND_SAVED_DESIGNS]] ouvre un menu contextuel permettant de les ajouter à l'unité ou en totalité aux modèles [[DESIGN_WND_FINISHED_DESIGNS]] de l'empire (ctrl + clic sur un modèle permettra de l'ajouter directement aux modèles [[DESIGN_WND_FINISHED_DESIGNS]]). Un modèle sauvegardé peut être supprimé définitivement avec l'entrée "[[DESIGN_WND_DELETE_SAVED]]". Si l'option "[[OPTIONS_ADD_SAVED_DESIGNS]]" est activée dans les options de jeu, tous les modèles [[DESIGN_WND_SAVED_DESIGNS]] seront automatiquement importés à chaque lancement d'une toute nouvelle partie.
 
 
 Le panneau [[DESIGN_WND_PART_PALETTE_TITLE]] affiche comme son nom l'indique les équipements. Ceux dont la technologie associée a été recherchée et assimilée sont disponibles et peuvent être intégrés dans un modèle d'astronef. D'autres équipements sont indisponibles si aucune [[metertype METER_RESEARCH]] n'a encore été effectuée concernant la technologie associée ou si cet équipement est seulement utilisable par les monstres.
 
-Les filtres "[[PRODUCTION_WND_AVAILABILITY_AVAILABLE]]" et "[[PRODUCTION_WND_AVAILABILITY_UNAVAILABLE]]" des panneaux [[DESIGN_WND_STARTS]] et [[DESIGN_WND_PART_PALETTE_TITLE]] affichent respectivement les items que l'empire peut utiliser ou non dans la conception d'astronef. Certains items indisponibles peuvent être débloqués via la [[METER_RESEARCH]] des [[encyclopedia ENC_TECH]] associées.
+Les filtres "[[PRODUCTION_WND_AVAILABILITY_AVAILABLE]]", "[[PRODUCTION_WND_AVAILABILITY_UNAVAILABLE]]" et "[[PRODUCTION_WND_AVAILABILITY_OBSOLETE]]" des panneaux [[DESIGN_WND_STARTS]] et [[DESIGN_WND_PART_PALETTE_TITLE]] affichent respectivement les items que l'empire peut utiliser ou non dans la conception d'astronef, ou ceux que l'empire a choisi de ne plus prendre en compte.
 
 Le panneau [[DESIGN_WND_PART_PALETTE_TITLE]] propose également des filtres pour afficher/cacher les équipements par catégorie.
 
 
 Le panneau [[DESIGN_WND_MAIN_PANEL_TITLE]] fait office de plan de travail pour le modèle en cours.
 
-Un modèle peut accueillir plusieurs types de [[encyclopedia SLOT_TITLE]]: interne, externe, et centrale. Un glisser-déposer ou un double-clic sur un équipement dans le panneau [[DESIGN_WND_PART_PALETTE_TITLE]] ajoute celui-ci au modèle en cours, tandis que la même action le retire si elle est effectuée depuis le panneau [[DESIGN_WND_MAIN_PANEL_TITLE]].
+Un modèle peut accueillir plusieurs types de [[encyclopedia SLOT_TITLE]]: interne, externe, et centrale. Un glisser-déposer ou un double-clic sur un équipement dans le panneau [[DESIGN_WND_PART_PALETTE_TITLE]] ajoute celui-ci au modèle en cours, tandis que la même action le retire si elle est effectuée depuis le panneau [[DESIGN_WND_MAIN_PANEL_TITLE]]. Ctrl + glisser-déposer ajoute/retire/remplace tous les équipements de même type.
 
 Un nom pour le modèle conçu est requis tandis que sa description reste optionnelle.
 
-Le bouton "[[DESIGN_WND_ADD]]" ajoute le modèle conçu à la fin de la liste des modèles [[DESIGN_WND_FINISHED_DESIGNS]].
+Un clic sur "[[DESIGN_WND_ADD_FINISHED]]" ou "[[DESIGN_WND_ADD_SAVED]]" ajoute le modèle conçu au début de la liste des modèles.
 
-Le bouton "[[DESIGN_WND_UPDATE]]" remplace par un nouveau modèle le dernier modèle sélectionné et affiché depuis le panneau [[DESIGN_WND_FINISHED_DESIGNS]]. Le bouton "[[DESIGN_WND_UPDATE]]" est actif seulement si la conception d'un nouveau modèle a débuté à partir d'un modèle déjà existant dans le panneau [[DESIGN_WND_FINISHED_DESIGNS]]. "[[DESIGN_WND_UPDATE]]" modifie seulement la conception du modèle, donc tout astronef précédemment ajouté à la file d'attente de production ou déjà construit, sera toujours basé sur l'ancienne conception du modèle.
+Un clic sur "[[DESIGN_WND_UPDATE_FINISHED]]" ou "[[DESIGN_WND_UPDATE_SAVED]]" remplace par un nouveau modèle le dernier modèle sélectionné et affiché depuis le panneau "[[DESIGN_WND_FINISHED_DESIGNS]]" ou "[[DESIGN_WND_SAVED_DESIGNS]]". Les boutons "[[DESIGN_WND_UPDATE_FINISHED]]" ou "[[DESIGN_WND_UPDATE_SAVED]]" sont actifs seulement si la conception d'un nouveau modèle a débuté à partir d'un modèle déjà existant dans le panneau "[[DESIGN_WND_FINISHED_DESIGNS]]" ou "[[DESIGN_WND_SAVED_DESIGNS]]". "[[DESIGN_WND_UPDATE_FINISHED]]" modifie seulement la conception du modèle, donc tout astronef précédemment ajouté à la file d'attente de production ou déjà construit, sera toujours basé sur l'ancienne conception du modèle.
 '''
 
 FLEET_MOVEMENT_ARTICLE_TITLE
@@ -5084,7 +5850,7 @@ HIDDEN_SETTINGS__ARTICLE_TEXT
 
 Parmi les nombreux réglages disponibles permettant de définir l'emplacement/taille des divers éléments de l'UI, ces 'Réglages Cachés' intègrent:
 
-UI.design-pedia-dynamic : Active/Désactive la mise à jour dynamique de l'article de l'Encyclopédie concernant un modèle d'astronef si le nom de ce modèle a été modifié dans la [[encyclopedia DESIGN_WINDOW_ARTICLE_TITLE]] (peut engendrer des ralentissements)
+ui.window.design.pedia.title.dynamic.enabled : Active/Désactive la mise à jour dynamique de l'article de l'Encyclopédie concernant un modèle d'astronef si le nom de ce modèle a été modifié dans la [[encyclopedia DESIGN_WINDOW_ARTICLE_TITLE]] (peut engendrer des ralentissements)
 
 show-fleet-eta : Active/Désactive l'Estimation du Temps d'Arrivée d'une flotte (Estimated Time of Arrival soit ETA), en nombre de tours à partir du tour actuel, dans le Panneau de la flotte se trouvant dans la Fenêtre Flottes.
 
@@ -5115,7 +5881,6 @@ Salutations Noble Voyageur Cosmique, et Bienvenue dans l'Univers Freeorion!
 
 GREETINGS_GUIDE_REFERENCE
 Les nouveaux venus dans l'Univers Freeorion peuvent consulter le [[encyclopedia QUICK_START_GUIDE_TITLE]].
-
 
 GREETINGS_GUIDE_TEXT
 '''[[GREETINGS_INTRO]]
@@ -5166,7 +5931,7 @@ Les types de SitRep apparaissent dans la liste Filtres seulement une fois que l'
 
 Ignorer est utile pour masquer un événement récurrent, tels les rappels pour construire un [[buildingtype BLD_GAS_GIANT_GEN]] sur une planète.
 
-Bloquer est utile si vous considérez certains types de SitReps superflus, telles les [[encyclopedia BEGINNER_HINTS]] une fois toutes celles-ci connues.
+Bloquer est utile si certains types de SitReps deviennent superflus, telles les [[encyclopedia BEGINNER_HINTS]] une fois toutes celles-ci connues.
 '''
 
 RESEARCH_TECH_GUIDE_TITLE
@@ -5191,13 +5956,57 @@ ORBITAL_DRYDOCK_REPAIR_TITLE
 Réparation en Cale Sèche
 
 ORBITAL_DRYDOCK_REPAIR_TEXT
-'''La [[building BLD_SHIPYARD_ORBITAL_DRYDOCK]] est considérée comme la meilleure structure de réparation, capable de remettre à neuf tout astronef endommagé.
+'''La [[buildingtype BLD_SHIPYARD_ORBITAL_DRYDOCK]] est considérée comme la meilleure structure de réparation, capable de remettre à neuf tout astronef endommagé.
 
 Lorsque que l'indicateur [[metertype METER_HAPPINESS]] d'une planète est inférieur à 15, les réparations effectuées via une Cale Sèche Orbitale seront moins efficaces. Si l'indicateur Bonheur chute au-dessous de 5, aucune réparation ne pourra y être entreprise pour le tour en cours.
 
 Les réparations sont différées d'un tour pour les astronefs pénétrant tout juste dans un système. En effet, la manœuvre d'accostage d'un astronef ainsi que la préparation des outils et pièces nécessaires à la réparation nécessitent un certain temps.
 
 Tout combat au sein d'un système interrompt les réparations pour le tour en cours.'''
+
+CONFIG_GUIDE_TITLE
+Guide de Configuration
+
+CONFIG_GUIDE_TEXT
+'''La plupart des options de configuration du jeu sont conservées et lues à partir d'un unique fichier XML nommé config.xml.
+Si ce fichier n'existe pas (ou provient d'un build ou d'une version différente), il sera (re)créé lors du démarrage du serveur client.
+Le fichier de configuration est mis à jour lors de la modification d'une option, mais cette dernière peut être différée dans l'attente d'une action ultérieure (comme cliquer sur Valider ou Appliquer).
+Certaines de ces options peuvent être modifiées depuis la page '[[OPTIONS_TITLE]]' du Menu Principal.
+
+Une option définie depuis le fichier de configuration persistante (persistent_config.xml, s'il existe) aura la priorité sur la valeur correspondante du fichier config.xml.
+Une option définie par un argument de ligne de commande aura la priorité sur la valeur correspondante des deux fichiers.
+Le fichier config.xml est automatiquement modifié pour prendre en compte toute nouvelle valeur de configuration.
+
+
+Fichier de Configuration Persistante:
+
+Un fichier de configuration persistante est un fichier XML optionnel nommé persistent_config.xml.
+Si ce fichier existe, tout réglage y étant conservé sera prioritaire sur ceux du fichier principal de configuration.
+Cela s'avère utile lors du lancement d'un build différent du jeu ou suite à une mise à jour vers une nouvelle version. Afin de faciliter la compatibilité des options et de leurs valeurs, il est conseillé de conserver dans ce fichier les réglages des options essentielles (résolution d'affichage, taille des fenêtres, etc).
+
+Un fichier de configuration persistante peut être créé ou mis à jour depuis l'onglet '[[OPTIONS_PAGE_MISC]]' de la page '[[OPTIONS_TITLE]]', en cliquant sur le bouton '[[OPTIONS_CREATE_PERSISTENT_CONFIG]]'.
+Lors de l'usage de ce bouton, certains problèmes demeurent:
+Certaines options peuvent être incluses mêmes si ces dernières n'ont pas été modifiées par l'utilisateur. Après la mise à jour vers une nouvelle version, il peut être nécessaire d'effacer manuellement ces options du fichier afin d'actualiser leur valeur par défaut.
+Les fenêtres n'ayant pas été ouvertes durant la session de jeu en cours peuvent causer la non-conservation des réglages modifiés. Il est conseillé lors d'une session de jeu d'ouvrir au moins une fois toutes les fenêtres en question afin d'initialiser les réglages avant l'utilisation du bouton.
+
+Le fichier de configuration persistante peut être créé manuellement si désiré, mais ne doit jamais contenir l'option "version.string".
+
+
+Emplacement des Fichiers de Configuration:
+
+L'emplacement des fichiers est dépendant de l'OS et de la façon de déclarer une variable d'environnement.
+Pour Windows, la variable est entourée par le signe % - ( %var% ).
+Pour MacOSX et Linux, la variable débute par ${ et se termine par } - ( ${var} ).
+
+Windows: %APPDATA%\Roaming\FreeOrion
+    (e.g. C:\Users\username\AppData\Roaming\FreeOrion)
+
+MacOSX: ${HOME}/Library/Application Support/FreeOrion
+    (e.g. /Users/username/Library/Application Support/FreeOrion)
+
+Linux: ${XDG_CONFIG_HOME}/freeorion ou si $XDG_CONFIG_HOME n'est pas défini: ${HOME}/.config/freeorion
+    (e.g. /home/username/.config/freeorion)
+'''
 
 
 ##
@@ -5384,11 +6193,23 @@ Dern. Tour Bataille ici
 LAST_TURN_ACTIVE_IN_BATTLE
 Dern. Tour Bataille
 
+LAST_TURN_RESUPPLIED
+Dern. Tour Approvisionnement
+
+LAST_TURN_CONQUERED
+Dern. Tour Conquête
+
+LAST_TURN_ATTACKED_BY_SHIP
+Dern. Tour Attaque par Astronef
+
 ARRIVED_ON_TURN
 Arrivé au Tour
 
 SIZE_AS_DOUBLE
-Taille numér.
+Taille numérique
+
+HABITABLE_SIZE
+Taille habitable
 
 DISTANCE_FROM_ORIGINAL_TYPE
 Distance Type d'origine de la Planète
@@ -5553,6 +6374,12 @@ SITREP_WELCOME  # translated
 SITREP_WELCOME_LABEL
 Bienvenue
 
+SITREP_SYSTEM_GOT_INCOMING_WARNING
+Dans %system%: des astronefs ennemis arrivent au prochain tour!
+
+SITREP_SYSTEM_GOT_INCOMING_WARNING_LABEL
+Ennemis en approche
+
 SITREP_GAS_GIANT_GENERATION_REMINDER
 La planète %planet% est un emplacement favorable pour la structure %buildingtype%, mais aucune n'y est construite à ce jour.
 
@@ -5697,26 +6524,26 @@ Dans %system% : un %shipdesign% a été endommagé.
 SITREP_UNOWNED_SHIP_DAMAGED_AT_SYSTEM_LABEL
 Astronef libre endommagé
 
-SITREP_PLANET_BOMBARDED_AT_SYSTEM
-Dans %system% : la planète %planet% de %empire% a été bombardée.
+SITREP_PLANET_ATTACKED_AT_SYSTEM
+Dans %system% : la planète %planet% de %empire% a été attaquée.
 
-SITREP_PLANET_BOMBARDED_AT_SYSTEM_LABEL
-Planète impériale bombardée
+SITREP_PLANET_ATTACKED_AT_SYSTEM_LABEL
+Planète impériale attaquée
 
-SITREP_UNOWNED_PLANET_BOMBARDED_AT_SYSTEM
-Dans %system% : la planète %planet% a été bombardée.
+SITREP_UNOWNED_PLANET_ATTACKED_AT_SYSTEM
+Dans %system% : la planète %planet% a été attaquée.
 
-SITREP_UNOWNED_PLANET_BOMBARDED_AT_SYSTEM_LABEL
-Planète libre bombardée
+SITREP_UNOWNED_PLANET_ATTACKED_AT_SYSTEM_LABEL
+Planète libre attaquée
 
 SITREP_GROUND_BATTLE
-Sur %planet% : une bataille terrestre s'est déroulée.
+Sur %planet% : une bataille terrestre a eu lieu.
 
 SITREP_GROUND_BATTLE_LABEL
 Bataille au sol
 
 SITREP_GROUND_BATTLE_ENEMY
-Sur %planet% : une bataille terrestre s'est déroulée contre %empire%.
+Sur %planet% : une bataille terrestre a eu lieu contre %empire%.
 
 SITREP_GROUND_BATTLE_ENEMY_LABEL
 Bataille au sol - un seul Empire
@@ -5925,6 +6752,12 @@ La planète %planet% a été terraformée.
 EFFECT_TERRAFORM_LABEL
 Terraformation
 
+EFFECT_NEST_REMOVAL
+Sur %planet% : un nid de monstre a été éradiqué.
+
+EFFECT_NEST_REMOVAL_LABEL
+Éradication de Nid
+
 EFFECT_STARLANE_BORE
 Dans %system% : une nouvelle Voie spatiale a été ouverte vers un système proche.
 
@@ -5942,6 +6775,24 @@ La planète %planet% a été transformée en planète artificielle.
 
 EFFECT_ART_PLANET_LABEL
 Trou Noir
+
+INTERSPECIES_ACADEMY_LABEL
+Académie InterDesign d'Espèce
+
+CONDITION_INTERSPECIES_ACADEMY_SPECIES_ALREADY_EXISTS
+Des académies pour l'espèce de cette planète existent déjà dans l'empire
+
+EFFECT_INTERSPECIES_ACADEMY
+Effet additionnel pour l'espèce %species% sur la planète %planet% rejoignant l'Académie InterDesign. Chaque académie de design ajoute 0.05 à %rawtext%.
+
+EFFECT_INTERSPECIES_ACADEMY_LABEL
+Nouvelle Académie InterDesign
+
+EFFECT_INTERSPECIES_ACADEMY_DESTROY
+Destruction du doublon d'académie de design sur la planète %planet%.
+
+EFFECT_INTERSPECIES_ACADEMY_DESTROY_LABEL
+Doublon d'académie détruit
 
 EFFECT_TAME_MONSTER_HATCHED
 Un %predefinedshipdesign% apprivoisé est disponible sur la planète %planet%.
@@ -6075,6 +6926,12 @@ Sur %planet% : la [[tech LRN_SPATIAL_DISTORT_GEN]] a renvoyé la flotte %fleet% 
 EFFECT_FLEET_MOVED_TO_LABEL
 Flotte renvoyée dans
 
+EFFECT_SHIP_REFUELED
+Dans %system% : l'astronef %ship% a suffisamment de carburant pour reprendre son voyage spatial.
+
+EFFECT_SHIP_REFUELED_LABEL
+Astronef ravitaillé
+
 HEAD_ON_A_SPIKE_MESSAGE
 La capitale de l'empire %empire% est tombée.
 
@@ -6110,6 +6967,9 @@ VICTOIRE! L'empire %empire% a transcendé notre réalité et remporte une victoi
 
 VICTORY_ALL_ENEMIES_ELIMINATED
 VICTOIRE! L'empire %empire% est l'ultime survivant.
+
+VICTORY_FEW_HUMANS_ALIVE
+VICTOIRE! L'empire %empire% est l'un des derniers empires survivants contrôlé par un joueur humain.
 
 VICTORY_EXPERIMENTOR_CAPTURE
 VICTOIRE! L'empire %empire% a capturé les puissants Expérimentateurs, mettant ainsi un terme à l'effroyable fléau menaçant la galaxie.
@@ -6322,6 +7182,12 @@ Autosuffisant
 SELF_SUSTAINING_SPECIES_CLASS_DESC
 Liste des espèces à [[encyclopedia SELF_SUSTAINING_SPECIES_TITLE]]:
 
+GASEOUS_SPECIES_CLASS
+Gazeux
+
+GASEOUS_SPECIES_CLASS_DESC
+Liste des espèces à [[encyclopedia GASEOUS_SPECIES_TITLE]]:
+
 # Species Pedia Articles
 
 SP_HUMAN
@@ -6410,7 +7276,7 @@ Trith
 
 SP_TRITH_GAMEPLAY_DESC
 '''Télépathes xénophobes tourmentés.
-Préfèrent les Planètes [[PT_DESERT]]s.
+Préfèrent les Planètes [[PT_RADIATED]]s.
 [[encyclopedia SELF_SUSTAINING_SPECIES_TITLE]], [[encyclopedia TELEPATHIC_TITLE]], [[encyclopedia XENOPHOBIC_SPECIES_TITLE]]
 '''
 
@@ -6521,18 +7387,37 @@ Structure sociale:
 Les Laenfa jouissent d'une culture unifiée due à la télépathie, mais comme leur capacité télépathique s'affaiblit avec la distance, le tronc central de la vigne est en charge des décisions importantes. Cette vigne centrale gère seule les arbitrages, mais prend en compte les voix des Laenfa qu'elle est en mesure de détecter. Les Laenfa évoluent donc à la manière d'un super-organisme, chaque individu œuvrant pour le collectif, dont le but est d'acquérir le savoir des autres espèces et de protéger le leur.
 '''
 
+SP_SLY  # translated
+Sly
+
+SP_SLY_GAMEPLAY_DESC
+'''Sacs de gaz affables mais peu connus.
+Préfèrent grandement les planètes de type [[PT_GASGIANT]].
+[[encyclopedia GASEOUS_SPECIES_TITLE]]
+'''
+
+SP_SLY_DESC
+'''Description:
+Les Sly vivent sur les géantes gazeuses. Ces dernières étant si étrangères à la plupart des espèces dans l'univers, l'existence et l'histoire des Sly sont par conséquent peu connues.
+Dans l'incapacité de produire tout dispositif technologique, les Sly ne peuvent quitter leur monde natal. Mais récemment, ils ont pu obtenir de marchands galactiques l'équipement et les technologies nécessaires au voyage spatial en échange de données sur leur espèce et son histoire.
+Sous un régime alimentaire adapté, les Sly excrètent du carburant raffiné. Un astronef à équipage Sly régénère donc son carburant lorsqu'il se trouve dans un système abritant une géante gazeuse.
+
+Structure sociale:
+Les Sly ont une espérance de vie très importante et transmettent de génération en génération des chants dans lesquels l'ensemble du savoir culturel de l'espèce est encodé. Les Sly sont très ouverts et extrêmement curieux envers la galaxie et les autres espèces, avec lesquelles ils peuvent enfin entrer en contact.
+'''
+
 SP_LEMBALALAM  # translated
 Lembala'Lam
 SP_LEMBALALAM_GAMEPLAY_DESC
 '''Reptiles ancestraux égocentriques et dégénérescents, ne pouvant plus se reproduire.
 Préfèrent les Planètes [[PT_DESERT]]s.
 [[encyclopedia ORGANIC_SPECIES_TITLE]]
-Contrôler les Lembala octroie les technologies suivantes : [[tech SPY_STEALTH_1]], [[tech SPY_STEALTH_2]] et [[tech GRO_LIFECYCLE_MAN]]. 
+Contrôler les Lembala octroie les technologies suivantes : [[tech SPY_STEALTH_1]], [[tech SPY_STEALTH_2]] et [[tech GRO_LIFECYCLE_MAN]].
 '''
 
 SP_LEMBALALAM_DESC
 '''Description:
-Les Lembala'Lam sont une ancienne espèce au crépuscule de leur existence. Semblables par le passé à des reptiles tels les serpents ou les geckos, l'évolution de leur physionomie d'origine a été corrompue par leur mode de vie fortement influencé par l'amélioration mécanique. Sans machines de toutes sortes, ils seraient aujourd'hui incapables de se mouvoir ou de se nourrir. Leur système de reproduction s'en est retrouvé totalement inhibé, mais encore plus important, plus aucune relation de confiance n'unit l'espèce. Car le dernier clou planté dans le cercueil de la société Lembala fut l'invention d'un système automatisé transférant l'esprit d'un Lembala mourant dans un clone de remplacement, chaque Lembala s'assurant de disposer de centaines de corps de rechange précieusement conservés et dissimulés. La quasi-totalité des ressources mentales et matérielles des Lembala est utilisée pour entretenir cette immortalité artificielle, au détriment du développement réel de leur civilisation. 
+Les Lembala'Lam sont une ancienne espèce au crépuscule de leur existence. Semblables par le passé à des reptiles tels les serpents ou les geckos, l'évolution de leur physionomie d'origine a été corrompue par leur mode de vie fortement influencé par l'amélioration mécanique. Sans machines de toutes sortes, ils seraient aujourd'hui incapables de se mouvoir ou de se nourrir. Leur système de reproduction s'en est retrouvé totalement inhibé, mais encore plus important, plus aucune relation de confiance n'unit l'espèce. Car le dernier clou planté dans le cercueil de la société Lembala fut l'invention d'un système automatisé transférant l'esprit d'un Lembala mourant dans un clone de remplacement, chaque Lembala s'assurant de disposer de centaines de corps de rechange précieusement conservés et dissimulés. La quasi-totalité des ressources mentales et matérielles des Lembala est utilisée pour entretenir cette immortalité artificielle, au détriment du développement réel de leur civilisation.
 
 Structure sociale:
 Les Lembala connaissent chacun de leurs semblables depuis les âges les plus reculés, mais la méfiance envers tout un chacun est le seul sentiment partagé. Ces relations délétères engendrent de nombreuses impasses sociétales et paralysent leur gouvernement, pourtant démocratique, depuis une éternité. En raison de cette paranoïa constante et du manque d'altruisme des Lembala, même la coopération la plus basique est vouée à l'échec, les rares fois où une tentative de collaboration semble émerger.
@@ -6663,6 +7548,26 @@ Planète Natale:
 Leur planète possède une faible gravité et une atmosphère très épaisse. Sa composition géologique est unique du fait de la faible proportion de métaux lourds, mais de la bien plus forte présence d'autres éléments lourds, particulièrement les gaz nobles. De son activité tectonique très stable, résulte une croûte terrestre très plate, qui par conséquent est principalement recouverte d'eaux stagnantes et peu profondes. La totalité de leur monde s'apparente à une zone marécageuse géante.
 '''
 
+SP_REPLICON  # translated
+Replicon
+
+SP_REPLICON_GAMEPLAY_DESC
+'''Robots auto-réplicants à peine sensibles.
+Préfèrent les Planètes [[PT_RADIATED]]s.
+[[encyclopedia ROBOTIC_SPECIES_TITLE]]
+'''
+
+SP_REPLICON_DESC
+'''Description:
+Un Replicon a l'apparence d'une araignée robotique d'une envergure de 3m et munie d'ailes. Ces ailes sont en réalité des panneaux solaires hautement efficients car couvrant une grande superficie. "L'abdomen" de la créature s'avère être un "centre industriel de production" où les membres de remplacement et les nouveaux Replicons sont créés.
+
+Structure sociale:
+Les Replicons ont une structure sociale relativement primitive. Ils sont dirigés par un gouvernement planétaire s'appuyant sur quelques seigneurs féodaux, ces derniers ayant découvert le voyage spatial, devenu rapidement une solution très pratique pour lancer des attaques contre des peuplades très lointaines. Leur gouvernement est donc féodal en raison d'un fait assez inhabituel: la découverte du vol spatial par quelques individus avant l'avènement d'une révolution industrielle à l'échelle d'une nation. De par la grande variété des machines auto-réplicantes sur Cisarruj, la plupart des besoins normalement satisfaits par l'industrie sur les autres planètes, le sont par "l'agriculture" ou "reproduction" chez les Replicons. En effet, les Replicons ne disposent d'aucune base industrielle ni d'aucune connaissance technologique à proprement parler, autres que l'usage d'équipements et produits créés "naturellement" par leur soin. Par conséquent, leur société est très peu érudite, la plupart des individus transmettant la connaissance d'une manière discontinue et partielle: comment forger un revêtement de titane ou quelle quantité de minerai d'uranium est nécessaire pour alimenter son réacteur de production. La plupart des connaissances que les sociétés développées regroupent, partagent et mettent en relation, ne sont détenues que par les seigneurs, le reste de la société se développant aléatoirement grâce aux quelques savoirs appris et conservés, à la manière d'un monde post-apocalyptique.
+
+Planète natale:
+Cisarruj est une planète fortement irradiée, dominée par une grande variété de machines autonomes auto-réplicantes, et entourée d'un grand mystère. Il existe bien quelques rares archives historiques sur les protagonistes de la guerre ayant mené à la naissance de l'Empire Cisarruj. Cependant, la plupart de ces écrits ne relatent que les faits classiques d'une ère pré-industrielle, parsemée de périodes d'essor ou de déclin. Le Grand Mystère des Replicons quant à lui, reste entier. Une race supérieure a-t-elle conçu les Replicons au terme de nombreuses expériences, ou sont-ils le résultat d'un accident industriel poussant leurs infortunés créateurs à abandonner la planète? Ou bien ont-ils subi un destin encore plus funeste de la main-même des créatures qu'ils ont engendrées...
+'''
+
 SP_EGASSEM  # translated
 Egassem
 
@@ -6688,7 +7593,7 @@ Sslith
 
 SP_SSLITH_GAMEPLAY_DESC
 '''Créatures aquatiques plates et souples.
-Préfèrent les Planètes [[PT_TUNDRA]].
+Préfèrent les Planètes [[PT_OCEAN]]s.
 [[encyclopedia ORGANIC_SPECIES_TITLE]], [[encyclopedia TELEPATHIC_TITLE]]
 '''
 
@@ -6983,6 +7888,32 @@ Hive est une vaste planète stérile dont la taille est 2 fois plus importante q
 
 Raison de la sédentarité:
 Les Volp-Uglush ayant à présent une société hautement complexe et intriquée, il leur est impossible de quitter Hive pour fonder ailleurs une nouvelle colonie, cela nécessitant un esprit d'indépendance et d'innovation leur faisant désormais défaut.
+'''
+
+SP_FULVER
+Fulver
+
+SP_FULVER_GAMEPLAY_DESC
+'''Fourmis précognitives insatisfaites.
+Préfèrent les planètes [[PT_TUNDRA]].
+[[encyclopedia LITHIC_SPECIES_TITLE]]
+'''
+
+SP_FULVER_DESC
+'''Biologie:
+Les Fulvers ont l'apparence de grandes fourmis nerveuses. Ces dernières sont dotées d'un cerveau quantique qui leur permet de prédire avec une grande efficacité tous les futurs proches possibles, rendant très difficile de les surprendre en situation de combat.
+
+Nom:
+La capacité de précognition est unique à l'espèce des Fulvers au sein du monde natal des Fulvers. Par conséquent, un "Fulver" est "Celui qui peut voir" toutes vos réactions possibles.
+
+Personnalité:
+Un Fulver préfère se concentrer sur sa force individuelle et vivre au jour le jour. Il favorise le plus souvent les outils et les décisions qui lui permettent d'appréhender le plus grand nombre de choix futurs. Ayant une mauvaise mémoire et étant dans l'impossibilité de prévoir le futur à long terme, les Fulvers ne peuvent pas entreprendre sur le long terme, dans le domaine scientifique ou la construction de structures défensives complexes. Se sentant entravés par ce nombre limité de choix, les Fulvers, constamment agités et insatisfaits, tentent cependant de surmonter leur condition.
+
+Raison de l'exode:
+Les possibilités infinies qu'offrent l'espace motivent grandement les Fulvers, leur permettant au final de développer une technologie efficace de voyage spatial. Atteignant constamment de nouvelles frontières, les Fulvers ne se soucient guère de ce qu'ils laissent derrière eux.
+
+Structure sociale:
+Leur obsession du futur proche empêche les Fulvers de bâtir des structures de long terme. Étant conscients en permanence de tous les choix possibles de leurs semblables et agissant en conséquence, la société des Fulvers peut être considérée au mieux comme une anarchie informelle.
 '''
 
 SP_FURTHEST  # translated
@@ -7291,7 +8222,7 @@ Planète Métaphysique
 PHILOSOPHER_SPECIAL_DESC
 '''Aussi longtemps que la Planète Métaphysique demeure inhabitée, toutes les planètes habitées du même système stellaire voient leur [[metertype METER_RESEARCH]] accrue de 5 points. L'indicateur [[metertype METER_CONSTRUCTION]] d'une colonie installée sur une Planète Métaphysique est réduit de 20 points.
 
-L'unique et dernier représentant d'une espèce vagabonde de taille planétaire a trouvé sa dernière demeure près de cette étoile, autour de laquelle il orbite comme une planète normale. Âgé de milliers d'années, il a perdu l'envie et la capacité de voyager et se consacre désormais à méditer sur tous les mystères de l'univers qu'il a rencontré au cours de sa longue existence. Déroutant et légèrement perturbé, il refuse de communiquer avec quiconque n'étant ni de sa taille ni de de sa forme, ne laissant pas aux savants d'autres choix que de l'interroger via la voix de la planète sur laquelle ils résident. Sans surprise, coloniser la Planète Métaphysique la perturbe gravement et provoque un mutisme profond. La construction à sa surface s'avère difficile, comme il pouvait l'être présumé sur une entité vivante.'''
+L'unique et dernier représentant d'une espèce vagabonde de taille planétaire a trouvé sa dernière demeure près de cette étoile, autour de laquelle il orbite comme une planète normale. Âgé de milliers d'années, il a perdu l'envie et la capacité de voyager et se consacre désormais à la méditation sur tous les mystères de l'univers qu'il a rencontré au cours de sa longue existence. Déroutant et légèrement perturbé, il refuse de communiquer avec quiconque n'étant ni de sa taille ni de sa forme, ne laissant pas aux savants d'autres choix que de l'interroger via la voix de la planète sur laquelle ils résident. Sans surprise, coloniser la Planète Métaphysique la perturbe gravement et provoque un mutisme profond. La construction à sa surface s'avère difficile, comme il pouvait l'être présumé sur une entité vivante.'''
 
 ABANDONED_COLONY_SPECIAL
 Colonie Abandonnée
@@ -7323,7 +8254,7 @@ Kraken Congelé
 KRAKEN_IN_THE_ICE_SPECIAL_DESC
 '''En maîtrisant les technologies de [[tech SHP_DOMESTIC_MONSTER]] et de [[tech LRN_XENOARCH]], un [[predefinedshipdesign SM_WHITE_KRAKEN]] peut être ressuscité et domestiqué en construisant sur cette planète une [[buildingtype BLD_XENORESURRECTION_LAB]].
 
-Profondément enfoui sous la croûte glacée de cette planète, gît un ancêtre préhistorique à la peau blanche du monstre de l'espace Kraken.'''
+Profondément enfoui sous la croûte glacée de cette planète, gît un ancêtre préhistorique à la peau blanche du monstre spatial Kraken.'''
 
 HEAD_ON_A_SPIKE_SPECIAL
 Tête Empalée
@@ -7504,6 +8435,10 @@ Structure
 OBJ_SHIP
 Astronef
 
+# Note: the OBJ_SHIP and OBJ_BUILDING entries are used for the build item type of ships and buildings.
+BUILD_ITEM_TYPE_PROJECT
+Projet
+
 # Universe object types
 OBJ_FLEET
 Flotte
@@ -7514,11 +8449,11 @@ Planète
 
 # Universe object types
 OBJ_POP_CENTER
-Centre de Population
+Centre Population
 
 # Universe object types
 OBJ_PROD_CENTER
-Centre de Production
+Centre Production
 
 # Universe object types
 OBJ_SYSTEM
@@ -7689,6 +8624,13 @@ FOCUS_INDUSTRY
 Industrie
 
 # Focus types
+FOCUS_STOCKPILE
+Stock
+
+FOCUS_STOCKPILE_DESC
+Permet aux technologies de stockage d'augmenter la capacité d'usage du stock
+
+# Focus types
 FOCUS_RESEARCH
 Recherche
 
@@ -7746,27 +8688,27 @@ Type d'indicateur invalide
 
 # Meter types
 METER_TARGET_POPULATION
-Population Optimale Locale
+Projection Population
 
 # Meter types
 METER_TARGET_INDUSTRY
-Industrie Optimale Locale
+Projection Industrie
 
 # Meter types
 METER_TARGET_RESEARCH
-Recherche Optimale Locale
+Projection Recherche
 
 # Meter types
 METER_TARGET_TRADE
-Commerce Optimal Local
+Projection Commerce
 
 # Meter types
 METER_TARGET_CONSTRUCTION
-Infrastructure Optimale Locale
+Projection Infrastructure
 
 # Meter types
 METER_TARGET_HAPPINESS
-Bonheur Optimal Local
+Projection Bonheur
 
 # Meter types
 METER_MAX_CAPACITY
@@ -7795,6 +8737,10 @@ Max Défense
 # Meter types
 METER_MAX_SUPPLY
 Max Approvisionnement
+
+# Meter types
+METER_MAX_STOCKPILE
+Max Stock
 
 # Meter types
 METER_MAX_TROOPS
@@ -7851,6 +8797,10 @@ Défense
 # Meter types
 METER_SUPPLY
 Approvisionnement
+
+# Meter types
+METER_STOCKPILE
+Stock
 
 # Meter types
 METER_TROOPS
@@ -7966,6 +8916,10 @@ structure
 # Build types
 BT_SHIP
 astronef
+
+# Build types
+BT_STOCKPILE
+stock
 
 # Resource types
 INVALID_RESOURCE_TYPE
@@ -8170,6 +9124,38 @@ Partielle
 VIS_FULL_VISIBILITY
 Complète
 
+# Path types
+PATH_BINARY
+''''''
+
+# Path types
+PATH_RESOURCE
+''''''
+
+# Path types
+PATH_PYTHON
+''''''
+
+# Path types
+PATH_DATA_ROOT
+''''''
+
+# Path types
+PATH_DATA_USER
+''''''
+
+# Path types
+PATH_CONFIG
+''''''
+
+# Path types
+PATH_SAVE
+''''''
+
+# Path types
+PATH_TEMP
+''''''
+
 # Ship hull categories
 
 HULL_LINE_GENERIC
@@ -8269,9 +9255,6 @@ DESC_VAR_LOCAL_CANDIDATE
 
 DESC_VAR_ROOT_CANDIDATE
 éligible aux conditions d'origine
-
-DESC_STATISTIC
-statistique
 
 DESC_STAT_TYPE
 type de statistique
@@ -8519,8 +9502,17 @@ dernier tour où une bataille s'est déroulée ici
 DESC_COMPLEX
 Variable Complexe
 
-DESC_VARIABLE_NAME
-Nom de la Variable
+DESC_VAR_JUMPSBETWEEN
+voies spatiales entre les systèmes contenant les objets avec les ids %1% et %2%
+
+DESC_STATISTIC
+Statistique
+
+DESC_VAR_COUNT
+le nombre d'objets%2%
+
+DESC_VAR_IF
+0, ou 1 s'il existe tout objet%2%
 
 # FOCS variable reference description text.
 # %1% reference type of the FOCS variable.
@@ -8663,10 +9655,10 @@ DESC_CAPITAL_NOT
 ''' n'étant pas une Planète Capitale d'empire'''
 
 DESC_MONSTER
-''' étant un monstre de l'espace'''
+''' étant un monstre spatial'''
 
 DESC_MONSTER_NOT
-''' n'étant pas un monstre de l'espace'''
+''' n'étant pas un monstre spatial'''
 
 DESC_ARMED
 ''' étant un astronef armé'''
@@ -8861,7 +9853,7 @@ DESC_DESIGN_HAS_PART_NOT
 #     matching a part class.
 # %3% textual description of the ship part class.
 DESC_DESIGN_HAS_PART_CLASS
-''' intégrant un équipement de classe %1%'''
+''' intégrant entre un %1% et %2% équipements de classe %3%'''
 
 # %1% textual description of the lower limit for the number of ship parts
 #     matching a part class.
@@ -8869,7 +9861,7 @@ DESC_DESIGN_HAS_PART_CLASS
 #     matching a part class.
 # %3% textual description of the ship part class.
 DESC_DESIGN_HAS_PART_CLASS_NOT
-''' n'intégrant pas un équipement de classe %1%'''
+''' n'intégrant pas entre un %1% et %2% équipements de classe %3%'''
 
 # %1% name of the ship design.
 DESC_PREDEFINED_SHIP_DESIGN
@@ -9081,11 +10073,82 @@ DESC_ORDERED_BOMBARDED
 DESC_ORDERED_BOMBARDED_NOT
 ''' n'étant pas bombardé par un objet %1%'''
 
+
+# AND Descriptions for expressions 'AND [ A B C ]'
+DESC_AND_BEFORE_OPERANDS
+''' ['''
+
 DESC_AND_BETWEEN_OPERANDS
-''' et'''
+''', et'''
+
+DESC_AND_AFTER_OPERANDS
+''' ]'''
+
+DESC_AND_BEFORE_SINGLE_OPERAND
+''''''
+
+DESC_AND_AFTER_SINGLE_OPERAND
+''''''
+
+# NOT AND Descriptions for expressions  'NOT AND [ A B C ]'
+# We actually describe the the logically equivalent expression ( (not A) or (not B) or (not C) )
+# Note: the operands (not A), (not B).. are handled in the descriptions of A, B.. respectively
+DESC_NOT_AND_BEFORE_OPERANDS
+'''[[DESC_NOT_OR_BEFORE_OPERANDS]]'''
+
+DESC_NOT_AND_BETWEEN_OPERANDS
+'''[[DESC_NOT_OR_BETWEEN_OPERANDS]]'''
+
+DESC_NOT_AND_AFTER_OPERANDS
+'''[[DESC_NOT_OR_AFTER_OPERANDS]]'''
+
+
+# Description for 'not ( AND [ A ] )' expressions
+# Actually instead we describe 'OR [ not A ]' and leave the description of negation to A
+DESC_NOT_AND_BEFORE_SINGLE_OPERAND
+'''[[DESC_OR_BEFORE_SINGLE_OPERAND]]'''
+
+DESC_NOT_AND_AFTER_SINGLE_OPERAND
+'''[[DESC_OR_AFTER_SINGLE_OPERAND]]'''
+
+
+# OR Descriptions: for expressions of the form ( A or B or C )
+DESC_OR_BEFORE_OPERANDS
+''' (soit'''
 
 DESC_OR_BETWEEN_OPERANDS
-''' ou'''
+''', ou'''
+
+DESC_OR_AFTER_OPERANDS
+''' )'''
+
+DESC_OR_BEFORE_SINGLE_OPERAND
+''''''
+
+DESC_OR_AFTER_SINGLE_OPERAND
+''''''
+
+
+# NOT OR Descriptions; for expressions of the form 'NOT OR [ A B C ]'
+# We actually describe the logically equivalent expression 'AND [ (NOT A) (NOT B) (NOT C) ]'
+# Note: (NOT A), (NOT B).. are handled in the descriptions of A, B.. respectively
+DESC_NOT_OR_BEFORE_OPERANDS
+'''[[DESC_AND_BEFORE_OPERANDS]]'''
+
+DESC_NOT_OR_BETWEEN_OPERANDS
+'''[[DESC_AND_BETWEEN_OPERANDS]]'''
+
+DESC_NOT_OR_AFTER_OPERANDS
+'''[[DESC_AND_AFTER_OPERANDS]]'''
+
+# for expressions of the form 'NOT OR [ A ]' we describe instead 'AND [ NOT A ]'
+# Note: (NOT A) is handled in the description of A
+DESC_NOT_OR_BEFORE_SINGLE_OPERAND
+'''[[DESC_AND_BEFORE_SINGLE_OPERAND]]'''
+
+DESC_NOT_OR_AFTER_SINGLE_OPERAND
+'''[[DESC_AND_AFTER_SINGLE_OPERAND]]'''
+
 
 # %1% textual description of the lower turn limit.
 # %2% textual description of the upper turn limit.
@@ -9413,7 +10476,7 @@ LRN_ALGO_ELEGANCE
 Élégance Algorithmique
 
 LRN_ALGO_ELEGANCE_DESC
-'''Augmente la [[metertype METER_RESEARCH]] Optimale de 0.1 par Population sur toutes les planètes réglées sur le Focus Recherche.
+'''Augmente la Projection [[metertype METER_RESEARCH]] de 0.1 par Population sur toutes les planètes en Focus Recherche.
 
 Avec une difficulté grandissante des problèmes d'analyse de données, les démarches traditionnelles des performances algorithmiques deviennent moins efficaces, en raison des limitations de la complexité irréductible. À ce stade, de nouvelles formes et fonctions algorithmiques deviennent significatives: esthétiquement et métaphoriquement, l'élégance de la solution doit être optimisée.'''
 
@@ -9437,7 +10500,7 @@ LRN_ARTIF_MINDS
 Intelligences Artificielles
 
 LRN_ARTIF_MINDS_DESC
-'''Augmente la [[metertype METER_RESEARCH]] Optimale de 2 sur toutes les planètes.
+'''Augmente la Projection [[metertype METER_RESEARCH]] de 2 sur toutes les planètes.
 
 Alors que les ordinateurs traditionnels ont des capacités de calcul presque infinies, ils leur manquent cependant une qualité essentielle: la conscience. Bien que la définition complète du concept de conscience reste insaisissable, cette qualité peut être toutefois synthétisée et modifiée de manière convaincante. Ces recherches ouvrent de nouvelles voies en matière de sciences cognitives et de métaparadigmes.
 
@@ -9506,7 +10569,7 @@ LRN_QUANT_NET
 Réseau Quantique
 
 LRN_QUANT_NET_DESC
-'''Augmente la [[metertype METER_RESEARCH]] Optimale de 0.5 par Population sur toutes les planètes réglées sur le Focus Recherche.
+'''Augmente la Projection [[metertype METER_RESEARCH]] de 0.5 par Population sur toutes les planètes en Focus Recherche.
 
 Un réseau massif de donnés, à l'échelle de l'empire, capable de transférer instantanément des informations entre deux lieux, plutôt que par le système lent et indirect des voies spatiales. Ce progrès facilite grandement la Recherche dans tout l'empire.
 
@@ -9622,17 +10685,78 @@ GRO_ENERGY_META
 Métabolisme d'Énergie Pure
 
 GRO_ENERGY_META_DESC
-'''Augmente le [[metertype METER_FUEL]] max de 2 sur tous les astronefs, la [[metertype METER_DEFENSE]] max de 5 sur toutes les planètes, les [[metertype METER_SHIELD]] max de 5 sur toutes les planètes, l'[[metertype METER_INDUSTRY]] Optimale de 0.2 par Population sur toutes les planètes réglées sur le Focus Industrie, et la [[metertype METER_RESEARCH]] Optimale de 0.5 par Population sur toutes les planètes réglées sur le Focus Recherche.
+'''Augmente le [[metertype METER_FUEL]] max de 2 sur tous les astronefs, la [[metertype METER_DEFENSE]] max de 5 sur toutes les planètes, les [[metertype METER_SHIELD]] max de 5 sur toutes les planètes, la Projection [[metertype METER_INDUSTRY]] de 0.2 par Population sur toutes les planètes en Focus Industrie, et la Projection [[metertype METER_RESEARCH]] de 0.5 par Population sur toutes les planètes en Focus Recherche.
 
 Tandis que la transformation d'une population entière en êtres de pure énergie s'avérerait peu pertinente, certaines tâches conviennent mieux à des individus dénués de corporalité. L'équipage d'un astronef par exemple, n'aurait plus besoin d'optimiser l'espace disponible pour les quartiers d'équipage ou le stockage des rations. Des êtres dotés d'une capacité de canalisation de l'énergie seraient en mesure d'améliorer les défenses et boucliers planétaires, ainsi que la production de ressources.
 
 Le stade ultime du développement physique est justement de transcender le caractère physique des choses. Sans corps, les individus et les sociétés pourraient migrer, croître et exister librement, sans être entravés par des limitations physiques inutiles et des processus métaboliques improductifs, gaspillant l'énergie afin d'assurer l'homéostasie.'''
 
+PRO_TRANS_DESIGN
+Design Transcendant
+
+PRO_TRANS_DESIGN_DESC
+'''Transcendant les limitations de créativité des espèces, les représentants les plus inventifs et innovants des différentes espèces peuplant l'empire, entreprennent d'œuvrer collectivement à la conception de biens universellement utilisables.
+Bâtir la structure [[buildingtype BLD_INTERSPECIES_ACADEMY]] sur différentes planètes garantit que ce procédé soit diffusé à travers tout l'empire.
+
+Le service de Stock Impérial utilise le résultat de cette expérience pour produire des biens pouvant être utilisés par tout citoyen.'''
+
+IMPERIAL_STOCKPILE_SHORT_DESC
+Autorise le Stockage Impérial de Production
+
+PRO_PREDICTIVE_STOCKPILING
+Stockage Anticipatif
+
+PRO_PREDICTIVE_STOCKPILING_DESC
+'''Connaître où la demande future de certains biens augmentera, permet de stocker ceux-ci en prévision.
+Le service de Stock Impérial dispose d'une flotte acheminant les matériaux bruts vers des lieux où l'on prévoit que d'importants projets puissent être entrepris.
+Cette tâche s'avère difficile étant donné que le service doit présager du moment où la demande sera stipulée, de l'endroit, des matériaux et biens qui seront requis, et de leurs utilisateurs.
+
+Les PP inutilisés sont transférés automatiquement au Stock Impérial de Production.
+Un projet de la file d'attente de Production puise automatiquement dans le Stock Impérial si son usage n'a pas été explicitement bloqué pour le projet en question.
+
+Il s'agit donc de la technologie de base du Stock Impérial, augmentant de 1 le [[metertype METER_STOCKPILE]] des planètes réglées sur le [[encyclopedia STOCKPILE_FOCUS_TITLE]] ou le [[encyclopedia GROWTH_FOCUS_TITLE]].'''
+
+PRO_GENERIC_SUPPLIES
+Stocks Génériques
+
+PRO_GENERIC_SUPPLIES_DESC
+'''Par une gestion coordonnée des chaînes d'approvisionnement, des différents matériaux et des nombreux modèles de conception, des Stocks Génériques sont constitués, pouvant être facilement dissociés et réutilisés selon les besoins dans la plupart des productions industrielles.
+
+Les Stocks Génériques peuvent être constitués bien avant que la demande ne se fasse sentir. Les packages d'approvisionnement intègrent habituellement des dispositifs de reconstruction d'infrastructures permettant de redéfinir la production de nouveaux biens à partir des Stocks Génériques.
+En atteignant ce degré de sophistication, les Stocks Génériques peuvent être utilisés pour concevoir de nouveaux produits technologiques qui n'étaient même pas envisagés au moment de la constitution des stocks.
+
+Cela exempte le service du Stock Impérial de connaître à l'avance quels biens seront exactement demandés. Prévoir le lieu de la demande et les quantités s'avère désormais suffisant.
+
+Il s'agit donc d'une technologie d'amélioration du Stock Impérial. Le [[metertype METER_STOCKPILE]] augmente de 2, plus un supplément de 0.01 par Population, plus un supplément de 3 pour chaque planète réglée sur le [[encyclopedia STOCKPILE_FOCUS_TITLE]] ou le [[encyclopedia GROWTH_FOCUS_TITLE]].
+Ces amélioriations sont cumulables avec le bonus de la technologie [[tech PRO_PREDICTIVE_STOCKPILING]].'''
+
+PRO_INTERSTELLAR_ENTANGLEMENT_FACTORY
+Complexe d'Intrication Interstellaire
+
+PRO_INTERSTELLAR_ENTANGLEMENT_FACTORY_DESC
+'''L'intrication quantique des salles de contrôle permet de manœuvrer des machines industrielles à distance à partir d'autres systèmes stellaires.
+Dissocier le personnel et les moyens de production favorise un procédé optimal de conception et augmente l'efficience du service de Stock Impérial.
+
+Il s'agit donc d'une technologie d'amélioration du Stock Impérial. Le [[metertype METER_STOCKPILE]] augmente de 6, plus un supplément de 0.02 par Population.
+Ces amélioriations sont cumulables avec les bonus des technologies [[tech PRO_PREDICTIVE_STOCKPILING]], [[tech PRO_GENERIC_SUPPLIES]] et [[tech PRO_VOID_PREDICTION]].
+
+Débloque également la structure [[building BLD_STOCKPILING_CENTER]], augmentant additionnellement le [[metertype METER_STOCKPILE]] de 0.1 par Industrie.'''
+
+PRO_VOID_PREDICTION
+Prédiction du Vide
+
+PRO_VOID_PREDICTION_DESC
+'''Tandis que les prédictions classiques se basent invariablement sur la connaissance statistique des faits passés, l'étude de la mémoire chaotique du Vide mène à de solides prédictions de faits pourtant initiaux ou étranges.
+Pour le service du Stock Impérial, la Prédiction du Vide est l'instrument par excellence permettant de fournir les bons matériaux avant même que le besoin ne se manifeste.
+
+Il s'agit donc d'une technologie d'amélioration du Stock Impérial. Le [[metertype METER_STOCKPILE]] augmente de 0.2 par Population.
+Ces amélioriations sont cumulables avec les bonus des technologies [[tech PRO_PREDICTIVE_STOCKPILING]], [[tech PRO_GENERIC_SUPPLIES]] et [[tech PRO_INTERSTELLAR_ENTANGLEMENT_FACTORY]].'''
+
 PRO_MICROGRAV_MAN
 Production en Microgravité
 
 PRO_MICROGRAV_MAN_DESC
-'''Augmente l'[[metertype METER_INDUSTRY]] de 5 sur toutes les colonies en Focus Recherche situées dans un système abritant des colonies ou avant-postes sur une Ceinture d'Astéroïdes. Plusieurs Ceintures d'Astéroïdes n'engendrent pas de bénéfices additionnels.
+'''Augmente l'[[metertype METER_INDUSTRY]] de 5 sur toutes les colonies en Focus Recherche situées dans des systèmes abritant des colonies ou avant-postes sur une Ceinture d'Astéroïdes. Plusieurs Ceintures d'Astéroïdes n'engendrent pas de bénéfices additionnels.
 
 L'extraction de ressources minières sur des planétoïdes implique de nombreux challenges mais aussi de réelles opportunités en comparaison d'une exploitation planétaire classique. Ne disposant pas de la masse nécessaire pour la liquéfaction et la différenciation, les astéroïdes permettent un accès bien plus aisé à certains éléments lourds, tandis que l'absence de gravité rend l'extraction en vue d'une utilisation directe dans l'espace bien plus efficace. Par contre, la taille généralement limitée des astéroïdes requiert des infrastructures d'extraction auto-suffisantes et d'une grande mobilité. Par conséquent, les défis relatifs à un environnement en microgravité doivent être surmontés, nécessitant une refonte totale des méthodes traditionnelles.
 
@@ -9642,7 +10766,7 @@ PRO_ROBOTIC_PROD
 Production Robotisée
 
 PRO_ROBOTIC_PROD_DESC
-'''Augmente l'[[metertype METER_INDUSTRY]] Optimale de 0.1 par Population sur toutes les planètes réglées sur le Focus Industrie.
+'''Augmente la Projection [[metertype METER_INDUSTRY]] de 0.1 par Population sur toutes les planètes en Focus Industrie.
 
 Les Exobots, désignation sous laquelle ils sont communément connus, constituent l'aboutissement du design allié à la fonctionnalité. Robots conçus pour effectuer n'importe quelle tâche de production, de l'électronique microscopique à la construction à grande échelle, leur production de masse est aisée, tandis que leur utilisation reste la plus avantageuse dans les colonies assignant une haute priorité à l'industrie. Chaque monde privilégiant l'industrie se voit gratifiée d'une équipe d'Exobots, améliorant ainsi considérablement sa production industrielle.
 
@@ -9657,7 +10781,7 @@ PRO_FUSION_GEN
 Génération par Fusion
 
 PRO_FUSION_GEN_DESC
-'''Augmente l'[[metertype METER_INDUSTRY]] Optimale de 0.2 par Population sur toutes les planètes réglées sur le Focus Industrie.
+'''Augmente la Projection [[metertype METER_INDUSTRY]] de 0.2 par Population sur toutes les planètes en Focus Industrie.
 
 Les réacteurs de fusion nucléaire, bien que coûteux à produire et à entretenir, s'avèrent rentables pour les mondes industrialisés à forte consommation énergétique. La dépendance aux réacteurs basés sur la fission nucléaire deviendra peu à peu une relique du passé.
 
@@ -9681,7 +10805,7 @@ PRO_SENTIENT_AUTOMATION
 Automates Adaptatifs
 
 PRO_SENTIENT_AUTOMATION_DESC
-'''Augmente l'[[metertype METER_INDUSTRY]] Optimale de 5 sur toutes les planètes.
+'''Augmente la Projection [[metertype METER_INDUSTRY]] de 5 sur toutes les planètes.
 
 En concevant des usines automatisées ne nécessitant aucune supervision directe, il devient alors possible d'accroître la production industrielle via un processus totalement autonome. Ces usines peuvent être construites et entretenues sur n'importe quelle planète, quel que soit son Focus, engendrant un bonus industriel dans tout l'empire.
 
@@ -9749,7 +10873,7 @@ CON_FRC_ENRG_STRC
 Structures Synergiques
 
 CON_FRC_ENRG_STRC_DESC
-'''Accroît la progression des indicateurs de ressources inférieurs à ceux de la planète référence de 3 par tour, et la diminution des indicateurs de ressources supérieurs à ceux de la planète référence de 5 par tour.
+'''Accroît la progression des indicateurs de ressources et d'infrastructure inférieurs à la valeur projetée de 3 par tour, et la diminution des indicateurs de ressources supérieurs à la valeur projetée de 5 par tour.
 
 La flexibilité et la versatilité des structures synergiques permettent de redéfinir plus facilement le rôle des infrastructures des colonies en vue de nouvelles applications, augmentant ainsi la rapidité et le taux d'une modification de Focus.
 
@@ -9771,7 +10895,7 @@ Infrastructure Galactique
 CON_GAL_INFRA_DESC
 '''Augmente de 1 la portée de l'[[metertype METER_SUPPLY]] de tous les avant-postes et colonies de l'empire.
 
-Le transport efficace et fiable des ressources sur des distances interstellaires requiert une planification fastidieuse, complexifiée par de nombreux facteurs tels que la présence de monstres de l'espace, d'empires ennemis et de dangereux phénomènes astrophysiques. L'utilisation d'une infrastructure galactique intégrée permet un déploiement fluide des ressources entre les colonies avancées et émergentes, tandis que des solutions peuvent être appliquées aux problèmes de logistique particulièrement contraignants.
+Le transport efficace et fiable des ressources sur des distances interstellaires requiert une planification fastidieuse, complexifiée par de nombreux facteurs tels que la présence de monstres spatiaux, d'empires ennemis et de dangereux phénomènes astrophysiques. L'utilisation d'une infrastructure galactique intégrée permet un déploiement fluide des ressources entre les colonies avancées et émergentes, tandis que des solutions peuvent être appliquées aux problèmes de logistique particulièrement contraignants.
 
 Le développement et l'intégration des infrastructures des mondes à forte production au sein d'un réseau galactique d'envergure et unifié est un des plus grands progrès imaginables en matière de logistique. Une fois accompli, un tel système unit d'une manière optimale et fonctionnelle tous les mondes qui le composent. Les outils de transport intégré, de stockage, de maintenance, et de construction peuvent être déployés rapidement et efficacement vers le lieu où ils sont requis, afin de gérer avec efficience la disponibilité des ressources ou de s'adapter rapidement à tout changement.'''
 
@@ -9801,7 +10925,7 @@ Structures Multidimensionnelles
 CON_NDIM_STRC_DESC
 '''Accroît la Population max de toutes les planètes habitables selon leur taille : ([[SZ_TINY]] +2) ([[SZ_SMALL]] +4) ([[SZ_MEDIUM]] +6) ([[SZ_LARGE]] +8) ([[SZ_HUGE]] +10).
 
-Augmente également de 10 l'[[metertype METER_CONSTRUCTION]] Optimale de la planète hôte si celle-ci est habitée.
+Augmente également de 10 la Projection [[metertype METER_CONSTRUCTION]] des planètes habitées.
 
 Les facteurs principaux limitant la capacité de population d'une planète ne sont autres que les milieux environnementaux et l'espace disponible. En répartissant le développement des infrastructures de base sur de multiples dimensions, les limitations spatiales disparaissent, et dans des conditions environnementales idéales, le maximum de population d'une planète peut être considérablement accru.
 
@@ -9837,7 +10961,13 @@ SHP_SPACE_FLUX_DRIVE
 Propulsion Flux Spatial
 
 SHP_SPACE_FLUX_DRIVE_DESC
-D'ordinaire, la propulsion dans l'espace est limitée par le propulseur ou le milieu de propulsion lui-même. Cependant, à des échelles de grandeur relativement petites, il est possible de propulser un objet dans l'espace de la même manière qu'il le serait dans l'eau, c'est-à-dire en agissant directement sur le milieu dans lequel l'objet est immergé. Cela nécessite la manipulation de l'espace lui-même à une dimension quantique, chaque quantum d'espace étant réorganisé en un système d'unités fixes et adjacentes d'espace. Cette méthode de propulsion est très efficace, mais s'avère dangereuse à grande échelle et facilement détectable en raison des effets dimensionnels résultants. Des recherches avancées en matière de technologies de furtivité peuvent minimiser les désagréments causés par ces perturbations dimensionnelles.
+D'ordinaire, la propulsion dans l'espace est limitée par le propulseur ou le milieu de propulsion lui-même. Cependant, à des échelles de grandeur relativement petites, il est possible de propulser un objet dans l'espace de la même manière qu'il le serait dans l'eau, c'est-à-dire en agissant directement sur le milieu dans lequel l'objet est immergé. Cela nécessite la manipulation de l'espace lui-même à une dimension quantique, chaque quantum d'espace étant réorganisé en un système d'unités fixes et adjacentes d'espace. Cette méthode de propulsion est très efficace, mais s'avère dangereuse à grande échelle et facilement détectable en raison des effets dimensionnels résultants. Des recherches avancées en matière de technologies de furtivité peuvent minimiser les désagréments causés par ces perturbations dimensionnelles. La coque d'astronef résultant de ces recherches est d'un design légèrement plus sophistiqué que celle issue de la technologie [[tech SHP_SPACE_FLUX_BUBBLE]].
+
+SHP_SPACE_FLUX_BUBBLE
+Bulle Flux Spatial
+
+SHP_SPACE_FLUX_BUBBLE_DESC
+D'ordinaire, la propulsion dans l'espace est limitée par le propulseur ou le milieu de propulsion lui-même. Cependant, à des échelles de grandeur relativement petites, il est possible de propulser un objet dans l'espace de la même manière qu'il le serait dans l'eau, c'est-à-dire en agissant directement sur le milieu dans lequel l'objet est immergé. Cela nécessite la manipulation de l'espace lui-même à une dimension quantique, chaque quantum d'espace étant réorganisé en un système d'unités fixes et adjacentes d'espace. Cette méthode de propulsion est très efficace, mais s'avère dangereuse à grande échelle et facilement détectable en raison des effets dimensionnels résultants. Des recherches avancées en matière de technologies de furtivité peuvent minimiser les désagréments causés par ces perturbations dimensionnelles. La plus simple solution pour concevoir un astronef utilisant la propulsion par flux s'avère être la modulation en bulle, laquelle recouvre une coque de forme également sphérique. Des solutions plus complexes sont néanmoins possibles via une meilleure technologie de [[tech SHP_SPACE_FLUX_DRIVE]].
 
 SHP_CONTGRAV_MAINT
 Maintenance Anti-Gravitationnelle
@@ -9902,13 +11032,13 @@ SHP_MULTICELL_CAST_DESC
 Même lorsqu'il est inerte, un matériau organique est bien plus polyvalent que n'importe quel matériau standard. Un astronef multicellulaire non-vivant pourrait offrir certains avantages des matériaux organiques mais sans les inconvénients inhérents à la vie organique.
 
 SHP_DOMESTIC_MONSTER
-Domestication Méga-Faune
+Méga-Faune: Domestication
 
 SHP_DOMESTIC_MONSTER_DESC
-La pratique ancestrale de la domestication des autres espèces peut également s'appliquer aux monstres de l'espace peuplant les voies spatiales. Construire des Colonies et des Avant-Postes à proximité de leurs lieux de nidification rendrait possible la domestication de tels monstres.
+La pratique ancestrale de la domestication des autres espèces peut également s'appliquer aux monstres spatiaux peuplant les voies spatiales. Construire des Colonies et des Avant-Postes à proximité de leurs lieux de nidification rendrait possible la domestication de tels monstres.
 
 SHP_ENDOCRINE_SYSTEMS
-Endocrinologie Méga-Faune
+Méga-Faune: Endocrinologie
 
 SHP_ENDOCRINE_SYSTEMS_DESC
 L'étude des systèmes endocriniens d'organismes évoluant dans l'espace permet le développement des structures internes des astronefs à caractère organique.
@@ -9991,6 +11121,9 @@ Donne la victoire!
 SHIP_PART_UNLOCK_SHORT_DESC
 Débloque un équipement d'astronef
 
+SHIP_FUEL_IMPROVE_SHORT_DESC
+Améliore un réservoir d'astronef
+
 SHIP_WEAPON_UNLOCK_SHORT_DESC
 Débloque un armement d'astronef
 
@@ -10052,7 +11185,7 @@ GAME_MAKE_WORK_SHORT_DESC
 Permet le fonctionnement du jeu
 
 TAME_MONSTER_SHORT_DESC
-Apprivoise les Monstres de l'espace
+Apprivoise les Monstres spatiaux
 
 EXOBOT_SHORT_DESC
 Crée des citoyens exobots
@@ -10168,6 +11301,15 @@ En théorie, il est possible de prédire en totalité l'évolution écologique d
 GRO_GAIA_TRANS_SHORT_DESC
 Permet la Transformation Gaia
 
+GRO_MEGA_ECO
+Méga-Faune: Écologie
+
+GRO_MEGA_ECO_DESC
+L'étude des cycles de vie des organismes spatiaux permet de faire émerger des caractères communs pour une grande variété d'espèces. Il est donc possible d'exploiter ces connaissances afin de contrôler plus efficacement ces organismes, en ayant recours à la manipulation de leurs processus métaboliques et reproductifs.
+
+GRO_MEGA_ECO_SHORT_DESC
+Contrôle Nid de Monstre
+
 LRN_OBSERVATORY_I
 Observatoire
 
@@ -10184,7 +11326,7 @@ LRN_DISTRIB_THOUGHT
 Centralisation Cérébrale
 
 LRN_DISTRIB_THOUGHT_DESC
-'''Augmente la [[metertype METER_RESEARCH]] Optimale de 0.1 par Population sur toutes les planètes, quel que soit le Focus choisi.
+'''Augmente la Projection [[metertype METER_RESEARCH]] de 0.1 par Population sur toutes les planètes, quel que soit le Focus choisi.
 
 Le citoyen moyen gaspille littéralement ses capacités cérébrales, pourtant issues d'un des outils de calcul les plus fins de l'univers. En intégrant les cycles cérébraux inactifs d'une population suffisament importante au sein d'un réseau de simples émetteurs-récepteurs cybernétiques, la totalité des centres de recherche d'un empire peuvent accéder à une puissance de calcul considérable et peu coûteuse.'''
 
@@ -10192,7 +11334,7 @@ LRN_STELLAR_TOMOGRAPHY
 Tomographie Stellaire
 
 LRN_STELLAR_TOMOGRAPHY_DESC
-'''Augmente la [[metertype METER_RESEARCH]] Optimale des planètes réglées sur le Focus Recherche, par Population et selon le type d'étoile :
+'''Augmente la Projection [[metertype METER_RESEARCH]] des planètes réglées sur le Focus Recherche, par Population et selon le type d'étoile :
 * [[STAR_BLACK]] (x1)
 * [[STAR_NEUTRON]] (x0.75)
 * [[STAR_BLUE]] ou [[STAR_WHITE]] (x0.5)
@@ -10268,7 +11410,7 @@ Dispositif Défense Planétaire 1
 DEF_DEFENSE_NET_1_DESC
 '''Augmente la [[metertype METER_DEFENSE]] max de 5 sur toutes les planètes.
 
-Avec l'exploration galactique vient la possibilité de rencontrer de nouvelles races - mais aussi de nouveaux ennemis. En disposant plusieurs bases de défense armées en orbite autour d'une planète, il est possible de conférer à cette planète une capacité défensive importante sans qu'il soit nécessaire de de recourir à des astronefs.'''
+Avec l'exploration galactique vient la possibilité de rencontrer de nouvelles races - mais aussi de nouveaux ennemis. En disposant plusieurs bases de défense armées en orbite autour d'une planète, il est possible de conférer à cette planète une capacité défensive importante sans qu'il soit nécessaire de recourir à des astronefs.'''
 
 DEF_DEFENSE_NET_2
 Dispositif Défense Planétaire 2
@@ -10352,7 +11494,7 @@ DEF_ROOT_DEFENSE
 Auto-défense
 
 DEF_ROOT_DEFENSE_DESC
-'''Augmente les [[metertype METER_SHIELD]] max de 1 sur chaque planète appartenant à l'empire. Pour les espèces disposant de troupes de défense, augmente l'[[metertype METER_TROOPS]] max de 0.2 par Population sur la planète.
+'''Augmente les [[metertype METER_SHIELD]] max de 1 sur chaque planète appartenant à l'empire. Régénère 1 point de [[metertype METER_SHIELD]] par tour, seulement durant les tours où la planète n'est pas attaquée. Pour les espèces disposant de troupes de défense, augmente l'[[metertype METER_TROOPS]] max de 0.2 par Population sur la planète.
 
 Le concept d'Auto-défense est à la racine de maints développements technologiques.'''
 
@@ -10429,7 +11571,7 @@ SHP_FIGHTERS_1
 Chasseurs et Rampes de Lancement
 
 SHP_FIGHTERS_1_DESC
-'''Permet à l'empire de produire des astronefs intégrant des Hangars à Chasseurs et des Rampes de Lancement. Un astronef ne peut abriter qu'un seul type de [[encyclopedia PC_FIGHTER_HANGAR]], mais cependant autant que le permet le nombre de [[encyclopedia SLOT_TITLE]]s disponibles. Chaque Hangar dispose d'une capacité maximale de chasseurs et ces derniers auront tous la même Puissance (pouvant être modifiée selon l'espèce les contrôlant et en procédant à des recherches plus avancées dans le domaine). 
+'''Permet à l'empire de produire des astronefs intégrant des Hangars à Chasseurs et des Rampes de Lancement. Un astronef ne peut abriter qu'un seul type de [[encyclopedia PC_FIGHTER_HANGAR]], mais cependant autant que le permet le nombre de [[encyclopedia SLOT_TITLE]]s disponibles. Chaque Hangar dispose d'une capacité maximale de chasseurs et ces derniers auront tous la même Puissance (pouvant être modifiée selon l'espèce les contrôlant et en procédant à des recherches plus avancées dans le domaine).
 
 Une <encyclopedia PC_FIGHTER_BAY>Rampe de Lancement</encyclopedia> peut faire décoller un nombre défini de chasseurs lors de chaque passe de combat. Ces chasseurs deviennent des cibles valides et peuvent attaquer les astronefs et chasseurs ennemis lors de chaque passe suivante de combat. Toutefois, un unique tir de n'importe quelle nature subi par un chasseur détruira ce dernier. Contrairement aux [[encyclopedia DAMAGE_TITLE]] qu'infligent les armements traditionnels, les dommages résultant d'un tir de chasseur ne sont pas minorés par les [[metertype METER_SHIELD]] d'astronef (les chasseurs faisant feu une fois à l'intérieur de la zone de protection d'un bouclier).
 
@@ -10542,7 +11684,6 @@ Rayon Gamma 4
 
 SHP_WEAPON_4_4_DESC
 Améliore l'équipement [[shippart SR_WEAPON_4_1]] de tous les astronefs situés en zone d'[[metertype METER_SUPPLY]] (ou s'ils s'y rendent ultérieurement). Les [[encyclopedia DAMAGE_TITLE]] par tir sont de 30 une fois l'équipement amélioré.
-
 
 SHP_ION_CANNON
 Canon Ionique
@@ -10729,7 +11870,7 @@ Couplage de Motorisation Améliorée
 SHP_IMPROVED_ENGINE_COUPLINGS_DESC
 '''[[COLONY_BUILDING_TIME_DECREASE]]
 
-De meilleurs éléments de motorisation fournissent de meilleurs moteurs. Augmente de 10 la [[metertype METER_SPEED]]. Plusieurs exemplaires peuvent être intégrés dans une même coque d'astronef.'''
+De meilleurs éléments de motorisation, résultent de meilleurs moteurs. Augmente de 20 la [[metertype METER_SPEED]].'''
 
 SHP_N_DIMENSIONAL_ENGINE_MATRIX
 Matrice de Motorisation Multidimensionnelle
@@ -10737,7 +11878,7 @@ Matrice de Motorisation Multidimensionnelle
 SHP_N_DIMENSIONAL_ENGINE_MATRIX_DESC
 '''[[COLONY_BUILDING_TIME_DECREASE]]
 
-La recherche concernant les espaces multidimensionnels a rendu possible le développement de meilleures matrices de motorisation. Augmente de 20 la [[metertype METER_SPEED]]. Plusieurs exemplaires peuvent être intégrés dans une même coque d'astronef.'''
+La recherche concernant les espaces multidimensionnels a rendu possible le développement de meilleures matrices de motorisation. Augmente de 40 la [[metertype METER_SPEED]].'''
 
 SHP_SINGULARITY_ENGINE_CORE
 Noyau de Motorisation à Singularité
@@ -10745,19 +11886,25 @@ Noyau de Motorisation à Singularité
 SHP_SINGULARITY_ENGINE_CORE_DESC
 '''[[COLONY_BUILDING_TIME_DECREASE]]
 
-Dispositif dérivé de la structure [[buildingtype BLD_HYPER_DAM]] et adapté en taille pour les astronefs, le Noyau de Motorisation à Singularité accroît considérablement la génération d'énergie. Augmente de 30 la [[metertype METER_SPEED]]. Plusieurs exemplaires peuvent être intégrés dans une même coque d'astronef.'''
+Dispositif dérivé de la structure [[buildingtype BLD_HYPER_DAM]] et miniaturisé pour les astronefs, le Noyau de Motorisation à Singularité accroît considérablement la génération d'énergie. Augmente de 80 la [[metertype METER_SPEED]].'''
 
 SHP_DEUTERIUM_TANK
 Réservoir de Deutérium
 
 SHP_DEUTERIUM_TANK_DESC
-Débloque l'équipement [[shippart FU_DEUTERIUM_TANK]] pour les astronefs.
+Légère amélioration de chaque [[shippart FU_BASIC_TANK]] d'un astronef. Augmente la capacité en [[metertype METER_FUEL]] d'un astronef et par conséquent le nombre maximum de Voies spatiales pouvant être parcourues avant de devoir ravitailler en carburant.
+
+SHP_DEUTERIUM_TANK_EFFECT
+Technologie Réservoir de Deutérium
 
 SHP_ANTIMATTER_TANK
 Réservoir d'Anti-Matière
 
 SHP_ANTIMATTER_TANK_DESC
-Débloque l'équipement [[shippart FU_ANTIMATTER_TANK]] pour les astronefs.
+Notable amélioration de chaque [[shippart FU_BASIC_TANK]] d'un astronef. Augmente la capacité en [[metertype METER_FUEL]] d'un astronef et par conséquent le nombre maximum de Voies spatiales pouvant être parcourues avant de devoir ravitailler en carburant.
+
+SHP_ANTIMATTER_TANK_EFFECT
+Technologie Réservoir d'Anti-Matière
 
 SHP_ZERO_POINT
 Générateur Zero-Point de Carburant
@@ -11002,7 +12149,7 @@ BLD_CULTURE_ARCHIVES
 Archives Culturelles
 
 BLD_CULTURE_ARCHIVES_DESC
-'''Augmente la [[metertype METER_RESEARCH]] Optimale de 5, ainsi que l'[[metertype METER_INDUSTRY]] Optimale de la moitié de la Population planétaire.
+'''Augmente la Projection [[metertype METER_RESEARCH]] de 5, ainsi que la Projection [[metertype METER_INDUSTRY]] de la moitié de la Population planétaire.
 
 Abrite le savoir accumulé durant des milliers d'années d'existence sur cette planète, améliorant différents aspects de la productivité planétaire.'''
 
@@ -11010,7 +12157,7 @@ BLD_CULTURE_LIBRARY
 Bibliothèque Culturelle
 
 BLD_CULTURE_LIBRARY_DESC
-'''Augmente la [[metertype METER_RESEARCH]] Optimale de 5.
+'''Augmente la Projection [[metertype METER_RESEARCH]] de 5.
 
 Abrite le savoir accumulé durant des milliers d'années d'existence sur cette planète, octroyant ainsi un bonus à la Recherche. Cette structure sera détruite si la population planétaire est réduite à zéro.'''
 
@@ -11018,7 +12165,7 @@ BLD_AUTO_HISTORY_ANALYSER
 Analyseur Historique Automatisé
 
 BLD_AUTO_HISTORY_ANALYSER_DESC
-'''L' Analyseur Historique Automatisé peut être construit sur une planète abritant des [[buildingtype BLD_CULTURE_ARCHIVES]]. Augmente la [[metertype METER_RESEARCH]] Optimale de 5.
+'''L' Analyseur Historique Automatisé peut être construit sur une planète abritant des [[buildingtype BLD_CULTURE_ARCHIVES]]. Augmente la Projection [[metertype METER_RESEARCH]] de 5.
 
 Un centre de recherche automatisé doté d'une énorme puissance de calcul, parcourant continuellement la multitude de données au sein des archives  culturelles, afin de faire émerger de possibles analogies, d'établir des parallèles interdisciplinaires, ou bien de redécouvrir des concepts tombés dans l'oubli ou non finalisés.'''
 
@@ -11142,7 +12289,7 @@ Base Bioterroriste
 BLD_BIOTERROR_PROJECTOR_DESC
 '''Donne accès au Focus Bioterrorisme à la planète sur laquelle est construite la Base Bioterroriste. Cela a pour effet de réduire de 2 par tour la Population des planètes ennemies, seulement si ces dernières sont distantes de quatre Voies spatiales ou moins et si l'empire ennemi ne dispose pas d'une [[buildingtype BLD_GENOME_BANK]].
 
-Cette base clandestine d'armements biologiques provoque des ravages sur les planètes ennemies à proximité, en réduisant progressivement la Population de ces dernières jusqu'à extermination totale. Cependant, de telles activités n'étant pas approuvées par les lois galactiques, cette structure ne peut être construite que sur une planète autour de laquelle orbite une [[special RESONANT_MOON_SPECIAL]], et s'avère sans effets si l'empire ennemi dispose d'une Banque du Génome. Cette structure peut être construite sur un [[encyclopedia OUTPOSTS_TITLE]], si une Lune Synchrone orbite également autour de ce dernier.'''
+Cette base clandestine d'armements biologiques provoque des ravages sur les planètes ennemies à proximité, en réduisant progressivement la Population de ces dernières jusqu'à extermination totale. Cependant, de telles activités n'étant pas approuvées par les lois galactiques, cette structure ne peut être construite que sur une planète autour de laquelle orbite une [[special RESONANT_MOON_SPECIAL]], et s'avère sans effets si l'empire ennemi dispose d'une Banque du Génome. [[BUILDING_AVAILABLE_ON_OUTPOSTS]], si une Lune Synchrone orbite également autour de ce dernier.'''
 
 BLD_LIGHTHOUSE
 Phare Interstellaire
@@ -11162,12 +12309,31 @@ BLD_INDUSTRY_CENTER
 Centre Industriel
 
 BLD_INDUSTRY_CENTER_DESC
-'''Augmente l'indicateur [[metertype METER_INDUSTRY]] de 0.2 par Population sur toutes les planètes lui étant reliées par ligne d'[[metertype METER_SUPPLY]] et étant réglées sur le Focus Industrie.
+'''Augmente l'[[metertype METER_INDUSTRY]] de 0.2 par Population sur toutes les planètes lui étant reliées par ligne d'[[metertype METER_SUPPLY]] et étant réglées sur le Focus Industrie.
 [[NO_STACK_SUPPLY_CONNECTION_TEXT]]
 
 L'amélioration [[tech PRO_INDUSTRY_CENTER_II]] double le bonus de base.
 
 L'amélioration [[tech PRO_INDUSTRY_CENTER_III]] triple le bonus de base.'''
+
+BLD_INTERSPECIES_ACADEMY
+Académie InterDesign d'Espèce
+
+BLD_INTERSPECIES_ACADEMY_DESC
+'''Augmente le Stock de 10 sur la planète, si cette dernière est réglée sur le Focus Stock.
+Augmente la [[metertype METER_RESEARCH]] de 5 sur la planète, si cette dernière est réglée sur le Focus Recherche.
+
+Apprendre à concevoir des dispositifs utilisables par différentes espèces est crucial afin de développer des outils universellement exploitables.
+
+Chaque empire peut abriter une académie sur une à six planètes peuplées par différentes espèces. Pour accueillir une académie, le Bonheur de la Population sur la planète doit être élevé et cette dernière doit se trouver à au moins trois Voies spatiales de l'académie existante la plus proche.'''
+
+BLD_STOCKPILING_CENTER
+Centre d'Intrication Impériale
+
+BLD_STOCKPILING_CENTER_DESC
+'''Augmente le [[metertype METER_STOCKPILE]] de 0.1 par [[metertype METER_INDUSTRY]].
+
+Au lieu de recourir à l'implantation classique d'infastructures associant le lieu de production et la main d'œuvre planétaire, un noyau central peut permettre la connexion entre n'importe quelle infrastructure et main d'œuvre disponible. Cela engendre une très grande flexibilité des lieux de production.'''
 
 BLD_MEGALITH
 Mégalithe
@@ -11211,7 +12377,7 @@ BLD_COLLECTIVE_NET
 Réseau de Pensée Collective
 
 BLD_COLLECTIVE_NET_DESC
-'''Augmente l'[[metertype METER_INDUSTRY]] de 0.5 par Population sur toutes les planètes réglées sur le Focus Industrie, et la [[metertype METER_RESEARCH]] de 0.5 par Population sur toutes les planètes réglées sur le Focus Recherche. Tout trajet sur Voies spatiales dans un périmètre de 200 uu affaiblira l'efficacité de cette structure et supprimera tout bonus.
+'''Augmente l'[[metertype METER_INDUSTRY]] de 0.5 par Population sur toutes les planètes en Focus Industrie, et la [[metertype METER_RESEARCH]] de 0.5 par Population sur toutes les planètes en Focus Recherche. Tout voyage sur Voies spatiales dans un périmètre de 200 uu affaiblira l'efficacité de cette structure et supprimera tout bonus.
 [[NO_STACK_SUPPLY_CONNECTION_TEXT]]
 
 En transférant l'esprit dans le cyberespace, des milliers d'esprits peuvent agir comme un seul, résolvant des problèmes et faisant des découvertes qui s'avéreraient hors de portée pour un unique esprit, aussi brillant soit-il.'''
@@ -11228,7 +12394,7 @@ BLD_ENCLAVE_VOID
 Enclave Du Vide
 
 BLD_ENCLAVE_VOID_DESC
-'''Augmente la [[metertype METER_RESEARCH]] Optimale de 0.75 par Population sur toutes les planètes réglées sur le Focus Recherche.
+'''Augmente la Projection [[metertype METER_RESEARCH]] de 0.75 par Population sur toutes les planètes en Focus Recherche.
 Les bonus de plusieurs exemplaires ne s'additionnent pas.
 
 La population entière d'une planète est modifiée génétiquement afin de l'harmoniser avec l'Esprit du Vide, et ainsi diffuser sa sagesse dans tout l'empire. Les habitants de l'Enclave du Vide sont considérés comme des prêtres, prophètes d'une pensée supérieure et d'un savoir suprême. Dans tous les domaines de grande importance pour la bonne marche de l'empire, leurs conseils et avis s'avèrent d'une grande valeur. Des émissaires de l'Enclave peuvent donc prendre part à tout projet impérial de Recherche et apporter ainsi une aide précieuse.'''
@@ -11249,7 +12415,7 @@ BLD_HYPER_DAM
 Barrage Hyperspatial
 
 BLD_HYPER_DAM_DESC
-'''Pour les planètes non-reliées à un [[buildingtype BLD_BLACK_HOLE_POW_GEN]], augmente l'[[metertype METER_INDUSTRY]] Optimale de 1 par Population sur toutes les planètes reliées par lignes d'[[metertype METER_SUPPLY]] et réglées sur le Focus Industrie, mais diminue la Population de ces planètes selon leur taille : ([[SZ_TINY]] -1) ([[SZ_SMALL]] -2) ([[SZ_MEDIUM]] -3) ([[SZ_LARGE]] -4) ([[SZ_HUGE]] -5).
+'''Pour les planètes non-reliées à un [[buildingtype BLD_BLACK_HOLE_POW_GEN]], augmente la Projection [[metertype METER_INDUSTRY]] de 1 par Population sur toutes les planètes reliées par lignes d'[[metertype METER_SUPPLY]] et réglées sur le Focus Industrie, mais diminue la Population de ces planètes selon leur taille : ([[SZ_TINY]] -1) ([[SZ_SMALL]] -2) ([[SZ_MEDIUM]] -3) ([[SZ_LARGE]] -4) ([[SZ_HUGE]] -5).
 [[NO_STACK_SUPPLY_CONNECTION_TEXT]]
 
 Une déchirure dans le tissu de l'univers, contrôlée et manipulée en toute sécurité. Chaque planète peut construire son propre barrage hyperspatial, mais un seul centre de contrôle est requis pour s'assurer que le continuum de l'espace-temps n'est pas endommagé. Par contre, toutes les planètes ayant recours à un barrage hyperspatial voient leur population souffrir de différents problèmes de santé, à moins que les planètes en question n'orbitent autour d'un [[STAR_BLACK]].
@@ -11266,9 +12432,9 @@ BLD_SOL_ORB_GEN
 Générateur Orbital Solaire
 
 BLD_SOL_ORB_GEN_DESC
-'''Augmente l'[[metertype METER_INDUSTRY]] Optimale sur toutes les planètes lui étant reliées par ligne d'[[metertype METER_SUPPLY]], par Population et selon le type d'étoile :
+'''Augmente la Projection [[metertype METER_INDUSTRY]] sur toutes les planètes lui étant reliées par ligne d'[[metertype METER_SUPPLY]], par Population et selon le type d'étoile :
 * [[STAR_BLUE]] ou [[STAR_WHITE]] (x0.4)
-* [[STAR_YELLOW]] ou [[STAR_ORANGE]] (x0.2) 
+* [[STAR_YELLOW]] ou [[STAR_ORANGE]] (x0.2)
 * [[STAR_RED]] (x0.1)
 [[NO_STACK_SUPPLY_CONNECTION_TEXT]] Le meilleur bonus s'applique.
 
@@ -11300,6 +12466,12 @@ Terraformeur à Distance
 BLD_REMOTE_TERRAFORM_DESC
 Terraforme une planète en un type d'[[encyclopedia ENVIRONMENT_TITLE]] un palier plus proche de l'Environnement favori de l'espèce. Ce processus peut être enclenché depuis un [[encyclopedia OUTPOSTS_TITLE]].
 
+BLD_NEST_ERADICATOR
+Éradicateur de Nid
+
+BLD_NEST_ERADICATOR_DESC
+Éradique un [[encyclopedia KRAKEN_NEST_SPECIAL]], un [[encyclopedia SNOWFLAKE_NEST_SPECIAL]], ou un [[encyclopedia JUGGERNAUT_NEST_SPECIAL]] de la planète sur laquelle le dispositif est mis en place. [[BUILDING_AVAILABLE_ON_OUTPOSTS]].
+
 BLD_NEUTRONIUM_EXTRACTOR
 Extracteur Neutronium
 
@@ -11328,9 +12500,9 @@ BLD_CONC_CAMP
 Camps de Concentration
 
 BLD_CONC_CAMP_DESC
-'''Réduit la Population d'une planète de 3 par tour, et augmente l'[[metertype METER_INDUSTRY]] Optimale de 5 fois la population planétaire. Le [[metertype METER_HAPPINESS]] Optimal est réduit à 0.
+'''Réduit la Population d'une planète de 3 par tour, et augmente la Projection [[metertype METER_INDUSTRY]] de 5 fois la population planétaire. La Projection [[metertype METER_HAPPINESS]] est réduite à 0.
 
-Purger une planète d'une espèce indésirable permet l'introduction d'une espèce plus adaptée. En créant un réseau planétaire de camps de concentration conçus pour abattre les internés à la tâche, il est possible d'atteindre rapidement et efficacement le but fixé. Cette structure peut être construite sur un [[encyclopedia OUTPOSTS_TITLE]].'''
+Purger une planète d'une espèce indésirable permet l'introduction d'une espèce plus adaptée. En créant un réseau planétaire de camps de concentration conçus pour abattre les internés à la tâche, il est possible d'atteindre rapidement et efficacement le but fixé.'''
 
 BLD_CONC_CAMP_REMNANT
 Vestiges de Camps de Concentration
@@ -11431,7 +12603,7 @@ BLD_GAS_GIANT_GEN
 Convertisseur de Géante Gazeuse
 
 BLD_GAS_GIANT_GEN_DESC
-'''Cette structure ne peut être construite que sur une [[PT_GASGIANT]] et augmente de 10 l'indicateur [[metertype METER_INDUSTRY]] sur les planètes du même système réglées sur le Focus Industrie.
+'''Cette structure ne peut être construite que sur une [[PT_GASGIANT]] et augmente de 10 l'[[metertype METER_INDUSTRY]] sur les planètes du même système réglées sur le Focus Industrie.
 Les bonus de plusieurs exemplaires dans le même système ne s'additionnent pas.
 
 Un puissant générateur conçu pour puiser l'énergie des Géantes Gazeuses.'''
@@ -11532,6 +12704,12 @@ Colonie Furthest
 BLD_COL_FURTHEST_DESC
 [[BLD_COL_PART_1]] colonie [[species SP_FURTHEST]]. [[BLD_COL_PART_2]] colonie Furthest [[BLD_COL_PART_3]].
 
+BLD_COL_FULVER
+Colonie Fulver
+
+BLD_COL_FULVER_DESC
+[[BLD_COL_PART_1]] colonie [[species SP_FULVER]]. [[BLD_COL_PART_2]] colonie Fulver [[BLD_COL_PART_3]].
+
 BLD_COL_GEORGE
 Colonie George
 
@@ -11598,6 +12776,12 @@ Colonie Phinnert
 BLD_COL_PHINNERT_DESC
 [[BLD_COL_PART_1]] colonie [[species SP_PHINNERT]]. [[BLD_COL_PART_2]] colonie Phinnert [[BLD_COL_PART_3]].
 
+BLD_COL_REPLICON
+Colonie Replicon
+
+BLD_COL_REPLICON_DESC
+[[BLD_COL_PART_1]] colonie [[species SP_REPLICON]]. [[BLD_COL_PART_2]] colonie Replicon [[BLD_COL_PART_3]].
+
 BLD_COL_SCYLIOR
 Colonie Scylior
 
@@ -11615,6 +12799,12 @@ Colonie Silexian
 
 BLD_COL_SILEXIAN_DESC
 [[BLD_COL_PART_1]] colonie [[species SP_SILEXIAN]]. [[BLD_COL_PART_2]] colonie Silexian [[BLD_COL_PART_3]].
+
+BLD_COL_SLY
+Colonie Sly
+
+BLD_COL_SLY_DESC
+[[BLD_COL_PART_1]] colonie [[species SP_SLY]]. [[BLD_COL_PART_2]] colonie Sly [[BLD_COL_PART_3]].
 
 BLD_COL_SSLITH
 Colonie Sslith
@@ -11688,11 +12878,11 @@ PART_DESC_DIRECT_FIRE_STATS
 '''[[encyclopedia DAMAGE_TITLE]] par tir : %1%
 Tirs par Attaque : %2%'''
 
-# %1% ship part damage done (fighters).
-# %2% number of deployable fighters.
+# %1% number of deployable fighters.
+# %2% ship part damage done (fighters).
 PART_DESC_HANGAR_STATS
-'''[[encyclopedia DAMAGE_TITLE]] par tir : %2%
-Capacité [[encyclopedia FIGHTER_TECHS]] : %1%'''
+'''Capacité [[encyclopedia FIGHTER_TECHS]] : %1%
+[[encyclopedia DAMAGE_TITLE]] par tir : %2%'''
 
 
 ##
@@ -11741,10 +12931,10 @@ Hangar 4
 FT_HANGAR_4_DESC
 Système de stockage pour chasseurs lourdement armés.
 
-FT_KRILL
+FT_HANGAR_KRILL
 Essaim Krill
 
-FT_KRILL_DESC
+FT_HANGAR_KRILL_DESC
 Essaim de Krill.
 
 FT_BAY_KRILL
@@ -11779,8 +12969,7 @@ SR_WEAPON_2_1_DESC
 
 Améliorer la technologie de cet armement augmentera la valeur des dommages par tir.
 
-Les [[encyclopedia DAMAGE_TITLE]] d'un armement combinent la valeur des dommages par tir et celle de tout modificateur actif. Chaque Canon Laser monté sur un astronef construit par une espèce présentant l'attribut "Pilotes", infligera des dommages additionnels de 2 par rang de Pilotes (-2 pour "Mauvais Pilotes"). Les dommages du Canon Laser peuvent également être améliorés sur les astronefs dotés d'une [[shiphull SH_ORGANIC]] couplée à un [[shippart SP_SOLAR_CONCENTRATOR]].
-'''
+Les [[encyclopedia DAMAGE_TITLE]] d'un armement combinent la valeur des dommages par tir et celle de tout modificateur actif. Chaque Canon Laser monté sur un astronef construit par une espèce présentant l'attribut "Pilotes", infligera des dommages additionnels de 2 par rang de Pilotes (-2 pour "Mauvais Pilotes"). Les dommages du Canon Laser peuvent également être améliorés sur les astronefs dotés d'une [[shiphull SH_ORGANIC]] couplée à un [[shippart SP_SOLAR_CONCENTRATOR]].'''
 
 SR_WEAPON_3_1
 Canon Plasma
@@ -11812,13 +13001,13 @@ SR_JAWS
 Mâchoires
 
 SR_JAWS_DESC
-Mâchoires provenant d'un monstre de l'espace et en mesure d'endommager les astronefs. Les monstres spatiaux de très grande taille sont même capables de dévorer des flottes entières.
+Mâchoires provenant d'un monstre spatial et en mesure d'endommager les astronefs. Les monstres spatiaux de très grande taille sont même capables de dévorer des flottes entières.
 
 SR_SPINES
 Épines
 
 SR_SPINES_DESC
-Épines provenant d'un monstre de l'espace, à l'aide desquelles une frappe puissante peut sérieusement endommager un astronef.
+Épines provenant d'un monstre spatial, à l'aide desquelles une frappe puissante peut sérieusement endommager un astronef.
 
 SR_TENTACLE
 Tentacule
@@ -11830,13 +13019,13 @@ SR_PLASMA_DISCHARGE
 Décharge Plasma
 
 SR_PLASMA_DISCHARGE_DESC
-Décharge Plasma produite par un monstre de l'espace, en mesure de faire fondre la plupart des blindages.
+Décharge Plasma produite par un monstre spatial, en mesure de faire fondre la plupart des blindages.
 
 SR_ICE_BEAM
 Laser Démultiplié
 
 SR_ICE_BEAM_DESC
-Lasers de grande puissance, intégrés au corps d'un monstre de l'espace.
+Lasers de grande puissance, intégrés au corps d'un monstre spatial.
 
 SR_ION_CANNON
 Canon Ionique
@@ -11952,51 +13141,52 @@ Capteurs
 DT_DETECTOR_4_DESC
 Détection à très longue portée.
 
+FU_ENGINE_PART_LIMIT
+Un seul équipement de motorisation peut être intégré à un astronef.
+
 FU_IMPROVED_ENGINE_COUPLINGS
 Couplage de Motorisation Améliorée
 
 FU_IMPROVED_ENGINE_COUPLINGS_DESC
-'''Augmente de 10 la [[metertype METER_SPEED]].
+'''De meilleurs éléments de motorisation, résultent de meilleurs moteurs.
 
-De meilleurs éléments de motorisation fournissent de meilleurs moteurs.'''
+- Augmente de 20 la [[metertype METER_SPEED]].
+- [[FU_ENGINE_PART_LIMIT]]'''
 
 FU_N_DIMENSIONAL_ENGINE_MATRIX
 Matrice de Motorisation Multidimensionnelle
 
 FU_N_DIMENSIONAL_ENGINE_MATRIX_DESC
-'''Augmente de 20 la [[metertype METER_SPEED]].
+'''La recherche concernant les espaces multidimensionnels a rendu possible le développement de meilleures matrices de motorisation.
 
-La recherche concernant les espaces multidimensionnels a rendu possible le développement de meilleures matrices de motorisation.'''
+- Augmente de 40 la [[metertype METER_SPEED]].
+- [[FU_ENGINE_PART_LIMIT]]'''
 
 FU_SINGULARITY_ENGINE_CORE
 Noyau de Motorisation à Singularité
 
 FU_SINGULARITY_ENGINE_CORE_DESC
-Augmente de 30 la [[metertype METER_SPEED]]. Dispositif dérivé de la structure [[buildingtype BLD_HYPER_DAM]] et adapté en taille pour les astronefs, le Noyau de Motorisation à Singularité accroît considérablement la génération d'énergie.
+'''Dispositif derivé de la structure [[buildingtype BLD_HYPER_DAM]] et miniaturisé pour les astronefs, le Noyau de Motorisation à Singularité accroît considérablement la génération d'énergie.
+
+- Augmente de 80 la [[metertype METER_SPEED]].
+- [[FU_ENGINE_PART_LIMIT]]'''
 
 FU_TRANSPATIAL_DRIVE
 Propulsion Trans-Spatiale
 
 FU_TRANSPATIAL_DRIVE_DESC
-Un dispositif de motorisation incroyablement puissant capable de courber l'espace-temps lui-même, augmentant à la fois la [[metertype METER_SPEED]] et la [[metertype METER_STEALTH]] d'un astronef de 40. Ne peut être monté que dans la [[encyclopedia SLOT_TITLE]] Centrale d'un astronef. Les bonus de Furtivité des équipements d'astronef ne s'additionnent pas.
+'''Un dispositif de motorisation incroyablement puissant capable de courber l'espace-temps lui-même.
+
+- Augmente de 60 la [[metertype METER_SPEED]].
+- Augmente de 40 la [[metertype METER_STEALTH]].
+- Les bonus de Furtivité des équipements d'astronef ne s'additionnent pas.
+- [[FU_ENGINE_PART_LIMIT]]'''
 
 FU_BASIC_TANK
 Réservoir Additionnel de Carburant
 
 FU_BASIC_TANK_DESC
-Augmente la capacité en [[metertype METER_FUEL]] d'un astronef, permettant un voyage supplémentaire sur une Voie spatiale.
-
-FU_DEUTERIUM_TANK
-Réservoir de Deutérium
-
-FU_DEUTERIUM_TANK_DESC
-Augmente la capacité en [[metertype METER_FUEL]] d'un astronef. Volumineux et vulnérable à toute puissance de feu.
-
-FU_ANTIMATTER_TANK
-Réservoir d'Anti-Matière
-
-FU_ANTIMATTER_TANK_DESC
-Augmente la capacité en [[metertype METER_FUEL]] d'un astronef. Compact et solide.
+Augmente la capacité en [[metertype METER_FUEL]] d'un astronef, permettant un voyage supplémentaire sur une Voie spatiale. Des technologies plus avancées augmenteront le nombre de voyages supplémentaires pour chaque réservoir de carburant équipant un astronef.
 
 FU_ZERO_FUEL
 Générateur Zero-Point de Carburant
@@ -12134,7 +13324,7 @@ SH_ROBOTIC_INTERFACE_SHIELDS
 Boucliers à Interface Robotique
 
 SH_ROBOTIC_INTERFACE_SHIELDS_DESC
-'''Les Boucliers à Interface Robotique ont approximativement une solidité de 1 multipliée par le nombre des autres astronefs situés au même emplacement et équipés du même bouclier. Cette valeur tend à diminuer lorsqu'un grand nombre d'astronefs est atteint et l'effet ne s'applique qu'aux astronefs dont l'équipage est une espèce à [[encyclopedia ROBOTIC_SPECIES_TITLE]]. La solidité du bouclier ne peut dépasser 20 et ce dernier ne peut équiper que les coques suivantes: la [[shiphull SH_ROBOTIC]], la [[shiphull SH_SELF_GRAVITATING]], la [[shiphull SH_NANOROBOTIC]], la [[shiphull SH_LOGISTICS_FACILITATOR]], et la [[shiphull SH_TITANIC]].
+'''Les Boucliers à Interface Robotique ont approximativement une solidité de 1 multipliée par le nombre des autres astronefs situés au même emplacement et équipés du même bouclier, bien que cette valeur tende à diminuer lorsqu'un grand nombre d'astronefs est concerné. La solidité du bouclier ne peut dépasser 20, l'effet ne s'applique qu'aux astronefs de [[encyclopedia HULL_LINE_ROBOTIC]] et dont l'équipage est une espèce à [[encyclopedia ROBOTIC_SPECIES_TITLE]].
 
 Les Espèces Robotiques ont la capacité intrinsèque de fonctionner en réseau et augmentent ainsi considérablement leur puissance de calcul pure. Les Boucliers à Interface Robotique utilisent ce réseau afin de calculer la trajectoire du feu ennemi et concentrer la solidité du bouclier au point d'impact.
 '''
@@ -12159,7 +13349,7 @@ CO_OUTPOST_POD
 Module d'Avant-Poste
 
 CO_OUTPOST_POD_DESC
-'''Les Modules d'[[encyclopedia OUTPOSTS_TITLE]] permettent d'établir des stations non-habitées et peuvent être installés sur des planètes inhabitables. Ces modules n'ont aucune population et ne produisent normalement aucune ressource, mais offrent une extension des lignes d'[[metertype METER_SUPPLY]] lorsque la technologie nécessaire est assimilée. Les Modules d'Avant-Poste peuvent évoluer en colonies.
+'''Les Modules d'[[encyclopedia OUTPOSTS_TITLE]] permettent d'établir des stations non-habitées et peuvent être installés sur des planètes inhabitables. Ces modules n'ont aucune population et ne produisent normalement aucune ressource, mais permettent de découvrir une zone donnée et offrent une extension des lignes d'[[metertype METER_SUPPLY]] lorsque la technologie nécessaire est assimilée. Les Modules d'Avant-Poste peuvent évoluer en colonies.
 
 [[COLONY_SHIP_PARTS_UPKEEP_COST]]'''
 
@@ -12273,13 +13463,13 @@ SP_SOLAR_CONCENTRATOR
 Concentrateur Solaire
 
 SP_SOLAR_CONCENTRATOR_DESC
-Le Concentrateur Solaire utilise la capacité phototropique des coques de type [[tech SHP_ORG_HULL]] afin d'augmenter la puissance des [[tech SHP_WEAPON_2_1]]. Son efficacité dépend de la luminosité de l'étoile locale, pour un gain de puissance estimé entre 1.5 et 4.5. La recherche de la [[tech SHP_SOLAR_CONNECTION]] permet d'accroître la surface collectrice du Concentrateur Solaire afin d'en maximiser l'effet.
+Le Concentrateur Solaire utilise la capacité phototropique des astronefs de [[encyclopedia HULL_LINE_ORGANIC]] afin d'augmenter la puissance des [[tech SHP_WEAPON_2_1]]. Son efficacité dépend de la luminosité de l'étoile locale, pour un gain de puissance estimé entre 1.5 et 4.5. La recherche de la [[tech SHP_SOLAR_CONNECTION]] permet d'accroître la surface collectrice du Concentrateur Solaire afin d'en maximiser l'effet.
 
 SHP_SOLAR_CONNECTION
 Toile Solaire
 
 SHP_SOLAR_CONNECTION_DESC
-Cette amélioration du [[shippart SP_SOLAR_CONCENTRATOR]] est contrôlée par l'équipage des astronefs. Elle permet à chaque astronef d'établir un réseau énergétique avec l'ensemble des astronefs de l'empire se trouvant dans le même système stellaire. La [[SHP_SOLAR_CONNECTION]] fournit une surface additionnelle permettant de collecter des photons, ces derniers étant alors uniformément répartis entre chaque coque de type [[tech SHP_ORG_HULL]]. En théorie et dans des conditions optimales, les toiles gigantesques peuvent accroître la puissance des [[tech SHP_WEAPON_2_1]] de 130%. Une approche plus pragmatique démontre qu'une augmentation de 80% nécessite 100 concentrateurs, tandis que 20 concentrateurs fournissent une amplification de 50%. La [[SHP_SOLAR_CONNECTION]] finement tissée se brise lorsqu'un astronef du réseau entre sur une voie spatiale, tandis que ses effets d'augmentation de puissance disparaissent peu après.
+Cette amélioration du [[shippart SP_SOLAR_CONCENTRATOR]] est contrôlée par l'équipage des astronefs. Elle permet à chaque astronef d'établir un réseau énergétique avec l'ensemble des astronefs de l'empire se trouvant dans le même système stellaire. La [[SHP_SOLAR_CONNECTION]] fournit une surface additionnelle permettant de collecter des photons, ces derniers étant alors uniformément répartis entre les astronefs de [[encyclopedia HULL_LINE_ORGANIC]]. En théorie et dans des conditions optimales, les toiles gigantesques peuvent accroître la puissance des [[tech SHP_WEAPON_2_1]] de 130%. Une approche plus pragmatique démontre qu'une augmentation de 80% nécessite 100 concentrateurs, tandis que 20 concentrateurs fournissent une amplification de 50%. La [[SHP_SOLAR_CONNECTION]] finement tissée se brise lorsqu'un astronef du réseau entre sur une voie spatiale, tandis que ses effets d'augmentation de puissance disparaissent peu après.
 
 SHP_SOLAR_CONNECTION_SHORT_DESC
 Établit un réseau [[SP_SOLAR_CONCENTRATOR]]
@@ -12288,7 +13478,7 @@ SHP_ORGANIC_WAR_ADAPTION
 Guerre Organique Adaptive
 
 SHP_ORGANIC_WAR_ADAPTION_DESC
-Il semble que les coques de type [[tech SHP_ORG_HULL]] soient capables de collecter l'énergie photonique, laquelle peut être redirigée afin d'augmenter la puissance de certains équipements d'astronef.
+Il semble que les astronefs de [[encyclopedia HULL_LINE_ORGANIC]] soient capables de collecter l'énergie photonique, laquelle peut être redirigée afin d'augmenter la puissance de certains équipements d'astronef.
 
 SHP_ORGANIC_WAR_ADAPTION_SHORT_DESC
 Augmente la puissance du [[SR_WEAPON_2_1]] selon l'étoile environnante.
@@ -12338,6 +13528,18 @@ Coque Flux Spatial
 SH_SPATIAL_FLUX_DESC
 '''Cette minuscule coque est capable d'atteindre une vitesse optimale sur de longues distances en raison de la puissance fournie par la technologie de [[tech SHP_SPACE_FLUX_DRIVE]]. Elle ne dispose cependant que de deux niches externes et sa [[metertype METER_STRUCTURE]] max est faible.
  
+Sa [[metertype METER_STEALTH]] débute à 15, augmente de 10 si l'astronef est réglé sur '[[FW_PASSIVE]]', mais diminue de 30 pour tout déplacement durant un tour. Les avancées permises par les technologies telles que l'[[tech SPY_STEALTH_PART_1]] permettent à l'équipage d'accroître de 10 la Furtivité de l'astronef pour chaque recherche effectuée dans cette branche.
+
+Son [[metertype METER_DETECTION]] est standard, tandis que sa [[metertype METER_SPEED]] est moyenne.
+
+[[BLD_SHIPYARD_BASE_ORBITAL_DRYDOCK_REQUIRED]]'''
+
+SH_SPACE_FLUX_BUBBLE
+Coque Bulle Flux Spatial
+
+SH_SPACE_FLUX_BUBBLE_DESC
+'''Cette minuscule coque est capable d'atteindre une vitesse optimale sur de longues distances en raison de la puissance fournie par la technologie de [[tech SHP_SPACE_FLUX_BUBBLE]]. Elle ne dispose cependant que d'une niche interne et sa [[metertype METER_STRUCTURE]] max est faible.
+
 Sa [[metertype METER_STEALTH]] débute à 15, augmente de 10 si l'astronef est réglé sur '[[FW_PASSIVE]]', mais diminue de 30 pour tout déplacement durant un tour. Les avancées permises par les technologies telles que l'[[tech SPY_STEALTH_PART_1]] permettent à l'équipage d'accroître de 10 la Furtivité de l'astronef pour chaque recherche effectuée dans cette branche.
 
 Son [[metertype METER_DETECTION]] est standard, tandis que sa [[metertype METER_SPEED]] est moyenne.
@@ -12398,7 +13600,7 @@ SH_ASTEROID
 Coque Astéroïdale
 
 SH_ASTEROID_DESC
-'''Cette coque est conçue à partir d'un astéroïde de taille moyenne et s'avère assez économique à produire. Légèrement plus spacieuse que la [[shiphull SH_STANDARD]], elle dispose de quatre niches externes et de deux niches internes.
+'''Cette coque est conçue à partir d'un astéroïde de taille moyenne et s'avère assez économique à produire. Légèrement plus spacieuse que la [[shiphull SH_BASIC_LARGE]], elle dispose de quatre niches externes et de deux niches internes.
 
 Sa [[metertype METER_STEALTH]] est standard mais cette coque bénéficie d'un bonus conséquent de Furtivité lorsqu'elle se trouve dans un système abritant une Ceinture d'Astéroïdes, ou en combat lorsqu'elle se dissimule dans une Ceinture d'Astéroïdes. Son [[metertype METER_DETECTION]] est standard et sa [[metertype METER_SPEED]] est faible.
 
@@ -12688,10 +13890,10 @@ Sa [[metertype METER_STEALTH]] est standard de même que son [[metertype METER_D
 
 [[BLD_SHIPYARD_BASE_REQUIRED]]'''
 
-SH_STANDARD
+SH_BASIC_LARGE
 Coque Basique Massive
 
-SH_STANDARD_DESC
+SH_BASIC_LARGE_DESC
 '''Une coque interstellaire de base pour astronef de grande taille. Elle dispose de trois niches externes et d'une niche interne.
 
 Sa [[metertype METER_STEALTH]] est standard de même que son [[metertype METER_DETECTION]], tandis que sa [[metertype METER_SPEED]] est faible.
@@ -12799,25 +14001,25 @@ SH_KRAKEN_1_BODY
 Corps Kraken Larvaire
 
 SH_KRAKEN_1_BODY_DESC
-Un formidable monstre de l'espace de petite taille.
+Un formidable monstre spatial de petite taille.
 
 SH_KRAKEN_2_BODY
 Corps Kraken
 
 SH_KRAKEN_2_BODY_DESC
-Un formidable monstre de l'espace de taille intermédiaire.
+Un formidable monstre spatial de taille intermédiaire.
 
 SH_KRAKEN_3_BODY
 Corps Kraken Massif
 
 SH_KRAKEN_3_BODY_DESC
-Un formidable monstre de l'espace de grande taille.
+Un formidable monstre spatial de grande taille.
 
 SH_WHITE_KRAKEN_BODY
 Corps Kraken Blanc
 
 SH_WHITE_KRAKEN_BODY_DESC
-Un ancêtre préhistorique à la peau blanche du monstre de l'espace Kraken.
+Un ancêtre préhistorique à la peau blanche du monstre spatial Kraken.
 
 SH_BLACK_KRAKEN_BODY
 Corps Kraken Noir
@@ -12829,49 +14031,49 @@ SH_SNOWFLAKE_1_BODY
 Corps Flocon Juvénile
 
 SH_SNOWFLAKE_1_BODY_DESC
-Un redoutable monstre de l'espace de petite masse.
+Un redoutable monstre spatial de petite masse.
 
 SH_SNOWFLAKE_2_BODY
 Corps Flocon
 
 SH_SNOWFLAKE_2_BODY_DESC
-Un redoutable monstre de l'espace de petite masse.
+Un redoutable monstre spatial de petite masse.
 
 SH_SNOWFLAKE_3_BODY
 Corps Flocon Massif
 
 SH_SNOWFLAKE_3_BODY_DESC
-Un redoutable monstre de l'espace de petite masse.
+Un redoutable monstre spatial de petite masse.
 
 SH_PSIONIC_SNOWFLAKE_BODY
 Corps Flocon Psionique
 
 SH_PSIONIC_SNOWFLAKE_BODY_DESC
-Un monstre de l'espace doté de puissantes capacités mentales.
+Un monstre spatial doté de puissantes capacités mentales.
 
 SH_JUGGERNAUT_1_BODY
 Corps Mastodonte Juvénile
 
 SH_JUGGERNAUT_1_BODY_DESC
-Un redoutable monstre de l'espace de masse importante.
+Un redoutable monstre spatial de masse importante.
 
 SH_JUGGERNAUT_2_BODY
 Corps Mastodonte
 
 SH_JUGGERNAUT_2_BODY_DESC
-Un redoutable monstre de l'espace de masse importante.
+Un redoutable monstre spatial de masse importante.
 
 SH_JUGGERNAUT_3_BODY
 Corps Mastodonte Massif
 
 SH_JUGGERNAUT_3_BODY_DESC
-Un redoutable monstre de l'espace de masse importante.
+Un redoutable monstre spatial de masse importante.
 
 SH_BLOATED_JUGGERNAUT_BODY
 Corps Mastodonte Déformé
 
 SH_BLOATED_JUGGERNAUT_BODY_DESC
-Un monstre de l'espace exceptionnellment grand et massif.
+Un monstre spatial exceptionnellement grand et massif.
 
 SH_NEBULOUS_BODY
 Corps Nébuleux
@@ -12886,7 +14088,7 @@ SH_COSMIC_DRAGON_BODY
 Corps Dragon Cosmique
 
 SH_COSMIC_DRAGON_BODY_DESC
-Un terrifiant dragon de l'espace de la taille d'une petite planète.
+Un terrifiant dragon spatial de la taille d'une petite planète.
 
 SH_DAMPENING_CLOUD_BODY
 Corps Nuage Siphonnant
@@ -13111,7 +14313,7 @@ quel que soit l'[[encyclopedia ENVIRONMENT_TITLE]] planétaire.
 Si cette planète est réglée sur le [[encyclopedia GROWTH_FOCUS_TITLE]], le bonus s'applique également à tous les autres mondes connectés par lignes d'[[metertype METER_SUPPLY]] et peuplés d'espèces à'''
 
 GROWTH_SPECIAL_INDUSTRY_BOOST
-Si cette planète est réglée sur le Focus Industrie, son [[metertype METER_INDUSTRY]] Optimale augmente de 0.2 par Population.
+Si cette planète est réglée sur le Focus Industrie, sa Projection [[metertype METER_INDUSTRY]] augmente de 0.2 par Population.
 
 GROWTH_SPECIALS_ENTRY_LIST
 '''Les planètes présentant une Particularité de Croissance et réglées sur le Focus Croissance favorisent seulement une classification d'espèces. Certaines Particularités ne fonctionnent que pour les espèces organiques, d'autres pour les espèces lithiques, et enfin d'autres pour les espèces robotiques.
@@ -13247,17 +14449,24 @@ GREAT_WEAPONS_DESC
 ULTIMATE_WEAPONS_DESC
 +++	Parfaits Pilotes : dommages de base par armement d'astronef augmentés de trois niveaux.
 
+GASEOUS_DESC
+'''+	Vie sur Géantes Gazeuses
++	Ravitaillement Carburant sur Géantes Gazeuses 0.1'''
+
 BAD_POPULATION_DESC
-−	Faible Population : 75%
+−	Mauvais en [[metertype METER_POPULATION]] : 75%
 
 AVERAGE_POPULATION_DESC
-'''	Population normale'''
+'''	Normal en [[metertype METER_POPULATION]] : 100%'''
 
 GOOD_POPULATION_DESC
-+	Grande Population : 125%
++	Bon en [[metertype METER_POPULATION]] : 125%
 
 FIXED_LOW_POPULATION_DESC
 −−	Population Maximale limitée à 5
+
+VERY_BAD_SUPPLY_DESC
+−−	Très Mauvais en [[metertype METER_SUPPLY]]: -1
 
 BAD_SUPPLY_DESC
 −	Mauvais en [[metertype METER_SUPPLY]] : aucun bonus
@@ -13270,6 +14479,24 @@ GREAT_SUPPLY_DESC
 
 ULTIMATE_SUPPLY_DESC
 ++	Parfait en [[metertype METER_SUPPLY]] : +3
+
+NO_STOCKPILE_DESC
+−−	Aucun [[metertype METER_STOCKPILE]]
+
+BAD_STOCKPILE_DESC
+−	Mauvais en [[metertype METER_STOCKPILE]] : +0.01 par Population
+
+AVERAGE_STOCKPILE_DESC
+'''	Normal en [[metertype METER_STOCKPILE]] : +0.02 par Population'''
+
+GOOD_STOCKPILE_DESC
++	Bon en [[metertype METER_STOCKPILE]] : +0.06 par Population
+
+GREAT_STOCKPILE_DESC
+++	Excellent en [[metertype METER_STOCKPILE]] : +0.2 par Population
+
+ULTIMATE_STOCKPILE_DESC
++++	Parfait en [[metertype METER_STOCKPILE]] : +0.3 par Population
 
 GOOD_SHIP_SHIELD_DESC
 +	Bons [[metertype METER_SHIELD]] d'astronefs : +1
@@ -13295,8 +14522,23 @@ FAST_COLONIZATION_DESC
 SLOW_COLONIZATION_DESC
 −	Colonisation lente : +20% de délai pour bâtir une colonie.
 
+NO_FUEL_DESC
+−−−	Astronefs sans [[metertype METER_FUEL]]
+
 BAD_FUEL_DESC
-−	Mauvais en [[metertype METER_FUEL]] max : - 1
+−	Mauvais en [[metertype METER_FUEL]] max : -1
+
+AVERAGE_FUEL_DESC
+'''	Normal en [[metertype METER_FUEL]] max : +0'''
+
+GOOD_FUEL_DESC
++	Bon en [[metertype METER_FUEL]] max : +1
+
+GREAT_FUEL_DESC
+++	Excellent en [[metertype METER_FUEL]] max : +2
+
+ULTIMATE_FUEL_DESC
++++	Parfait en [[metertype METER_FUEL]] max : +3
 
 GREAT_ASTEROID_INDUSTRY_DESC
 +	Bons Mineurs sur Astéroïdes: + 0.2 en [[metertype METER_INDUSTRY]] par Population lorsque que le Focus Industrie est activé dans les systèmes abritant une Ceinture d'Astéroïdes colonisée par l'empire.
@@ -13308,7 +14550,7 @@ TELEPATHIC_DETECTION_DESC
 +	Détection Télépathique: peut percevoir les planètes habitées proches.
 
 COMMUNAL_VISION_DESC
-	Vision Commune: partage ce qui est visible avec tout autre représentant de l'espèce dans l'univers.
+'''	Vision Commune: partage ce qui est visible avec tout autre représentant de l'espèce dans l'univers.'''
 
 
 ##
@@ -13378,12 +14620,12 @@ Planète Natale
 # %1% FIXME
 # %2% FIXME
 BAD_POPULATION_LABEL
-%2% Faible population 75%%
+%2% Mauvais en Population
 
 # %1% FIXME
 # %2% FIXME
 GOOD_POPULATION_LABEL
-%2% Grande population 125%%
+%2% Bon en Population
 
 # %1% FIXME
 # %2% FIXME
@@ -13437,6 +14679,11 @@ ULTIMATE_RESEARCH_LABEL
 
 # %1% FIXME
 # %2% FIXME
+VERY_BAD_SUPPLY_LABEL
+%2% Très Mauvais en Approvisionnement
+
+# %1% FIXME
+# %2% FIXME
 BAD_SUPPLY_LABEL
 %2% Mauvais en Approvisionnement
 
@@ -13454,6 +14701,61 @@ GREAT_SUPPLY_LABEL
 # %2% FIXME
 ULTIMATE_SUPPLY_LABEL
 %2% Parfait en Approvisionnement
+
+# %1% FIXME
+# %2% FIXME
+BAD_STOCKPILE_LABEL
+%2% Mauvais en Stock
+
+# %1% FIXME
+# %2% FIXME
+AVERAGE_STOCKPILE_LABEL
+%2% Normal en Stock
+
+# %1% FIXME
+# %2% FIXME
+GOOD_STOCKPILE_LABEL
+%2% Bon en Stock
+
+# %1% FIXME
+# %2% FIXME
+GREAT_STOCKPILE_LABEL
+%2% Excellent en Stock
+
+# %1% FIXME
+# %2% FIXME
+ULTIMATE_STOCKPILE_LABEL
+%2% Parfait en Stock
+
+# %1% FIXME
+# %2% FIXME
+NO_FUEL_LABEL
+%2% Sans Carburant
+
+# %1% FIXME
+# %2% FIXME
+BAD_FUEL_LABEL
+%2% Mauvais en Carburant max
+
+# %1% FIXME
+# %2% FIXME
+AVERAGE_FUEL_LABEL
+%2% Normal en Carburant max
+
+# %1% FIXME
+# %2% FIXME
+GOOD_FUEL_LABEL
+%2% Bon en Carburant max
+
+# %1% FIXME
+# %2% FIXME
+GREAT_FUEL_LABEL
+%2% Excellent en Carburant max
+
+# %1% FIXME
+# %2% FIXME
+ULTIMATE_FUEL_LABEL
+%2% Parfait en Carburant max
 
 # %1% FIXME
 # %2% FIXME
@@ -13535,8 +14837,26 @@ Planète Natale
 CAPITAL_LABEL
 Capitale
 
+BLD_STOCKPILING_CENTER_LABEL
+Centre d'Intrication Impériale
+
 CONCENTRATION_CAMPS_LABEL
 Camps de Concentration
+
+GENERIC_SUPPLIES_FIXED_BONUS_LABEL
+[[PRO_GENERIC_SUPPLIES]] bonus fixe
+
+GENERIC_SUPPLIES_FOCUS_BONUS_LABEL
+[[PRO_GENERIC_SUPPLIES]] bonus selon Focus
+
+GENERIC_SUPPLIES_POPULATION_BONUS_LABEL
+[[PRO_GENERIC_SUPPLIES]] bonus selon Population
+
+INTERSTELLAR_ENTANGLEMENT_FACTORY_POPULATION_BONUS_LABEL
+Complexe d'Intrication Interstellaire bonus selon Population
+
+INTERSTELLAR_ENTANGLEMENT_FACTORY_FIXED_BONUS_LABEL
+Complexe d'Intrication Interstellaire bonus fixe
 
 ORBITAL_HAB_LABEL
 Habitation orbitale
@@ -13561,6 +14881,9 @@ Excellente Vision
 
 FOCUS_PROTECTION_LABEL
 Focus Protection
+
+GASEOUS_LABEL
+Environnement Géante Gazeuse
 
 XENOPHOBIC_LABEL_SELF
 Frénésie xénophobe (autre espèce proche)
@@ -13609,6 +14932,9 @@ Interférence Flux
 
 SPATIAL_FLUX_BONUS
 Bonus Propulsion Flux
+
+DYING_POPULATION_LABEL
+Population agonisante
 
 
 ##
@@ -13776,7 +15102,7 @@ Oh, pas une nouvelle pleurnicherie pathétique, de grâce!
 # Newline separated list of polite positive peace proposal acknowlegements.
 AI_PEACE_PROPOSAL_RESPONSES_YES_MILD_LIST
 '''Nous serons ravis de croire en vos bonnes intentions.
-Tout le plaisir est pour nous, Sire.  Chacun s'accorde à dire que vous êtes digne de confiance.
+Tout le plaisir est pour nous, Sire. Chacun s'accorde à dire que vous êtes digne de confiance.
 '''
 
 # Newline separated list of polite negative peace proposal acknowlegements.
@@ -13787,7 +15113,7 @@ Nous sommes dans le regret de vous informer que nous ne pouvons accéder à votr
 
 # Newline separated list of harsh positive peace proposal acknowlegements.
 AI_PEACE_PROPOSAL_RESPONSES_YES_HARSH_LIST
-'''Par grande miséricorde, nous acceptons de ne pas vous attaquer.  Pour le moment.
+'''Par grande miséricorde, nous acceptons de ne pas vous attaquer. Pour le moment.
 Insignifiantes créatures!  Il n'y aurait que bien peu d'honneur à vous terrasser.
 '''
 
@@ -13811,7 +15137,7 @@ Sombres idiots, vous ne pensiez pas que cette paix allait durer, n'est-ce pas?
 
 # Newline separated pre-game acknowledgements.
 AI_PREGAME_ACKNOWLEDGEMENTS__LIST
-'''Je médite, en attente des directives suprêmes de Dieu.  Veuillez rappeler plus tard.
+'''Je médite, en attente des directives suprêmes de Dieu. Veuillez rappeler plus tard.
 Des murmures émanant du Vide?  Cela se peut-il?
 '''
 
@@ -13952,14 +15278,23 @@ Annihilez votre espèce est pour nous un devoir sacré!
 OPTIONS_PAGE_HOTKEYS
 Raccourcis clavier
 
-HOTKEYS_Z_COMBAT
-Fenêtre Combat
+HOTKEYS_UI
+Interface Utilisateur
 
-HOTKEYS_MAP
+HOTKEYS_UI_MAP
 Carte galactique
+
+HOTKEYS_UI_MAP_FLEET
+Flottes
+
+HOTKEYS_UI_MAP_SYSTEM
+Systèmes
 
 HOTKEYS_GENERAL
 Raccourcis généraux
+
+HOTKEYS_VIDEO
+Vidéo
 
 HOTKEY_MAP_OPEN_CHAT
 Ouvrir Messages
@@ -14152,6 +15487,5 @@ Plein écran [on/off]
 
 
 
-#include "../global_settings.txt"
 #include "../content_specific_parameters.txt"
 #include "../customizations/common_user_customizations.txt"

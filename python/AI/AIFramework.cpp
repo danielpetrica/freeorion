@@ -5,10 +5,8 @@
 #include "../../util/Directories.h"
 #include "../../util/Logger.h"
 #include "../../util/i18n.h"
-#include "../../util/MultiplayerCommon.h"
 #include "../../util/OptionsDB.h"
 #include "../../Empire/Empire.h"
-#include "../../Empire/EmpireManager.h"
 #include "../../Empire/Diplomacy.h"
 #include "../CommonFramework.h"
 #include "../SetWrapper.h"
@@ -73,6 +71,11 @@ BOOST_PYTHON_MODULE(freeOrionAIInterface)
     ///////////////////
     FreeOrionPython::WrapGameStateEnums();
 
+    ///////////////////
+    //     Config    //
+    ///////////////////
+    FreeOrionPython::WrapConfig();
+
     ////////////////////
     // STL Containers //
     ////////////////////
@@ -97,6 +100,7 @@ BOOST_PYTHON_MODULE(freeOrionAIInterface)
 bool PythonAI::Initialize() {
     if (PythonBase::Initialize()) {
         BuildingTypeManager& temp = GetBuildingTypeManager();  // Ensure buildings are initialized
+        (void)temp; // Hide unused variable warning
         return true;
     }
     else

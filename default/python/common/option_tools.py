@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 from ConfigParser import SafeConfigParser
@@ -72,9 +74,12 @@ def _create_default_config_file(path):
         for k, v in entries.iteritems():
             config.set(section, k, str(v))
     if path:
-        with open(unicode(path, 'utf-8'), 'w') as configfile:
-            config.write(configfile)
-        print "default config is dumped to %s" % path
+        try:
+            with open(unicode(path, 'utf-8'), 'w') as configfile:
+                config.write(configfile)
+            print("default config is dumped to %s" % path)
+        except IOError:
+            sys.stderr.write("AI Config Error: could not write default config %s\n" % path)
     return config
 
 
@@ -99,6 +104,12 @@ def get_sectioned_option_dict():
 
 
 def parse_config(option_string, config_dir):
+
+    if option_string is not None and not isinstance(option_string, str):
+        # probably called by unit test
+        print("Specified option string is not a string: ", option_string, file=sys.stderr)
+        return
+
     # get defaults; check if don't already exist and can write
     default_file = _get_option_file(config_dir)
     if os.path.exists(default_file):
@@ -115,7 +126,7 @@ def parse_config(option_string, config_dir):
     if option_string:
         config_files = [option_string]
         configs_read = config.read(config_files)
-        print "AI Config read config file(s): %s" % configs_read
+        print("AI Config read config file(s): %s" % configs_read)
         if len(configs_read) != len(config_files):
             sys.stderr.write("AI Config Error; could NOT read config file(s): %s\n"
                              % list(set(config_files).difference(configs_read)))

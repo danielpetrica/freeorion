@@ -4,6 +4,7 @@
 #include "../util/Logger.h"
 #include "../util/Random.h"
 #include "../util/AppInterface.h"
+#include "../util/GameRules.h"
 #include "Fleet.h"
 #include "Predicates.h"
 #include "ShipDesign.h"
@@ -18,32 +19,16 @@
 class Species;
 const Species* GetSpecies(const std::string& name);
 
-Ship::Ship() :
-    UniverseObject(),
-    m_design_id(ShipDesign::INVALID_DESIGN_ID),
-    m_fleet_id(INVALID_OBJECT_ID),
-    m_ordered_scrapped(false),
-    m_ordered_colonize_planet_id(INVALID_OBJECT_ID),
-    m_ordered_invade_planet_id(INVALID_OBJECT_ID),
-    m_ordered_bombard_planet_id(INVALID_OBJECT_ID),
-    m_last_turn_active_in_combat(INVALID_GAME_TURN),
-    m_produced_by_empire_id(ALL_EMPIRES),
-    m_arrived_on_turn(INVALID_GAME_TURN)
+Ship::Ship()
 {}
 
 Ship::Ship(int empire_id, int design_id, const std::string& species_name,
            int produced_by_empire_id/* = ALL_EMPIRES*/) :
-    UniverseObject(),
     m_design_id(design_id),
-    m_fleet_id(INVALID_OBJECT_ID),
-    m_ordered_scrapped(false),
-    m_ordered_colonize_planet_id(INVALID_OBJECT_ID),
-    m_ordered_invade_planet_id(INVALID_OBJECT_ID),
-    m_ordered_bombard_planet_id(INVALID_OBJECT_ID),
-    m_last_turn_active_in_combat(INVALID_GAME_TURN),
     m_species_name(species_name),
     m_produced_by_empire_id(produced_by_empire_id),
-    m_arrived_on_turn(CurrentTurn())
+    m_arrived_on_turn(CurrentTurn()),
+    m_last_resupplied_on_turn(CurrentTurn())
 {
     if (!GetShipDesign(design_id))
         throw std::invalid_argument("Attempted to construct a Ship with an invalid design id");
@@ -82,18 +67,18 @@ Ship::Ship(int empire_id, int design_id, const std::string& species_name,
             switch (part->Class()) {
             case PC_COLONY:
             case PC_TROOPS: {
-                m_part_meters[std::make_pair(METER_CAPACITY, part->Name())];
+                m_part_meters[{METER_CAPACITY, part->Name()}];
                 break;
             }
             case PC_DIRECT_WEAPON:      // capacity is damage, secondary stat is shots per attack
             case PC_FIGHTER_HANGAR: {   // capacity is how many fighters contained, secondary stat is damage per fighter attack
-                m_part_meters[std::make_pair(METER_SECONDARY_STAT,      part->Name())];
-                m_part_meters[std::make_pair(METER_MAX_SECONDARY_STAT,  part->Name())];
+                m_part_meters[{METER_SECONDARY_STAT, part->Name()}];
+                m_part_meters[{METER_MAX_SECONDARY_STAT, part->Name()}];
                 // intentionally no break here
             }
             case PC_FIGHTER_BAY: {      // capacity is how many fighters launched per combat round
-                m_part_meters[std::make_pair(METER_CAPACITY,            part->Name())];
-                m_part_meters[std::make_pair(METER_MAX_CAPACITY,        part->Name())];
+                m_part_meters[{METER_CAPACITY, part->Name()}];
+                m_part_meters[{METER_MAX_CAPACITY, part->Name()}];
                 break;
             }
             default:
@@ -117,7 +102,7 @@ Ship* Ship::Clone(int empire_id) const {
 void Ship::Copy(std::shared_ptr<const UniverseObject> copied_object, int empire_id) {
     if (copied_object.get() == this)
         return;
-    std::shared_ptr<const Ship> copied_ship = std::dynamic_pointer_cast<const Ship>(copied_object);
+    auto copied_ship = std::dynamic_pointer_cast<const Ship>(copied_object);
     if (!copied_ship) {
         ErrorLogger() << "Ship::Copy passed an object that wasn't a Ship";
         return;
@@ -125,16 +110,16 @@ void Ship::Copy(std::shared_ptr<const UniverseObject> copied_object, int empire_
 
     int copied_object_id = copied_object->ID();
     Visibility vis = GetUniverse().GetObjectVisibilityByEmpire(copied_object_id, empire_id);
-    std::set<std::string> visible_specials = GetUniverse().GetObjectVisibleSpecialsByEmpire(copied_object_id, empire_id);
+    auto visible_specials = GetUniverse().GetObjectVisibleSpecialsByEmpire(copied_object_id, empire_id);
 
     UniverseObject::Copy(copied_object, vis, visible_specials);;
 
     if (vis >= VIS_BASIC_VISIBILITY) {
         if (this->m_fleet_id != copied_ship->m_fleet_id) {
             // as with other containers, removal from the old container is triggered by the contained Object; removal from System is handled by UniverseObject::Copy
-            if (std::shared_ptr<Fleet> oldFleet = GetFleet(this->m_fleet_id))
-                oldFleet->RemoveShip(this->ID());
-            this->m_fleet_id =              copied_ship->m_fleet_id; // as with other containers (Systems), actual insertion into fleet ships set is handled by the fleet
+            if (auto old_fleet = GetFleet(this->m_fleet_id))
+                old_fleet->RemoveShips({this->ID()});
+            this->m_fleet_id = copied_ship->m_fleet_id; // as with other containers (Systems), actual insertion into fleet ships set is handled by the fleet
         }
 
         if (vis >= VIS_PARTIAL_VISIBILITY) {
@@ -148,6 +133,7 @@ void Ship::Copy(std::shared_ptr<const UniverseObject> copied_object, int empire_
             this->m_last_turn_active_in_combat= copied_ship->m_last_turn_active_in_combat;
             this->m_produced_by_empire_id =     copied_ship->m_produced_by_empire_id;
             this->m_arrived_on_turn =           copied_ship->m_arrived_on_turn;
+            this->m_last_resupplied_on_turn =   copied_ship->m_last_resupplied_on_turn;
 
             if (vis >= VIS_FULL_VISIBILITY) {
                 this->m_ordered_scrapped =          copied_ship->m_ordered_scrapped;
@@ -157,6 +143,14 @@ void Ship::Copy(std::shared_ptr<const UniverseObject> copied_object, int empire_
             }
         }
     }
+}
+
+bool Ship::HostileToEmpire(int empire_id) const
+{
+    if (OwnedBy(empire_id))
+        return false;
+    return empire_id == ALL_EMPIRES || Unowned() ||
+           Empires().GetDiplomaticStatus(Owner(), empire_id) == DIPLO_WAR;
 }
 
 std::set<std::string> Ship::Tags() const {
@@ -216,17 +210,18 @@ bool Ship::ContainedBy(int object_id) const {
             ||  object_id == this->SystemID());
 }
 
-std::string Ship::Dump() const {
+std::string Ship::Dump(unsigned short ntabs) const {
     std::stringstream os;
-    os << UniverseObject::Dump();
+    os << UniverseObject::Dump(ntabs);
     os << " design id: " << m_design_id
        << " fleet id: " << m_fleet_id
        << " species name: " << m_species_name
        << " produced by empire id: " << m_produced_by_empire_id
-       << " arrived on turn: " << m_arrived_on_turn;
+       << " arrived on turn: " << m_arrived_on_turn
+       << " last resupplied on turn: " << m_last_resupplied_on_turn;
     if (!m_part_meters.empty()) {
         os << " part meters: ";
-        for (const PartMeterMap::value_type& entry : m_part_meters) {
+        for (const auto& entry : m_part_meters) {
         const std::string part_name = entry.first.second;
         MeterType meter_type = entry.first.first;
         const Meter& meter = entry.second;
@@ -286,7 +281,7 @@ bool Ship::CanBombard() const {
 }
 
 float Ship::Speed() const
-{ return CurrentMeterValue(METER_SPEED); }
+{ return InitialMeterValue(METER_SPEED); }
 
 float Ship::ColonyCapacity() const {
     float retval = 0.0f;
@@ -295,8 +290,7 @@ float Ship::ColonyCapacity() const {
     if (!design)
         return retval;
 
-    for (const std::string& part_name : design->Parts())
-    {
+    for (const std::string& part_name : design->Parts()) {
         if (part_name.empty())
             continue;
         const PartType* part_type = GetPartType(part_name);
@@ -306,7 +300,7 @@ float Ship::ColonyCapacity() const {
         if (part_class != PC_COLONY)
             continue;
         // add capacity for all instances of colony parts to accumulator
-        retval += this->CurrentPartMeterValue(METER_CAPACITY, part_name);
+        retval += this->InitialPartMeterValue(METER_CAPACITY, part_name);
     }
 
     return retval;
@@ -329,7 +323,7 @@ float Ship::TroopCapacity() const {
         if (part_class != PC_TROOPS)
             continue;
         // add capacity for all instances of colony parts to accumulator
-        retval += this->CurrentPartMeterValue(METER_CAPACITY, part_name);
+        retval += this->InitialPartMeterValue(METER_CAPACITY, part_name);
     }
 
     return retval;
@@ -363,58 +357,12 @@ const std::string& Ship::PublicName(int empire_id) const {
 std::shared_ptr<UniverseObject> Ship::Accept(const UniverseObjectVisitor& visitor) const
 { return visitor.Visit(std::const_pointer_cast<Ship>(std::static_pointer_cast<const Ship>(shared_from_this()))); }
 
-float Ship::NextTurnCurrentMeterValue(MeterType type) const {
-    const Meter* meter = UniverseObject::GetMeter(type);
-    if (!meter)
-        throw std::invalid_argument("Ship::NextTurnCurrentMeterValue passed meter type that the Ship does not have: " + boost::lexical_cast<std::string>(type));
-    float current_meter_value = meter->Current();
-
-    if (type == METER_SHIELD) {
-        if (m_last_turn_active_in_combat >= CurrentTurn())
-            return std::max(0.0f,   // battle just happened. shields limited to max shield, but don't regen
-                            std::min(current_meter_value,
-                                     UniverseObject::GetMeter(METER_MAX_SHIELD)->Current()));
-        else                        // shields regneerate to max shield
-            return UniverseObject::GetMeter(METER_MAX_SHIELD)->Current();
-    }
-
-
-    // ResourceCenter-like resource meter growth...
-
-    MeterType target_meter_type = INVALID_METER_TYPE;
-    switch (type) {
-    case METER_TARGET_INDUSTRY:
-    case METER_TARGET_RESEARCH:
-    case METER_TARGET_TRADE:
-        return current_meter_value;
-        break;
-    case METER_INDUSTRY:    target_meter_type = METER_TARGET_INDUSTRY;      break;
-    case METER_RESEARCH:    target_meter_type = METER_TARGET_RESEARCH;      break;
-    case METER_TRADE:       target_meter_type = METER_TARGET_TRADE;         break;
-    default:
-        return UniverseObject::NextTurnCurrentMeterValue(type);
-    }
-
-    const Meter* target_meter = UniverseObject::GetMeter(target_meter_type);
-    if (!target_meter)
-        throw std::runtime_error("Ship::NextTurnCurrentMeterValue dealing with invalid meter type: " + boost::lexical_cast<std::string>(type));
-    float target_meter_value = target_meter->Current();
-
-    // meter growth or decay towards target is one per turn.
-    if (target_meter_value > current_meter_value)
-        return std::min(current_meter_value + 1.0f, target_meter_value);
-    else if (target_meter_value < current_meter_value)
-        return std::max(target_meter_value, current_meter_value - 1.0f);
-    else
-        return current_meter_value;
-}
-
 const Meter* Ship::GetPartMeter(MeterType type, const std::string& part_name) const
 { return const_cast<Ship*>(this)->GetPartMeter(type, part_name); }
 
 Meter* Ship::GetPartMeter(MeterType type, const std::string& part_name) {
     Meter* retval = nullptr;
-    PartMeterMap::iterator it = m_part_meters.find(std::make_pair(type, part_name));
+    auto it = m_part_meters.find({type, part_name});
     if (it != m_part_meters.end())
         retval = &it->second;
     return retval;
@@ -439,7 +387,7 @@ float Ship::SumCurrentPartMeterValuesForPartClass(MeterType type, ShipPartClass 
     if (!design)
         return retval;
 
-    const std::vector<std::string>& parts = design->Parts();
+    const auto& parts = design->Parts();
     if (parts.empty())
         return retval;
 
@@ -447,7 +395,7 @@ float Ship::SumCurrentPartMeterValuesForPartClass(MeterType type, ShipPartClass 
     for (const std::string& part : parts)
         part_counts[part]++;
 
-    for (const PartMeterMap::value_type& part_meter : m_part_meters) {
+    for (const auto& part_meter : m_part_meters) {
         if (part_meter.first.first != type)
             continue;
         const std::string& part_name = part_meter.first.second;
@@ -465,8 +413,7 @@ float Ship::SumCurrentPartMeterValuesForPartClass(MeterType type, ShipPartClass 
 
 float Ship::FighterCount() const {
     float retval = 0.0f;
-    for (const PartMeterMap::value_type& entry : m_part_meters) {
-        //std::map<std::pair<MeterType, std::string>, Meter>
+    for (const auto& entry : m_part_meters) {
         if (entry.first.first != METER_CAPACITY)
             continue;
         const PartType* part_type = GetPartType(entry.first.second);
@@ -480,7 +427,7 @@ float Ship::FighterCount() const {
 
 float Ship::FighterMax() const {
     float retval = 0.0f;
-    for (const PartMeterMap::value_type& entry : m_part_meters) {
+    for (const auto& entry : m_part_meters) {
         //std::map<std::pair<MeterType, std::string>, Meter>
         if (entry.first.first != METER_MAX_CAPACITY)
             continue;
@@ -496,7 +443,7 @@ float Ship::FighterMax() const {
 float Ship::TotalWeaponsDamage(float shield_DR, bool include_fighters) const {
     // sum up all individual weapons' attack strengths
     float total_attack = 0.0f;
-    std::vector<float> all_weapons_damage = AllWeaponsDamage(shield_DR, include_fighters);
+    auto all_weapons_damage = AllWeaponsDamage(shield_DR, include_fighters);
     for (float attack : all_weapons_damage)
         total_attack += attack;
     return total_attack;
@@ -528,9 +475,9 @@ namespace {
                 continue;
             ShipPartClass part_class = part->Class();
 
-            // get the attack power for each weapon part
+            // get the attack power for each weapon part.
             if (part_class == PC_DIRECT_WEAPON) {
-                float part_attack = ship->CurrentPartMeterValue(METER, part_name);
+                float part_attack = ship->CurrentPartMeterValue(METER, part_name);  // used within loop that updates meters, so need current, not initial values
                 float part_shots = ship->CurrentPartMeterValue(SECONDARY_METER, part_name);
                 if (part_attack > DR)
                     retval.push_back((part_attack - DR)*part_shots);
@@ -552,7 +499,7 @@ namespace {
         int fighter_shots = std::min(available_fighters, fighter_launch_capacity);  // how many fighters launched in bout 1
         available_fighters -= fighter_shots;
         int launched_fighters = fighter_shots;
-        int num_bouts = GetUniverse().GetNumCombatRounds();
+        int num_bouts = GetGameRules().Get<int>("RULE_NUM_COMBAT_ROUNDS");
         int remaining_bouts = num_bouts - 2;  // no attack for first round, second round already added
         while (remaining_bouts > 0) {
             int fighters_launched_this_bout = std::min(available_fighters, fighter_launch_capacity);
@@ -609,11 +556,13 @@ void Ship::BackPropagateMeters() {
     UniverseObject::BackPropagateMeters();
 
     // ship part meter back propagation, since base class function doesn't do this...
-    for (PartMeterMap::value_type& entry : m_part_meters)
+    for (auto& entry : m_part_meters)
         entry.second.BackPropagate();
 }
 
 void Ship::Resupply() {
+    m_last_resupplied_on_turn = CurrentTurn();
+
     Meter* fuel_meter = UniverseObject::GetMeter(METER_FUEL);
     const Meter* max_fuel_meter = UniverseObject::GetMeter(METER_MAX_FUEL);
     if (!fuel_meter || !max_fuel_meter) {
@@ -626,12 +575,12 @@ void Ship::Resupply() {
     // set all part capacities equal to any associated max capacity
     // this "upgrades" any direct-fire weapon parts to their latest-allowed
     // strengths, and replaces any lost fighters
-    for (PartMeterMap::value_type& entry : m_part_meters) {
-        PartMeterMap::iterator max_it = m_part_meters.end();
+    for (auto& entry : m_part_meters) {
+        auto max_it = m_part_meters.end();
         if (entry.first.first == METER_CAPACITY) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_CAPACITY, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_CAPACITY, entry.first.second});
         } else if (entry.first.first == METER_SECONDARY_STAT) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_SECONDARY_STAT, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_SECONDARY_STAT, entry.first.second});
         }
         if (max_it == m_part_meters.end())
             continue;
@@ -696,12 +645,12 @@ void Ship::ResetTargetMaxUnpairedMeters() {
     UniverseObject::GetMeter(METER_SPEED)->ResetCurrent();
     //UniverseObject::GetMeter(METER_STEALTH)->ResetCurrent(); redundant with base class function
 
-    for (PartMeterMap::value_type& entry : m_part_meters) {
-        PartMeterMap::iterator max_it = m_part_meters.end();
+    for (auto& entry : m_part_meters) {
+        auto max_it = m_part_meters.end();
         if (entry.first.first == METER_CAPACITY) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_CAPACITY, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_CAPACITY, entry.first.second});
         } else if (entry.first.first == METER_SECONDARY_STAT) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_SECONDARY_STAT, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_SECONDARY_STAT, entry.first.second});
         }
         if (max_it != m_part_meters.end())
             continue;
@@ -712,12 +661,12 @@ void Ship::ResetTargetMaxUnpairedMeters() {
 void Ship::ResetPairedActiveMeters() {
     UniverseObject::ResetPairedActiveMeters();
 
-    for (PartMeterMap::value_type& entry : m_part_meters) {
-        PartMeterMap::iterator max_it = m_part_meters.end();
+    for (auto& entry : m_part_meters) {
+        auto max_it = m_part_meters.end();
         if (entry.first.first == METER_CAPACITY) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_CAPACITY, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_CAPACITY, entry.first.second});
         } else if (entry.first.first == METER_SECONDARY_STAT) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_SECONDARY_STAT, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_SECONDARY_STAT, entry.first.second});
         }
         if (max_it != m_part_meters.end())
             entry.second.SetCurrent(entry.second.Initial());
@@ -733,31 +682,18 @@ void Ship::SetShipMetersToMax() {
     UniverseObject::GetMeter(METER_STRUCTURE)->SetCurrent(Meter::LARGE_VALUE);
 
     // some part capacity meters may have an associated max capacity...
-    for (PartMeterMap::value_type& entry : m_part_meters) {
-        PartMeterMap::iterator max_it = m_part_meters.end();
+    for (auto& entry : m_part_meters) {
+        auto max_it = m_part_meters.end();
         if (entry.first.first == METER_CAPACITY) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_CAPACITY, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_CAPACITY, entry.first.second});
         } else if (entry.first.first == METER_SECONDARY_STAT) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_SECONDARY_STAT, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_SECONDARY_STAT, entry.first.second});
         }
         if (max_it == m_part_meters.end())
             continue;
         max_it->second.SetCurrent(Meter::LARGE_VALUE);
         entry.second.SetCurrent(Meter::LARGE_VALUE);
     }
-}
-
-void Ship::PopGrowthProductionResearchPhase() {
-    UniverseObject::PopGrowthProductionResearchPhase();
-
-    UniverseObject::GetMeter(METER_SHIELD)->SetCurrent(Ship::NextTurnCurrentMeterValue(METER_SHIELD));
-    UniverseObject::GetMeter(METER_INDUSTRY)->SetCurrent(Ship::NextTurnCurrentMeterValue(METER_INDUSTRY));
-    UniverseObject::GetMeter(METER_RESEARCH)->SetCurrent(Ship::NextTurnCurrentMeterValue(METER_RESEARCH));
-    UniverseObject::GetMeter(METER_TRADE)->SetCurrent(Ship::NextTurnCurrentMeterValue(METER_TRADE));
-
-    // part capacity meters set to max only by being in supply
-
-    StateChangedSignal();
 }
 
 void Ship::ClampMeters() {
@@ -780,19 +716,19 @@ void Ship::ClampMeters() {
     UniverseObject::GetMeter(METER_SPEED)->ClampCurrentToRange();
 
     // clamp most part meters to basic range limits
-    for (PartMeterMap::value_type& entry : m_part_meters) {
+    for (auto& entry : m_part_meters) {
         if (entry.first.first == METER_CAPACITY || entry.first.first == METER_SECONDARY_STAT)
             continue;
         entry.second.ClampCurrentToRange();
     }
 
     // special case extra clamping for paired CAPACTY meters dependent on their associated MAX_CAPACITY meter...
-    for (PartMeterMap::value_type& entry : m_part_meters) {
-        PartMeterMap::iterator max_it = m_part_meters.end();
+    for (auto& entry : m_part_meters) {
+        auto max_it = m_part_meters.end();
         if (entry.first.first == METER_CAPACITY) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_CAPACITY, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_CAPACITY, entry.first.second});
         } else if (entry.first.first == METER_SECONDARY_STAT) {
-            max_it = m_part_meters.find(std::make_pair(METER_MAX_SECONDARY_STAT, entry.first.second));
+            max_it = m_part_meters.find({METER_MAX_SECONDARY_STAT, entry.first.second});
         }
 
         if (max_it == m_part_meters.end()) {

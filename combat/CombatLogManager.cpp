@@ -11,51 +11,47 @@
 
 namespace {
     static float MaxHealth(const UniverseObject& object) {
-        if ( object.ObjectType() == OBJ_SHIP ) {
+        if (object.ObjectType() == OBJ_SHIP) {
             return object.CurrentMeterValue(METER_MAX_STRUCTURE);
+
         } else if ( object.ObjectType() == OBJ_PLANET ) {
             const Meter* defense = object.GetMeter(METER_MAX_DEFENSE);
             const Meter* shield = object.GetMeter(METER_MAX_SHIELD);
             const Meter* construction = object.UniverseObject::GetMeter(METER_TARGET_CONSTRUCTION);
 
-            float ret = 0.0;
-            if(defense) {
+            float ret = 0.0f;
+            if (defense)
                 ret += defense->Current();
-            }
-            if(shield) {
+            if (shield)
                 ret += shield->Current();
-            }
-            if(construction) {
+            if (construction)
                 ret += construction->Current();
-            }
             return ret;
-        } else {
-            return 0.0;
         }
+
+        return 0.0f;
     }
 
     static float CurrentHealth(const UniverseObject& object) {
-        if ( object.ObjectType() == OBJ_SHIP ) {
+        if (object.ObjectType() == OBJ_SHIP) {
             return object.CurrentMeterValue(METER_STRUCTURE);
-        } else if ( object.ObjectType() == OBJ_PLANET ) {
+
+        } else if (object.ObjectType() == OBJ_PLANET) {
             const Meter* defense = object.GetMeter(METER_DEFENSE);
             const Meter* shield = object.GetMeter(METER_SHIELD);
             const Meter* construction = object.UniverseObject::GetMeter(METER_CONSTRUCTION);
 
-            float ret = 0.0;
-            if(defense) {
+            float ret = 0.0f;
+            if (defense)
                 ret += defense->Current();
-            }
-            if(shield) {
+            if (shield)
                 ret += shield->Current();
-            }
-            if(construction) {
+            if (construction)
                 ret += construction->Current();
-            }
             return ret;
-        } else {
-            return 0.0;
         }
+
+        return 0.0f;
     }
 
     static void FillState(CombatParticipantState& state, const UniverseObject& object) {
@@ -64,20 +60,10 @@ namespace {
     };
 }
 
-CombatParticipantState::CombatParticipantState():
-current_health(0.0f),
-max_health(0.0f)
-{
+CombatParticipantState::CombatParticipantState() {}
 
-}
-
-
-CombatParticipantState::CombatParticipantState(const UniverseObject& object):
-current_health(0.0f),
-max_health(0.0f)
-{
-    FillState(*this, object);
-}
+CombatParticipantState::CombatParticipantState(const UniverseObject& object)
+{ FillState(*this, object); }
 
 ////////////////////////////////////////////////
 // CombatLog
@@ -98,7 +84,7 @@ CombatLog::CombatLog(const CombatInfo& combat_info) :
 {
     // compile all remaining and destroyed objects' ids
     object_ids = combat_info.destroyed_object_ids;
-    for (ObjectMap::const_iterator<> it = combat_info.objects.const_begin();
+    for (auto it = combat_info.objects.const_begin();
          it != combat_info.objects.const_end(); ++it)
     {
         object_ids.insert(it->ID());
@@ -128,16 +114,16 @@ void CombatLog::serialize(Archive& ar, const unsigned int version)
     ar.template register_type<WeaponsPlatformEvent>();
 
     ar  & BOOST_SERIALIZATION_NVP(turn)
-    & BOOST_SERIALIZATION_NVP(system_id)
-    & BOOST_SERIALIZATION_NVP(empire_ids)
-    & BOOST_SERIALIZATION_NVP(object_ids)
-    & BOOST_SERIALIZATION_NVP(damaged_object_ids)
-    & BOOST_SERIALIZATION_NVP(destroyed_object_ids)
-    & BOOST_SERIALIZATION_NVP(combat_events);
+        & BOOST_SERIALIZATION_NVP(system_id)
+        & BOOST_SERIALIZATION_NVP(empire_ids)
+        & BOOST_SERIALIZATION_NVP(object_ids)
+        & BOOST_SERIALIZATION_NVP(damaged_object_ids)
+        & BOOST_SERIALIZATION_NVP(destroyed_object_ids)
+        & BOOST_SERIALIZATION_NVP(combat_events);
 
     // Store state of fleet at this battle.
     // Used to show summaries of past battles.
-    if(version >= 1) {
+    if (version >= 1) {
         ar & BOOST_SERIALIZATION_NVP(participant_states);
     }
 }
@@ -157,8 +143,7 @@ void CombatLog::serialize<freeorion_xml_oarchive>(freeorion_xml_oarchive& ar, co
 // CombatLogManagerImpl
 ////////////////////////////////////////////////
 
-class CombatLogManager::Impl
-{
+class CombatLogManager::Impl {
     public:
     Impl();
 
@@ -171,10 +156,10 @@ class CombatLogManager::Impl
     //@}
 
     /** \name Mutators */ //@{
-    int     AddLog(const CombatLog& log);   // adds log, returns unique log id
+    int  AddLog(const CombatLog& log);   // adds log, returns unique log id
     /** Replace incomplete log with \p id with \p log. */
-    void    CompleteLog(int id, const CombatLog& log);
-    void    Clear();
+    void CompleteLog(int id, const CombatLog& log);
+    void Clear();
 
     /** Serialize log headers so that the receiving LogManager can then request
         complete logs in the background.*/
@@ -202,7 +187,7 @@ CombatLogManager::Impl::Impl() :
 {}
 
 boost::optional<const CombatLog&> CombatLogManager::Impl::GetLog(int log_id) const {
-    boost::unordered_map<int, CombatLog>::const_iterator it = m_logs.find(log_id);
+    auto it = m_logs.find(log_id);
     if (it != m_logs.end())
         return it->second;
     return boost::none;
@@ -215,9 +200,10 @@ int CombatLogManager::Impl::AddLog(const CombatLog& log) {
 }
 
 void CombatLogManager::Impl::CompleteLog(int id, const CombatLog& log) {
-    std::set<int>::iterator incomplete_it = m_incomplete_logs.find(id);
+    auto incomplete_it = m_incomplete_logs.find(id);
     if (incomplete_it == m_incomplete_logs.end()) {
         ErrorLogger() << "CombatLogManager::Impl::CompleteLog id = " << id << " is not an incomplete log, so log is being discarded.";
+        return;
     }
     m_incomplete_logs.erase(incomplete_it);
     m_logs[id] = log;
@@ -230,25 +216,24 @@ void CombatLogManager::Impl::CompleteLog(int id, const CombatLog& log) {
     }
 }
 
-void CombatLogManager::Impl::Clear()
-{ m_logs.clear(); }
+void CombatLogManager::Impl::Clear() {
+    m_logs.clear();
+    m_incomplete_logs.clear();
+    m_latest_log_id = -1;
+}
 
 void CombatLogManager::Impl::GetLogsToSerialize(
     std::map<int, CombatLog>& logs, int encoding_empire) const
 {
     // TODO: filter logs by who should have access to them
-    for (boost::unordered_map<int, CombatLog>::const_iterator it = m_logs.begin();
-         it != m_logs.end(); ++it)
-    {
-        logs.insert(std::make_pair(it->first, it->second));
-    }
+    for (auto it = m_logs.begin(); it != m_logs.end(); ++it)
+        logs.insert({it->first, it->second});
 }
 
 void CombatLogManager::Impl::SetLog(int log_id, const CombatLog& log)
 { m_logs[log_id] = log; }
 
-boost::optional<std::vector<int>> CombatLogManager::Impl::IncompleteLogIDs() const
-{
+boost::optional<std::vector<int>> CombatLogManager::Impl::IncompleteLogIDs() const {
     if (m_incomplete_logs.empty())
         return boost::none;
 
@@ -256,11 +241,9 @@ boost::optional<std::vector<int>> CombatLogManager::Impl::IncompleteLogIDs() con
     // send one log it is the most recent combat log, which is the one most
     // likely of interest to the player.
     std::vector<int> ids;
-    for (std::set<int>::reverse_iterator rit = m_incomplete_logs.rbegin();
-         rit != m_incomplete_logs.rend(); ++rit)
-    {
+    for (auto rit = m_incomplete_logs.rbegin(); rit != m_incomplete_logs.rend(); ++rit)
         ids.push_back(*rit);
-    }
+
     return ids;
 }
 

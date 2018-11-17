@@ -26,18 +26,24 @@ MultiIconValueIndicator::MultiIconValueIndicator(GG::X w) :
     MultiIconValueIndicator(w, {}, {})
 {}
 
-MultiIconValueIndicator::MultiIconValueIndicator(GG::X w, int object_id,
-                                                 const std::vector<std::pair<MeterType, MeterType>>& meter_types) :
+MultiIconValueIndicator::MultiIconValueIndicator(
+    GG::X w, int object_id,
+    const std::vector<std::pair<MeterType, MeterType>>& meter_types) :
     MultiIconValueIndicator(w, std::vector<int>{object_id}, meter_types)
 {}
 
-MultiIconValueIndicator::MultiIconValueIndicator(GG::X w, const std::vector<int>& object_ids,
-                                                 const std::vector<std::pair<MeterType, MeterType>>& meter_types) :
+MultiIconValueIndicator::MultiIconValueIndicator(
+    GG::X w, const std::vector<int>& object_ids,
+    const std::vector<std::pair<MeterType, MeterType>>& meter_types) :
     GG::Wnd(GG::X0, GG::Y0, w, GG::Y1, GG::INTERACTIVE),
     m_icons(),
     m_meter_types(meter_types),
     m_object_ids(object_ids)
-{
+{}
+
+void MultiIconValueIndicator::CompleteConstruction() {
+    GG::Wnd::CompleteConstruction();
+
     SetName("MultiIconValueIndicator");
 
     GG::X x(EDGE_PAD);
@@ -49,16 +55,15 @@ MultiIconValueIndicator::MultiIconValueIndicator(GG::X w, const std::vector<int>
         // special case for population meter for an indicator showing only a
         // single popcenter: icon is species icon, rather than generic pop icon
         if (PRIMARY_METER_TYPE == METER_POPULATION && m_object_ids.size() == 1) {
-	    if (std::shared_ptr<const PopCenter> pc = GetPopCenter(*m_object_ids.begin()))
+	    if (auto pc = GetPopCenter(*m_object_ids.begin()))
 		texture = ClientUI::SpeciesIcon(pc->SpeciesName());
         }
 
-        m_icons.push_back(new StatisticIcon(texture, 0.0, 3, false,
-                                            GG::X0, GG::Y0, IconWidth(), IconHeight()));
+        m_icons.push_back(GG::Wnd::Create<StatisticIcon>(texture, 0.0, 3, false, IconWidth(), IconHeight()));
         GG::Pt icon_ul(x, GG::Y(EDGE_PAD));
         GG::Pt icon_lr = icon_ul + GG::Pt(IconWidth(), IconHeight() + ClientUI::Pts()*3/2);
         m_icons.back()->SizeMove(icon_ul, icon_lr);
-        m_icons.back()->InstallEventFilter(this);
+        m_icons.back()->InstallEventFilter(shared_from_this());
         AttachChild(m_icons.back());
         x += IconWidth() + IconSpacing();
     }
@@ -67,7 +72,7 @@ MultiIconValueIndicator::MultiIconValueIndicator(GG::X w, const std::vector<int>
     Update();
 }
 
-bool MultiIconValueIndicator::Empty()
+bool MultiIconValueIndicator::Empty() const
 { return m_object_ids.empty(); }
 
 void MultiIconValueIndicator::Render() {
@@ -89,18 +94,24 @@ void MultiIconValueIndicator::Update() {
 
     for (std::size_t i = 0; i < m_icons.size(); ++i) {
         assert(m_icons[i]);
-        double sum = 0.0;
+        double total = 0.0;
         for (int object_id : m_object_ids) {
-            std::shared_ptr<const UniverseObject> obj = GetUniverseObject(object_id);
+            auto obj = GetUniverseObject(object_id);
             if (!obj) {
                 ErrorLogger() << "MultiIconValueIndicator::Update couldn't get object with id " << object_id;
                 continue;
             }
             //DebugLogger() << "MultiIconValueIndicator::Update object:";
             //DebugLogger() << obj->Dump();
-            sum += obj->InitialMeterValue(m_meter_types[i].first);
+            auto type = m_meter_types[i].first;
+            double value = obj->InitialMeterValue(type);
+            // Supply is a special case: the only thing that matters is the highest value.
+            if (type == METER_SUPPLY)
+                total = std::max(total, value);
+            else
+                total += value;
         }
-        m_icons[i]->SetValue(sum);
+        m_icons[i]->SetValue(total);
     }
 }
 
@@ -124,7 +135,7 @@ bool MultiIconValueIndicator::EventFilter(GG::Wnd* w, const GG::WndEvent& event)
     MeterType meter_type = INVALID_METER_TYPE;
     for (unsigned int i = 0; i < m_icons.size(); ++i) {
         try {
-            if (m_icons.at(i) == w) {
+            if (m_icons.at(i).get() == w) {
                 meter_type = m_meter_types.at(i).first;
                 break;
             }
@@ -141,42 +152,29 @@ bool MultiIconValueIndicator::EventFilter(GG::Wnd* w, const GG::WndEvent& event)
     if (UserStringExists(meter_string))
         meter_title = UserString(meter_string);
 
-    GG::MenuItem menu_contents;
     std::string species_name;
 
-    std::shared_ptr<const PopCenter> pc = GetPopCenter(*m_object_ids.begin());
+    bool retval = false;
+    auto zoom_species_action = [&retval, &species_name]() { retval = ClientUI::GetClientUI()->ZoomToSpecies(species_name); };
+    auto zoom_article_action = [&retval, &meter_string]() { retval = ClientUI::GetClientUI()->ZoomToMeterTypeArticle(meter_string);};
+
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
+
+    auto pc = GetPopCenter(*m_object_ids.begin());
     if (meter_type == METER_POPULATION && pc && m_object_ids.size() == 1) {
-	species_name = pc->SpeciesName();
-	if (!species_name.empty()) {
-	    std::string species_label = boost::io::str(FlexibleFormat(UserString("ENC_LOOKUP")) % UserString(species_name));
-	    menu_contents.next_level.push_back(GG::MenuItem(species_label, 1, false, false));
-	}
+        species_name = pc->SpeciesName();
+        if (!species_name.empty()) {
+            std::string species_label = boost::io::str(FlexibleFormat(UserString("ENC_LOOKUP")) % UserString(species_name));
+            popup->AddMenuItem(GG::MenuItem(species_label, false, false, zoom_species_action));
+        }
     }
 
     if (!meter_title.empty()) {
         std::string popup_label = boost::io::str(FlexibleFormat(UserString("ENC_LOOKUP")) %
                                                                 meter_title);
-        menu_contents.next_level.push_back(GG::MenuItem(popup_label, 2, false, false));
+        popup->AddMenuItem(GG::MenuItem(popup_label, false, false, zoom_article_action));
     }
-
-    CUIPopupMenu popup(pt.x, pt.y, menu_contents);
-
-    bool retval = false;
-
-    if (popup.Run()) {
-        switch (popup.MenuID()) {
-            case 1: {
-                retval = ClientUI::GetClientUI()->ZoomToSpecies(species_name);
-                break;
-            }
-            case 2: {
-                retval = ClientUI::GetClientUI()->ZoomToMeterTypeArticle(meter_string);
-                break;
-            }
-            default:
-                break;
-        }
-    }
+    popup->Run();
 
     return retval;
 }

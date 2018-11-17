@@ -11,9 +11,11 @@ namespace {
     struct strip_quotes_ {
         typedef std::string result_type;
 
-        std::string operator()(const parse::text_iterator& start, const parse::text_iterator& end) const {
-            std::string::const_iterator start_ = start;
-            std::string::const_iterator end_ = end;
+        std::string operator()(const parse::text_iterator& start,
+                               const parse::text_iterator& end) const
+        {
+            auto start_ = start;
+            auto end_ = end;
             return std::string(++start_, --end_);
         }
     };
@@ -51,6 +53,9 @@ lexer::lexer() :
     BOOST_PP_SEQ_FOR_EACH(DEFINE_TOKEN, _, TOKEN_SEQ_12)
     BOOST_PP_SEQ_FOR_EACH(DEFINE_TOKEN, _, TOKEN_SEQ_13)
     BOOST_PP_SEQ_FOR_EACH(DEFINE_TOKEN, _, TOKEN_SEQ_14)
+    BOOST_PP_SEQ_FOR_EACH(DEFINE_TOKEN, _, TOKEN_SEQ_15)
+    BOOST_PP_SEQ_FOR_EACH(DEFINE_TOKEN, _, TOKEN_SEQ_16)
+    BOOST_PP_SEQ_FOR_EACH(DEFINE_TOKEN, _, TOKEN_SEQ_17)
 #undef DEFINE_TOKEN
 
     error_token("\\S+?")
@@ -90,14 +95,11 @@ lexer::lexer() :
         |     '>'
         |     '<'
         |     '!'
+        |     ':'
+        |     '?'
         ;
 
-#define REGISTER_TOKEN(r, _, name)                                    \
-    {                                                                 \
-        const char* n(BOOST_PP_CAT(name, _token));                    \
-        self += BOOST_PP_CAT(name, _) [ _val = n ];                   \
-        m_name_tokens[n] = &BOOST_PP_CAT(name, _);                    \
-    }
+#define REGISTER_TOKEN(r, _, name) self += BOOST_PP_CAT(name, _);
     BOOST_PP_SEQ_FOR_EACH(REGISTER_TOKEN, _, TOKEN_SEQ_1)
     BOOST_PP_SEQ_FOR_EACH(REGISTER_TOKEN, _, TOKEN_SEQ_2)
     BOOST_PP_SEQ_FOR_EACH(REGISTER_TOKEN, _, TOKEN_SEQ_3)
@@ -112,6 +114,9 @@ lexer::lexer() :
     BOOST_PP_SEQ_FOR_EACH(REGISTER_TOKEN, _, TOKEN_SEQ_12)
     BOOST_PP_SEQ_FOR_EACH(REGISTER_TOKEN, _, TOKEN_SEQ_13)
     BOOST_PP_SEQ_FOR_EACH(REGISTER_TOKEN, _, TOKEN_SEQ_14)
+    BOOST_PP_SEQ_FOR_EACH(REGISTER_TOKEN, _, TOKEN_SEQ_15)
+    BOOST_PP_SEQ_FOR_EACH(REGISTER_TOKEN, _, TOKEN_SEQ_16)
+    BOOST_PP_SEQ_FOR_EACH(REGISTER_TOKEN, _, TOKEN_SEQ_17)
 #undef REGISTER_TOKEN
 
     self
@@ -125,30 +130,6 @@ lexer::lexer() :
         ;
 }
 
-const lexer& lexer::instance() {
-    static const lexer retval;
-    return retval;
-}
-
-const boost::spirit::lex::token_def<const char*>& lexer::name_token(const char* name) const {
-    std::map<const char*, boost::spirit::lex::token_def<const char*>*>::const_iterator it = m_name_tokens.find(name);
-    assert(it != m_name_tokens.end());
-    return *it->second;
-}
-
 namespace boost { namespace spirit { namespace traits {
-
-    // This template specialization is required by Spirit.Lex to automatically
-    // convert an iterator pair to an const char* in the lexer.
-    void assign_to_attribute_from_iterators<const char*, parse::text_iterator, void>::
-    call(const parse::text_iterator& first, const parse::text_iterator& last, const char*& attr) {
-        std::string str(first, last);
-        boost::algorithm::to_lower(str);
-        attr = str.c_str();
-    }
-
-    void assign_to_attribute_from_iterators<bool, parse::text_iterator, void>::
-    call(const parse::text_iterator& first, const parse::text_iterator& last, bool& attr)
-    { attr = *first == 't' || *first == 'T' ? true : false; }
 
 } } }

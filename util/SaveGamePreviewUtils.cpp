@@ -4,7 +4,6 @@
 #include "i18n.h"
 #include "Directories.h"
 #include "Logger.h"
-#include "MultiplayerCommon.h"
 #include "EnumText.h"
 #include "Serialize.h"
 #include "Serialize.ipp"
@@ -32,6 +31,8 @@ namespace {
     const std::string XML_SAVE_FILE_DESCRIPTION("This is an XML archive FreeOrion saved game. Initial header information is uncompressed. The main gamestate information follows, possibly stored as zlib-comprssed XML archive in the last entry in the main archive.");
     const std::string BIN_SAVE_FILE_DESCRIPTION("This is binary archive FreeOrion saved game.");
 
+    const std::string XML_COMPRESSED_MARKER("zlib-xml");
+
     /// Splits time and date on separate lines for an ISO datetime string
     std::string split_time(const std::string& time) {
         std::string result = time;
@@ -52,7 +53,7 @@ namespace {
 
         fs::ifstream ifs(path, std::ios_base::binary);
 
-        full.filename = PathString(path.filename());
+        full.filename = PathToString(path.filename());
 
         if (!ifs)
             throw std::runtime_error(UNABLE_TO_OPEN_FILE);
@@ -64,7 +65,14 @@ namespace {
 
         DebugLogger() << "LoadSaveGamePreviewData: Loading preview from: " << path.string();
         try {
-            try {
+            // read the first five letters of the stream and check if it is opening an xml file
+            std::string xxx5(5, ' ');
+            ifs.read(&xxx5[0], 5);
+            const std::string xml5{"<?xml"};
+            // reset to start of stream
+            boost::iostreams::seek(ifs, 0, std::ios_base::beg);
+            // binary deserialization iff document is not xml
+            if (xml5 != xxx5) {
                 ScopedTimer timer("LoadSaveGamePreviewData (binary): " + path.string(), true);
 
                 // first attempt binary deserialziation
@@ -73,15 +81,14 @@ namespace {
                 ia >> BOOST_SERIALIZATION_NVP(save_preview_data);
                 ia >> BOOST_SERIALIZATION_NVP(galaxy_setup_data);
 
-            } catch (...) {
-                // if binary deserialization failed, try more-portable XML deserialization
-
-                // reset to start of stream (attempted binary serialization will have consumed some input...)
-                boost::iostreams::seek(ifs, 0, std::ios_base::beg);
-
+            } else {
                 DebugLogger() << "Deserializing XML data";
                 freeorion_xml_iarchive ia(ifs);
                 ia >> BOOST_SERIALIZATION_NVP(save_preview_data);
+
+                if (BOOST_VERSION >= 106600 && save_preview_data.save_format_marker == XML_COMPRESSED_MARKER)
+                    throw std::invalid_argument("Save Format Not Compatible with Boost Version " BOOST_LIB_VERSION);
+
                 ia >> BOOST_SERIALIZATION_NVP(galaxy_setup_data);
             }
 
@@ -155,6 +162,7 @@ template void SaveGamePreviewData::serialize<freeorion_bin_iarchive>(freeorion_b
 template void SaveGamePreviewData::serialize<freeorion_xml_oarchive>(freeorion_xml_oarchive&, unsigned int);
 template void SaveGamePreviewData::serialize<freeorion_xml_iarchive>(freeorion_xml_iarchive&, unsigned int);
 
+
 template<class Archive>
 void FullPreview::serialize(Archive& ar, unsigned int version)
 {
@@ -181,6 +189,63 @@ template void PreviewInformation::serialize<freeorion_bin_oarchive>(freeorion_bi
 template void PreviewInformation::serialize<freeorion_bin_iarchive>(freeorion_bin_iarchive&, const unsigned int);
 template void PreviewInformation::serialize<freeorion_xml_oarchive>(freeorion_xml_oarchive&, const unsigned int);
 template void PreviewInformation::serialize<freeorion_xml_iarchive>(freeorion_xml_iarchive&, const unsigned int);
+
+
+bool SaveFileWithValidHeader(const boost::filesystem::path& path) {
+    if (!fs::exists(path))
+        return false;
+
+    fs::ifstream ifs(path, std::ios_base::binary);
+    if (!ifs)
+        return false;
+
+    // dummy holders for deserialized data
+    SaveGamePreviewData                 ignored_save_preview_data;
+    GalaxySetupData                     ignored_galaxy_setup_data;
+    ServerSaveGameData                  ignored_server_save_game_data;
+    std::vector<PlayerSaveHeaderData>   ignored_player_save_header_data;
+    std::map<int, SaveGameEmpireData>   ignored_empire_save_game_data;
+
+    DebugLogger() << "SaveFileWithValidHeader: Loading headers from: " << path.string();
+    try {
+        // read the first five letters of the stream and check if it is opening an xml file
+        std::string xxx5(5, ' ');
+        ifs.read(&xxx5[0], 5);
+        const std::string xml5{"<?xml"};
+        // reset to start of stream 
+        boost::iostreams::seek(ifs, 0, std::ios_base::beg);
+        // binary deserialization iff document is not xml
+        if (xml5 != xxx5) {
+            ScopedTimer timer("SaveFileWithValidHeader (binary): " + path.string(), true);
+
+            freeorion_bin_iarchive ia(ifs);
+
+            ia >> BOOST_SERIALIZATION_NVP(ignored_save_preview_data);
+            ia >> BOOST_SERIALIZATION_NVP(ignored_galaxy_setup_data);
+            ia >> BOOST_SERIALIZATION_NVP(ignored_server_save_game_data);
+            ia >> BOOST_SERIALIZATION_NVP(ignored_player_save_header_data);
+            ia >> BOOST_SERIALIZATION_NVP(ignored_empire_save_game_data);
+        } else {
+            DebugLogger() << "Deserializing XML data";
+            freeorion_xml_iarchive ia(ifs);
+
+            ia >> BOOST_SERIALIZATION_NVP(ignored_save_preview_data);
+
+            if (BOOST_VERSION >= 106600 && ignored_save_preview_data.save_format_marker == XML_COMPRESSED_MARKER)
+                throw std::invalid_argument("Save Format Not Compatible with Boost Version " BOOST_LIB_VERSION);
+
+            ia >> BOOST_SERIALIZATION_NVP(ignored_galaxy_setup_data);
+            ia >> BOOST_SERIALIZATION_NVP(ignored_server_save_game_data);
+            ia >> BOOST_SERIALIZATION_NVP(ignored_player_save_header_data);
+            ia >> BOOST_SERIALIZATION_NVP(ignored_empire_save_game_data);
+        }
+
+    } catch (const std::exception& e) {
+        ErrorLogger() << "SaveFileWithValidHeader: Failed to read headers of " << path.string() << " because: " << e.what();
+        return false;
+    }
+    return true;
+}
 
 std::string ColumnInPreview(const FullPreview& full, const std::string& name, bool thin) {
     if (name == "player") {
@@ -234,7 +299,8 @@ void LoadSaveGamePreviews(const fs::path& orig_path, const std::string& extensio
     fs::path path = orig_path;
     // Relative path relative to the save directory
     if (path.is_relative()) {
-        path = GetSaveDir() / path;
+        ErrorLogger() << "LoadSaveGamePreviews: supplied path must not be relative, \"" << path << "\" ";
+        return;
     }
 
     if (!fs::exists(path)) {
@@ -248,7 +314,7 @@ void LoadSaveGamePreviews(const fs::path& orig_path, const std::string& extensio
 
     for (fs::directory_iterator it(path); it != end_it; ++it) {
         try {
-            std::string filename = PathString(it->path().filename());
+            std::string filename = PathToString(it->path().filename());
             if ((it->path().filename().extension() == extension) && !fs::is_directory(it->path())) {
                 if (LoadSaveGamePreviewData(*it, data)) {
                     // Add preview entry to list
@@ -259,22 +325,4 @@ void LoadSaveGamePreviews(const fs::path& orig_path, const std::string& extensio
             ErrorLogger() << "LoadSaveGamePreviews: Failed loading preview from " << it->path() << " because: " << e.what();
         }
     }
-}
-
-bool IsInside(const fs::path& path, const fs::path& directory) {
-    const fs::path target = fs::canonical(directory);
-
-    if (!path.has_parent_path()) {
-        return false;
-    }
-
-    fs::path cur = path.parent_path();
-    while (cur.has_parent_path()) {
-        if (cur == target) {
-            return true;
-        } else {
-            cur = cur.parent_path();
-        }
-    }
-    return false;
 }

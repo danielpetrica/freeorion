@@ -44,9 +44,9 @@ class GG_API OverlayWnd : public Wnd
 public:
     /** \name Structors */ ///@{
     OverlayWnd(X x, Y y, X w, Y h, Flags<WndFlag> flags = NO_WND_FLAGS);
-
     ~OverlayWnd();
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ ///@{
     Pt MinUsableSize() const override;
@@ -58,28 +58,25 @@ public:
     std::size_t NumWnds() const;
 
     /** Returns the Wnd currently visible in the OverlayWnd, or 0 if there is none. */
-    Wnd* CurrentWnd() const;
+    std::shared_ptr<Wnd> CurrentWnd() const;
 
     /** Returns the index into the sequence of Wnds in this OverlayWnd of the Wnd
         currently shown.  NO_WND is returned if there is no Wnd currently
         visible. */
     std::size_t  CurrentWndIndex() const;
-
-    /** Returns the set of Wnds currently controlled by this OverlayWnd. */
-    const std::vector<Wnd*>& Wnds() const;
     //@}
 
     /** \name Mutators */ ///@{
     /** Adds \a wnd to the sequence of Wnds in this OverlayWnd, with name \a name.
         \a name can be used later to remove the Wnd (\a name is not checked
         for uniqueness).  Returns the index at which \a wnd is placed. */
-    std::size_t AddWnd(Wnd* wnd);
+    std::size_t AddWnd(const std::shared_ptr<Wnd>& wnd);
 
     /** Adds \a wnd to the sequence of Wnds in this OverlayWnd, inserting it at
         the \a index location within the sequence.  \a name can be used later
         to remove the Wnd (\a name is not checked for uniqueness).  Not range
         checked. */
-    void InsertWnd(std::size_t index, Wnd* wnd);
+    void InsertWnd(std::size_t index, const std::shared_ptr<Wnd>& wnd);
 
     /** Removes and returns the Wnd at index \a index from the sequence of
         Wnds in this OverlayWnd, or 0 if there is no Wnd at that index. */
@@ -99,7 +96,7 @@ public:
     static const std::size_t NO_WND;
 
 private:
-    std::vector<Wnd*> m_wnds;
+    std::vector<std::shared_ptr<Wnd>> m_wnds;
     std::size_t       m_current_wnd_index;
 };
 
@@ -117,8 +114,10 @@ public:
     //@}
 
     /** \name Structors */ ///@{
-    TabWnd(X x, Y y, X w, Y h, const std::shared_ptr<Font>& font, Clr color, Clr text_color = CLR_BLACK);
+    TabWnd(X x, Y y, X w, Y h, const std::shared_ptr<Font>& font,
+           Clr color, Clr text_color = CLR_BLACK);
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ ///@{
     Pt MinUsableSize() const override;
@@ -142,13 +141,13 @@ public:
     /** Adds \a wnd to the sequence of Wnds in this TabWnd, with name \a name.
         \a name can be used later to remove the Wnd (\a name is not checked
         for uniqueness).  Returns the index at which \a wnd is placed. */
-    std::size_t     AddWnd(Wnd* wnd, const std::string& name);
+    std::size_t     AddWnd(const std::shared_ptr<Wnd>& wnd, const std::string& name);
 
     /** Adds \a wnd to the sequence of Wnds in this TabWnd, inserting it at
         the \a index location within the sequence.  \a name can be used later
         to remove the Wnd (\a name is not checked for uniqueness).  Not range
         checked. */
-    void            InsertWnd(std::size_t index, Wnd* wnd, const std::string& name);
+    void            InsertWnd(std::size_t index, const std::shared_ptr<Wnd>& wnd, const std::string& name);
 
     /** Removes and returns the first Wnd previously added witht he name \a
         name from the sequence of Wnds in this TabWnd, or 0 if no such Wnd is
@@ -168,12 +167,6 @@ public:
 
 protected:
     /** \name Accessors */ ///@{
-    /** Returns the TabBar at the top of this TabWnd. */
-    const TabBar*                       GetTabBar() const;
-
-    /** Returns the OverlayWnd in this TabWnd. */
-    const OverlayWnd*                   GetOverlayWnd() const;
-
     /** Returns the set of Wnds currently controlled by this TabWnd, indexed
         by name. */
     const std::map<std::string, Wnd*>&  WndNames() const;
@@ -182,8 +175,8 @@ protected:
 private:
     void    TabChanged(std::size_t tab_index, bool signal);
 
-    TabBar*                     m_tab_bar;
-    OverlayWnd*                 m_overlay;
+    std::shared_ptr<TabBar>                     m_tab_bar;
+    std::shared_ptr<OverlayWnd>                 m_overlay;
     std::map<std::string, Wnd*> m_named_wnds;
 };
 
@@ -206,7 +199,9 @@ public:
     /** \name Structors */ ///@{
     TabBar(const std::shared_ptr<Font>& font, Clr color, Clr text_color = CLR_BLACK,
            Flags<WndFlag> flags = INTERACTIVE);
+    void CompleteConstruction() override;
     //@}
+public:
 
     /** \name Accessors */ ///@{
     Pt MinUsableSize() const override;
@@ -236,21 +231,21 @@ public:
     /** Adds a tab called \a name to the sequence of tabs in this TabBar.  \a
         name can be used later to remove the tab (\a name is not checked for
         uniqueness).  Returns the index at which the tab is placed. */
-    std::size_t     AddTab(const std::string& name);
+    std::size_t AddTab(const std::string& name);
 
     /** Adds tab to the sequence of tabs in this TabBar, inserting it at the
         \a index location within the sequence.  \a name can be used later to
         remove the tab (\a name is not checked for uniqueness).  Not range
         checked. */
-    void            InsertTab(std::size_t index, const std::string& name);
+    void InsertTab(std::size_t index, const std::string& name);
 
     /** Removes the first tab previously added witht he name \a name from the
         sequence of tab in this TabBar. */
-    void            RemoveTab(const std::string& name);
+    void RemoveTab(const std::string& name);
 
     /** Sets the current tab in the sequence to the tab in the \a index
         position within the sequence.  Not range checked. */
-    void            SetCurrentTab(std::size_t index);
+    void SetCurrentTab(std::size_t index);
     //@}
 
     mutable TabChangedSignalType TabChangedSignal; ///< The tab change signal object for this TabBar
@@ -273,7 +268,7 @@ protected:
 
     /** Brings the currently-selected tab button to the top within the tab
         button group. */
-    void            RaiseCurrentTabButton();
+    void RaiseCurrentTabButton();
     //@}
 
 private:
@@ -284,12 +279,15 @@ private:
     void RightClicked();
     void BringTabIntoView(std::size_t index);
 
-    RadioButtonGroup*         m_tabs;
-    std::vector<StateButton*> m_tab_buttons;
+    /** Shows or hides the left-right buttons based on whether they are currently needed. */
+    void RecalcLeftRightButton();
+
+    std::shared_ptr<RadioButtonGroup>         m_tabs;
+    std::vector<std::shared_ptr<StateButton>> m_tab_buttons;
     std::shared_ptr<Font> m_font;
-    Button*                   m_left_button;
-    Button*                   m_right_button;
-    Layout*                   m_left_right_button_layout;
+    std::shared_ptr<Button>                   m_left_button;
+    std::shared_ptr<Button>                   m_right_button;
+    std::shared_ptr<Layout>                   m_left_right_button_layout;
     Flags<TextFormat>         m_format;
     Clr                       m_text_color;
     std::size_t               m_first_tab_shown;

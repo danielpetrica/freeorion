@@ -10,9 +10,9 @@
 
 
 /** Encapsulates a spawned child process in a platform-independent manner. A Process object holds a shared_ptr to the
-   data on the process it creates; therefore Process objects can be freely copied, with the same copy semantics as 
-   a shared_ptr.  In addition, the created process is automatically killed when its owning Process object is 
-   destroyed, unless it is explicitly Free()d.  Note that whether or not the process is explicitly Free()d, it may be 
+   data on the process it creates; therefore Process objects can be freely copied, with the same copy semantics as
+   a shared_ptr.  In addition, the created process is automatically killed when its owning Process object is
+   destroyed, unless it is explicitly Free()d.  Note that whether or not the process is explicitly Free()d, it may be
    explicitly Kill()ed at any time.
    <br>
    Currently, creating processes is supported on these operating systems:
@@ -54,10 +54,14 @@ public:
 
     /** \name Mutators */ //@{
     /** sets process priority */
-    bool SetLowPriority(bool low); 
+    bool SetLowPriority(bool low);
 
     /** kills the controlled process immediately. */
     void Kill();
+
+    /** terminate the controlled process and wait for finish.
+     *  Return true if exit status was 0. */
+    bool Terminate();
 
     /** kills the controlled process iff it has not been freed. */
     void RequestTermination();
@@ -71,7 +75,7 @@ private:
 
     std::shared_ptr<Impl> m_impl;
     bool                    m_empty;           ///< true iff this is a default-constructed Process (no associated process exists)
-    bool                    m_low_priority;    ///< true if this process is set to low priority
+    bool                    m_low_priority = false;  ///< true if this process is set to low priority
 };
 
 #endif // _Process_h_

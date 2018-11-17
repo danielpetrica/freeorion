@@ -22,14 +22,32 @@ class Field;
 struct GalaxySetupData;
 
 class FO_COMMON_API IApp {
+protected:
+    IApp();
+
 public:
+    IApp(const IApp&) = delete;
+
+    IApp(IApp&&) = delete;
+
     virtual ~IApp();
+
+    const IApp& operator=(const IApp&) = delete;
+
+    IApp& operator=(IApp&&) = delete;
 
     /** Returns a IApp pointer to the singleton instance of the app. */
     static IApp* GetApp();
 
-    /** Returns applications copy of Universe. */
+    //! Returns the ::Universe known to this application
+    //!
+    //! @return
+    //! A constant reference to the single ::Universe instance representing the
+    //! known universe of this application.
     virtual Universe& GetUniverse() = 0;
+
+    /** Start parsing universe object types on a separate thread. */
+    virtual void StartBackgroundParsing();
 
     /** Returns the set of known Empires for this application. */
     virtual EmpireManager& Empires() = 0;
@@ -47,16 +65,9 @@ public:
 
     virtual std::string GetVisibleObjectName(std::shared_ptr<const UniverseObject> object) = 0;
 
-    /** returns a universe object ID which can be used for new objects.
-        Can return INVALID_OBJECT_ID if an ID cannot be created. */
-    virtual int GetNewObjectID() = 0;
-
-    /** returns a design ID which can be used for a new design to uniquely
-        identify it.
-        Can return INVALID_OBJECT_ID if an ID cannot be created. */
-    virtual int GetNewDesignID() = 0;
-
-    /** Returns the current game turn. */
+    //! Returns the current game turn
+    //!
+    //! @return The number representing the current game turn.
     virtual int CurrentTurn() const = 0;
 
     static int MAX_AI_PLAYERS(); ///<Maximum number of AIs
@@ -73,17 +84,11 @@ public:
     virtual int EffectsProcessingThreads() const = 0;
 
 protected:
-    IApp();
-
     static IApp* s_app; ///< a IApp pointer to the singleton instance of the app
 
     // NormalExitException is used to break out of the run loop, without calling
     // terminate and failing to unroll the stack.
     class NormalExitException {};
-
-private:
-    const IApp& operator=(const IApp&); // disabled
-    IApp(const IApp&); // disabled
 };
 
 /** Accessor for the App's empire manager */
@@ -173,14 +178,6 @@ inline std::shared_ptr<Building> GetEmpireKnownBuilding(int object_id, int empir
  * name, if the application isn't supposed to see the real object name. */
 inline std::string GetVisibleObjectName(std::shared_ptr<const UniverseObject> object)
 { return IApp::GetApp()->GetVisibleObjectName(object); }
-
-/** Returns a new object ID from the server */
-inline int GetNewObjectID()
-{ return IApp::GetApp()->GetNewObjectID(); }
-
-/** Returns a new object ID from the server */
-inline int GetNewDesignID()
-{ return IApp::GetApp()->GetNewDesignID(); }
 
 /** Returns current game turn.  This is >= 1 during a game, BEFORE_FIRST_TURN
   * during galaxy setup, or is INVALID_GAME_TURN at other times */

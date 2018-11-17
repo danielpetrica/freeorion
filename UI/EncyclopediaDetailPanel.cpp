@@ -12,7 +12,6 @@
 #include "../universe/Encyclopedia.h"
 #include "../universe/Universe.h"
 #include "../universe/Tech.h"
-#include "../universe/ShipDesign.h"
 #include "../universe/Building.h"
 #include "../universe/Planet.h"
 #include "../universe/System.h"
@@ -30,24 +29,26 @@
 #include "../util/i18n.h"
 #include "../util/Logger.h"
 #include "../util/OptionsDB.h"
+#include "../util/GameRules.h"
 #include "../util/Directories.h"
 #include "../util/VarText.h"
 #include "../util/ScopedTimer.h"
 #include "../client/human/HumanClientApp.h"
 #include "../combat/CombatLogManager.h"
-#include "../parse/Parse.h"
 
 #include <GG/DrawUtil.h>
-#include <GG/StaticGraphic.h>
 #include <GG/GUI.h>
 #include <GG/RichText/RichText.h>
 #include <GG/ScrollPanel.h>
+#include <GG/StaticGraphic.h>
 #include <GG/Texture.h>
 
 #include <boost/algorithm/clamp.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <unordered_map>
+
+FO_COMMON_API extern const int INVALID_DESIGN_ID;
 
 using boost::io::str;
 
@@ -57,8 +58,8 @@ namespace {
     const int DESCRIPTION_PADDING(3);
 
     void    AddOptions(OptionsDB& db) {
-        db.Add("UI.dump-effects-descriptions", UserStringNop("OPTIONS_DB_DUMP_EFFECTS_GROUPS_DESC"),  false,  Validator<bool>());
-        db.Add("UI.encyclopedia.search.articles", UserStringNop("OPTIONS_DB_ENC_SEARCH_ARTICLE"),     true,   Validator<bool>());
+        db.Add("resource.effects.description.shown", UserStringNop("OPTIONS_DB_DUMP_EFFECTS_GROUPS_DESC"), false, Validator<bool>());
+        db.Add("ui.pedia.search.articles.enabled", UserStringNop("OPTIONS_DB_UI_ENC_SEARCH_ARTICLE"), true, Validator<bool>());
     }
     bool temp_bool = RegisterOptions(&AddOptions);
 
@@ -140,7 +141,7 @@ namespace {
             "ENC_METER_TYPE",   "ENC_EMPIRE",       "ENC_SHIP_DESIGN",  "ENC_SHIP",
             "ENC_MONSTER",      "ENC_MONSTER_TYPE", "ENC_FLEET",        "ENC_PLANET",
             "ENC_BUILDING",     "ENC_SYSTEM",       "ENC_FIELD",        "ENC_GRAPH",
-            "ENC_GALAXY_SETUP"};
+            "ENC_GALAXY_SETUP", "ENC_GAME_RULES"};
         //  "ENC_HOMEWORLDS" omitted due to weird formatting of article titles
         return dir_names;
     }
@@ -149,8 +150,8 @@ namespace {
      * @param[in] name name entry of the article
      */
     const EncyclopediaArticle& GetPediaArticle(const std::string& name) {
-        const std::map<std::string, std::vector<EncyclopediaArticle>>& articles = GetEncyclopedia().articles;
-        for (const std::map<std::string, std::vector<EncyclopediaArticle>>::value_type& entry : articles) {
+        const auto& articles = GetEncyclopedia().Articles();
+        for (const auto& entry : articles) {
             for (const EncyclopediaArticle& article : entry.second) {
                 if (article.name == name) {
                     return article;
@@ -169,14 +170,16 @@ namespace {
                                                 std::pair<std::string,
                                                           std::string>>& sorted_entries_list)
     {
+        ScopedTimer subdir_timer("GetSortedPediaDirEntires(" + dir_name + ")",
+                                 true, std::chrono::milliseconds(20));
+
         const Encyclopedia& encyclopedia = GetEncyclopedia();
         int client_empire_id = HumanClientApp::GetApp()->EmpireID();
 
         if (dir_name == "ENC_INDEX") {
             // add entries consisting of links to pedia page lists of
             // articles of various types
-            for (const std::string& str : GetSearchTextDirNames())
-            {
+            for (const std::string& str : GetSearchTextDirNames()) {
                 if (str == "ENC_INDEX")
                     continue;
                 sorted_entries_list.insert({UserString(str),
@@ -184,15 +187,13 @@ namespace {
                                              str}});
             }
 
-            for (const std::string& str : {"ENC_TEXTURES", "ENC_HOMEWORLDS"})
-            {
+            for (const std::string& str : {"ENC_TEXTURES", "ENC_HOMEWORLDS"}) {
                 sorted_entries_list.insert({UserString(str),
                                             {LinkTaggedText(TextLinker::ENCYCLOPEDIA_TAG, str) + "\n",
                                              str}});
             }
 
-
-            for (const std::map<std::string, std::vector<EncyclopediaArticle>>::value_type& entry : encyclopedia.articles) {
+            for (const auto& entry : encyclopedia.Articles()) {
                 // Do not add sub-categories
                 const EncyclopediaArticle& article = GetPediaArticle(entry.first);
                 // No article found or specifically a top-level category
@@ -205,7 +206,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_SHIP_PART") {
-            for (const std::map<std::string, PartType*>::value_type& entry : GetPartTypeManager()) {
+            for (const auto& entry : GetPartTypeManager()) {
                 std::string custom_category = DetermineCustomCategory(entry.second->Tags());
                 if (custom_category.empty()) {
                     sorted_entries_list.insert({UserString(entry.first),
@@ -215,7 +216,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_SHIP_HULL") {
-            for (const std::map<std::string, HullType*>::value_type& entry : GetHullTypeManager()) {
+            for (const auto& entry : GetHullTypeManager()) {
                 std::string custom_category = DetermineCustomCategory(entry.second->Tags());
                 if (custom_category.empty()) {
                     sorted_entries_list.insert({UserString(entry.first),
@@ -227,10 +228,10 @@ namespace {
         } else if (dir_name == "ENC_TECH") {
             std::map<std::string, std::string> userstring_tech_names;
             // sort tech names by user-visible name, so names are shown alphabetically in UI
-            for (const std::string& tech_name : GetTechManager().TechNames()) {
+            for (const auto& tech_name : GetTechManager().TechNames()) {
                 userstring_tech_names[UserString(tech_name)] = tech_name;
             }
-            for (std::map<std::string, std::string>::value_type& tech_name : userstring_tech_names) {
+            for (const auto& tech_name : userstring_tech_names) {
                 std::string custom_category = DetermineCustomCategory(GetTech(tech_name.second)->Tags());
                 if (custom_category.empty()) {
                     // already iterating over userstring-looked-up names, so don't need to re-look-up-here
@@ -241,7 +242,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_BUILDING_TYPE") {
-            for (const std::map<std::string, BuildingType*>::value_type& entry : GetBuildingTypeManager()) {
+            for (const auto& entry : GetBuildingTypeManager()) {
                 std::string custom_category = DetermineCustomCategory(entry.second->Tags());
                 if (custom_category.empty()) {
                     sorted_entries_list.insert({UserString(entry.first),
@@ -258,7 +259,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_SPECIES") {
-            for (const std::map<std::string, Species*>::value_type& entry : GetSpeciesManager()) {
+            for (const auto& entry : GetSpeciesManager()) {
                 std::string custom_category = DetermineCustomCategory(entry.second->Tags());
                 if (custom_category.empty()) {
                     sorted_entries_list.insert({UserString(entry.first),
@@ -268,10 +269,9 @@ namespace {
             }
 
         } else if (dir_name == "ENC_HOMEWORLDS") {
-            int client_empire_id = HumanClientApp::GetApp()->EmpireID();
             const SpeciesManager& species_manager = GetSpeciesManager();
-            for (const std::map<std::string, Species*>::value_type& entry : species_manager) {
-                Species* species = entry.second;
+            for (const auto& entry : species_manager) {
+                const auto& species = entry.second;
                 std::set<int> known_homeworlds;
                 //std::string species_entry = UserString(entry.first) + ":  ";
                 std::string species_entry;
@@ -297,8 +297,8 @@ namespace {
 
                 // occupied planets
                 std::vector<std::shared_ptr<const Planet>> species_occupied_planets;
-                for (std::shared_ptr<Planet> planet : Objects().FindObjects<Planet>()) {
-                    if ((planet->SpeciesName() == entry.first) && (known_homeworlds.find(planet->ID()) == known_homeworlds.end()))
+                for (auto& planet : Objects().FindObjects<Planet>()) {
+                    if ((planet->SpeciesName() == entry.first) && !known_homeworlds.count(planet->ID()))
                         species_occupied_planets.push_back(planet);
                 }
                 if (!species_occupied_planets.empty()) {
@@ -306,7 +306,7 @@ namespace {
                         species_entry += "  |   " + std::to_string(species_occupied_planets.size()) + " " + UserString("OCCUPIED_PLANETS");
                     } else {
                         species_entry += "  |   " + UserString("OCCUPIED_PLANETS") + ":  ";
-                        for (std::shared_ptr<const Planet> planet : species_occupied_planets) {
+                        for (auto& planet : species_occupied_planets) {
                             species_entry += LinkTaggedIDText(VarText::PLANET_ID_TAG, planet->ID(), planet->PublicName(client_empire_id)) + "   ";
                         }
                     }
@@ -315,8 +315,8 @@ namespace {
                 {species_entry + "\n", entry.first}});
             }
             sorted_entries_list.insert({"⃠ ", {"\n\n", "  "}});
-            for (const std::map<std::string, Species*>::value_type& entry : species_manager) {
-                Species* species = entry.second;
+            for (const auto& entry : species_manager) {
+                const auto& species = entry.second;
                 if (species->Homeworlds().empty()) {
                     std::string species_entry = LinkTaggedText(VarText::SPECIES_TAG, entry.first) + ":  ";
                     species_entry += UserString("NO_HOMEWORLD");
@@ -326,7 +326,7 @@ namespace {
             } 
 
         } else if (dir_name == "ENC_FIELD_TYPE") {
-            for (const std::map<std::string, FieldType*>::value_type& entry : GetFieldTypeManager()) {
+            for (const auto& entry : GetFieldTypeManager()) {
                 std::string custom_category = DetermineCustomCategory(entry.second->Tags());
                 if (custom_category.empty()) {
                     sorted_entries_list.insert({UserString(entry.first),
@@ -345,25 +345,27 @@ namespace {
             }
 
         } else if (dir_name == "ENC_EMPIRE") {
-            for (std::map<int, Empire*>::value_type& entry : Empires()) {
+            for (auto& entry : Empires()) {
                 sorted_entries_list.insert({UserString(entry.second->Name()),
                                             {LinkTaggedIDText(VarText::EMPIRE_ID_TAG, entry.first, entry.second->Name()) + "\n",
                                              std::to_string(entry.first)}});
             }
 
         } else if (dir_name == "ENC_SHIP_DESIGN") {
-            for (Universe::ship_design_iterator it = GetUniverse().beginShipDesigns();
+            for (auto it = GetUniverse().beginShipDesigns();
                  it != GetUniverse().endShipDesigns(); ++it)
             {
                 if (it->second->IsMonster())
                     continue;
-                sorted_entries_list.insert({it->second->Name(),
-                                            {LinkTaggedIDText(VarText::DESIGN_ID_TAG, it->first, it->second->Name()) + "\n",
-                                             std::to_string(it->first)}});
+                sorted_entries_list.insert(
+                    {it->second->Name(),
+                        {LinkTaggedIDText(VarText::DESIGN_ID_TAG, it->first,
+                                          it->second->Name()) + "\n",
+                                          std::to_string(it->first)}});
             }
 
         } else if (dir_name == "ENC_SHIP") {
-            for (std::shared_ptr<const Ship> ship : Objects().FindObjects<Ship>()) {
+            for (auto& ship : Objects().FindObjects<Ship>()) {
                 const std::string& ship_name = ship->PublicName(client_empire_id);
                 sorted_entries_list.insert({ship_name,
                                             {LinkTaggedIDText(VarText::SHIP_ID_TAG, ship->ID(), ship_name) + "  ",
@@ -371,7 +373,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_MONSTER") {
-            for (std::shared_ptr<const Ship> ship : Objects().FindObjects<Ship>()) {
+            for (auto& ship : Objects().FindObjects<Ship>()) {
                 if (!ship->IsMonster())
                     continue;
                 const std::string& ship_name = ship->PublicName(client_empire_id);
@@ -381,14 +383,19 @@ namespace {
             }
 
         } else if (dir_name == "ENC_MONSTER_TYPE") {
-            for (Universe::ship_design_iterator it = GetUniverse().beginShipDesigns(); it != GetUniverse().endShipDesigns(); ++it)
+            for (auto it = GetUniverse().beginShipDesigns();
+                 it != GetUniverse().endShipDesigns(); ++it)
+            {
                 if (it->second->IsMonster())
-                    sorted_entries_list.insert({it->second->Name(),
-                                                {LinkTaggedIDText(VarText::DESIGN_ID_TAG, it->first, it->second->Name()) + "\n",
-                                                 std::to_string(it->first)}});
+                    sorted_entries_list.insert(
+                        {it->second->Name(),
+                            {LinkTaggedIDText(VarText::DESIGN_ID_TAG, it->first,
+                                              it->second->Name()) + "\n",
+                                              std::to_string(it->first)}});
+            }
 
         } else if (dir_name == "ENC_FLEET") {
-            for (std::shared_ptr<const Fleet> fleet : Objects().FindObjects<Fleet>()) {
+            for (auto& fleet : Objects().FindObjects<Fleet>()) {
                 const std::string& flt_name = fleet->PublicName(client_empire_id);
                 sorted_entries_list.insert({flt_name,
                                             {LinkTaggedIDText(VarText::FLEET_ID_TAG, fleet->ID(), flt_name) + "  ",
@@ -396,7 +403,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_PLANET") {
-            for (std::shared_ptr<const Planet> planet : Objects().FindObjects<Planet>()) {
+            for (auto& planet : Objects().FindObjects<Planet>()) {
                 const std::string& plt_name = planet->PublicName(client_empire_id);
                 sorted_entries_list.insert({plt_name,
                                             {LinkTaggedIDText(VarText::PLANET_ID_TAG, planet->ID(), plt_name) + "  ",
@@ -404,7 +411,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_BUILDING") {
-            for (std::shared_ptr<const Building> building : Objects().FindObjects<Building>()) {
+            for (auto& building : Objects().FindObjects<Building>()) {
                 const std::string& bld_name = building->PublicName(client_empire_id);
                 sorted_entries_list.insert({bld_name,
                                             {LinkTaggedIDText(VarText::BUILDING_ID_TAG, building->ID(), bld_name) + "  ",
@@ -412,7 +419,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_SYSTEM") {
-            for (std::shared_ptr<const System> system : Objects().FindObjects<System>()) {
+            for (auto& system : Objects().FindObjects<System>()) {
                 const std::string& sys_name = system->ApparentName(client_empire_id);
                 sorted_entries_list.insert({sys_name,
                                             {LinkTaggedIDText(VarText::SYSTEM_ID_TAG, system->ID(), sys_name) + "  ",
@@ -420,7 +427,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_FIELD") {
-            for (std::shared_ptr<const Field> field : Objects().FindObjects<Field>()) {
+            for (auto& field : Objects().FindObjects<Field>()) {
                 const std::string& field_name = field->Name();
                 sorted_entries_list.insert({field_name,
                                             {LinkTaggedIDText(VarText::FIELD_ID_TAG, field->ID(), field_name) + "  ",
@@ -428,7 +435,7 @@ namespace {
             }
 
         } else if (dir_name == "ENC_GRAPH") {
-            for (const std::map<std::string, std::map<int, std::map<int, double>>>::value_type& stat_record : GetUniverse().GetStatRecords()) {
+            for (const auto& stat_record : GetUniverse().GetStatRecords()) {
                 sorted_entries_list.insert({UserString(stat_record.first),
                                             {LinkTaggedText(TextLinker::GRAPH_TAG, stat_record.first) + "\n",
                                              stat_record.first}});
@@ -454,37 +461,43 @@ namespace {
             std::map<std::string, std::pair<std::string, std::string>> dir_entries;
 
             // part types
-            for (const std::map<std::string, PartType*>::value_type& entry : GetPartTypeManager())
+            for (const auto& entry : GetPartTypeManager())
                 if (DetermineCustomCategory(entry.second->Tags()) == dir_name)
-                    dir_entries[UserString(entry.first)] = std::make_pair(VarText::SHIP_PART_TAG, entry.first);
+                    dir_entries[UserString(entry.first)] =
+                        std::make_pair(VarText::SHIP_PART_TAG, entry.first);
 
             // hull types
-            for (const std::map<std::string, HullType*>::value_type& entry : GetHullTypeManager())
+            for (const auto& entry : GetHullTypeManager())
                 if (DetermineCustomCategory(entry.second->Tags()) == dir_name)
-                    dir_entries[UserString(entry.first)] = std::make_pair(VarText::SHIP_HULL_TAG, entry.first);
+                    dir_entries[UserString(entry.first)] =
+                        std::make_pair(VarText::SHIP_HULL_TAG, entry.first);
 
             // techs
-            for (const std::string& tech_name : GetTechManager().TechNames())
+            for (const auto& tech_name : GetTechManager().TechNames())
                 if (DetermineCustomCategory(GetTech(tech_name)->Tags()) == dir_name)
-                    dir_entries[UserString(tech_name)] = std::make_pair(VarText::TECH_TAG, tech_name);
+                    dir_entries[UserString(tech_name)] =
+                        std::make_pair(VarText::TECH_TAG, tech_name);
 
             // building types
-            for (const std::map<std::string, BuildingType*>::value_type& entry : GetBuildingTypeManager())
+            for (const auto& entry : GetBuildingTypeManager())
                 if (DetermineCustomCategory(entry.second->Tags()) == dir_name)
-                    dir_entries[UserString(entry.first)] = std::make_pair(VarText::BUILDING_TYPE_TAG, entry.first);
+                    dir_entries[UserString(entry.first)] =
+                        std::make_pair(VarText::BUILDING_TYPE_TAG, entry.first);
 
             // species
-            for (const std::map<std::string, Species*>::value_type& entry : GetSpeciesManager())
+            for (const auto& entry : GetSpeciesManager())
                 if (DetermineCustomCategory(entry.second->Tags()) == dir_name)
-                    dir_entries[UserString(entry.first)] = std::make_pair(VarText::SPECIES_TAG, entry.first);
+                    dir_entries[UserString(entry.first)] =
+                        std::make_pair(VarText::SPECIES_TAG, entry.first);
 
             // field types
-            for (const std::map<std::string, FieldType*>::value_type& entry : GetFieldTypeManager())
+            for (const auto& entry : GetFieldTypeManager())
                 if (DetermineCustomCategory(entry.second->Tags()) == dir_name)
-                    dir_entries[UserString(entry.first)] = std::make_pair(VarText::FIELD_TYPE_TAG, entry.first);
+                    dir_entries[UserString(entry.first)] =
+                        std::make_pair(VarText::FIELD_TYPE_TAG, entry.first);
 
             // Add sorted entries
-            for (std::map<std::string, std::pair<std::string, std::string>>::value_type& entry : dir_entries) {
+            for (const auto& entry : dir_entries) {
                 sorted_entries_list.insert({entry.first,
                                             {LinkTaggedText(entry.second.first, entry.second.second) + "\n",
                                              entry.second.second}});
@@ -493,9 +506,9 @@ namespace {
         }
 
         // Add any defined entries for this directory
-        std::map<std::string, std::vector<EncyclopediaArticle>>::const_iterator category_it =
-            encyclopedia.articles.find(dir_name);
-        if (category_it != encyclopedia.articles.end()) {
+        const auto& articles = encyclopedia.Articles();
+        auto category_it = articles.find(dir_name);
+        if (category_it != articles.end()) {
             for (const EncyclopediaArticle& article : category_it->second) {
                 // Prevent duplicate addition of hard-coded directories that also have a content definition
                 if (article.name == dir_name)
@@ -514,7 +527,7 @@ namespace {
         GetSortedPediaDirEntires(dir_name, sorted_entries_list);
 
         // add sorted entries to page text
-        for (std::multimap<std::string, std::pair<std::string, std::string>>::value_type& entry : sorted_entries_list)
+        for (const auto& entry : sorted_entries_list)
         { retval += entry.second.first; }
 
         return retval;
@@ -544,10 +557,13 @@ namespace {
     };
 }
 
-std::list<std::pair<std::string, std::string>>              EncyclopediaDetailPanel::m_items = std::list<std::pair<std::string, std::string>>(0);
-std::list<std::pair<std::string, std::string>>::iterator    EncyclopediaDetailPanel::m_items_it = m_items.begin();
+std::list<std::pair<std::string, std::string>>
+    EncyclopediaDetailPanel::m_items = std::list<std::pair<std::string, std::string>>(0);
+std::list<std::pair<std::string, std::string>>::iterator
+    EncyclopediaDetailPanel::m_items_it = m_items.begin();
 
-EncyclopediaDetailPanel::EncyclopediaDetailPanel(GG::Flags<GG::WndFlag> flags, const std::string& config_name) :
+EncyclopediaDetailPanel::EncyclopediaDetailPanel(GG::Flags<GG::WndFlag> flags,
+                                                 const std::string& config_name) :
     CUIWnd(UserString("MAP_BTN_PEDIA"), flags, config_name, false),
     m_name_text(nullptr),
     m_cost_text(nullptr),
@@ -559,30 +575,35 @@ EncyclopediaDetailPanel::EncyclopediaDetailPanel(GG::Flags<GG::WndFlag> flags, c
     m_graph(nullptr),
     m_needs_refresh(false)
 {
+}
+
+void EncyclopediaDetailPanel::CompleteConstruction() {
+    CUIWnd::CompleteConstruction();
+
     const int PTS = ClientUI::Pts();
     const int NAME_PTS = PTS*3/2;
     const int SUMMARY_PTS = PTS*4/3;
 
-    m_name_text =    new CUILabel("");
-    m_cost_text =    new CUILabel("");
-    m_summary_text = new CUILabel("");
+    m_name_text =    GG::Wnd::Create<CUILabel>("");
+    m_cost_text =    GG::Wnd::Create<CUILabel>("");
+    m_summary_text = GG::Wnd::Create<CUILabel>("");
 
     m_name_text->SetFont(ClientUI::GetBoldFont(NAME_PTS));
     m_summary_text->SetFont(ClientUI::GetFont(SUMMARY_PTS));
 
     boost::filesystem::path button_texture_dir = ClientUI::ArtDir() / "icons" / "buttons";
 
-    m_index_button = new CUIButton(
+    m_index_button = Wnd::Create<CUIButton>(
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "uparrownormal.png")),
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "uparrowclicked.png")),
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "uparrowmouseover.png")));
 
-    m_back_button = new CUIButton(
+    m_back_button = Wnd::Create<CUIButton>(
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "leftarrownormal.png")),
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "leftarrowclicked.png")),
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "leftarrowmouseover.png")));
 
-    m_next_button = new CUIButton(
+    m_next_button = Wnd::Create<CUIButton>(
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "rightarrownormal.png")),
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "rightarrowclicked.png")),
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "rightarrowmouseover.png")));
@@ -590,36 +611,47 @@ EncyclopediaDetailPanel::EncyclopediaDetailPanel(GG::Flags<GG::WndFlag> flags, c
     m_back_button->Disable();
     m_next_button->Disable();
 
-    GG::Connect(m_index_button->LeftClickedSignal,  &EncyclopediaDetailPanel::OnIndex,                  this);
-    GG::Connect(m_back_button->LeftClickedSignal,   &EncyclopediaDetailPanel::OnBack,                   this);
-    GG::Connect(m_next_button->LeftClickedSignal,   &EncyclopediaDetailPanel::OnNext,                   this);
+    m_index_button->LeftClickedSignal.connect(
+        boost::bind(&EncyclopediaDetailPanel::OnIndex, this));
+    m_back_button->LeftClickedSignal.connect(
+        boost::bind(&EncyclopediaDetailPanel::OnBack, this));
+    m_next_button->LeftClickedSignal.connect(
+        boost::bind(&EncyclopediaDetailPanel::OnNext, this));
 
-    m_description_rich_text = new GG::RichText(GG::X(0), GG::Y(0), ClientWidth(), ClientHeight(), "",
-                                               ClientUI::GetFont(), ClientUI::TextColor(),
-                                               GG::FORMAT_TOP | GG::FORMAT_LEFT | GG::FORMAT_LINEWRAP | GG::FORMAT_WORDBREAK,
-                                               GG::INTERACTIVE);
-    m_scroll_panel = new GG::ScrollPanel(GG::X(0), GG::Y(0), ClientWidth(), ClientHeight(), m_description_rich_text);
+    m_description_rich_text = GG::Wnd::Create<GG::RichText>(
+        GG::X(0), GG::Y(0), ClientWidth(), ClientHeight(), "",
+        ClientUI::GetFont(), ClientUI::TextColor(),
+        GG::FORMAT_TOP | GG::FORMAT_LEFT | GG::FORMAT_LINEWRAP | GG::FORMAT_WORDBREAK,
+        GG::INTERACTIVE);
+    m_scroll_panel = GG::Wnd::Create<GG::ScrollPanel>(GG::X(0), GG::Y(0), ClientWidth(),
+                                                      ClientHeight(), m_description_rich_text);
 
     // Copy default block factory.
-    std::shared_ptr<GG::RichText::BLOCK_FACTORY_MAP> factory_map(new GG::RichText::BLOCK_FACTORY_MAP(*GG::RichText::DefaultBlockFactoryMap()));
-    CUILinkTextBlock::Factory* factory = new CUILinkTextBlock::Factory();
+    std::shared_ptr<GG::RichText::BLOCK_FACTORY_MAP>
+        factory_map(new GG::RichText::BLOCK_FACTORY_MAP(*GG::RichText::DefaultBlockFactoryMap()));
+    auto factory = new CUILinkTextBlock::Factory();
     // Wire this factory to produce links that talk to us.
-    GG::Connect(factory->LinkClickedSignal,        &EncyclopediaDetailPanel::HandleLinkClick,          this);
-    GG::Connect(factory->LinkDoubleClickedSignal,  &EncyclopediaDetailPanel::HandleLinkDoubleClick,    this);
-    GG::Connect(factory->LinkRightClickedSignal,   &EncyclopediaDetailPanel::HandleLinkDoubleClick,    this);
-    (*factory_map)[GG::RichText::PLAINTEXT_TAG] = factory;
+    factory->LinkClickedSignal.connect(
+        boost::bind(&EncyclopediaDetailPanel::HandleLinkClick, this, _1, _2));
+    factory->LinkDoubleClickedSignal.connect(
+        boost::bind(&EncyclopediaDetailPanel::HandleLinkDoubleClick, this, _1, _2));
+    factory->LinkRightClickedSignal.connect(
+        boost::bind(&EncyclopediaDetailPanel::HandleLinkDoubleClick, this, _1, _2));
+    (*factory_map)[GG::RichText::PLAINTEXT_TAG] =
+        std::shared_ptr<GG::RichText::IBlockControlFactory>(factory);
     m_description_rich_text->SetBlockFactoryMap(factory_map);
     m_description_rich_text->SetPadding(DESCRIPTION_PADDING);
 
     m_scroll_panel->SetBackgroundColor(ClientUI::CtrlColor());
-    m_scroll_panel->InstallEventFilter(this);
+    m_scroll_panel->InstallEventFilter(shared_from_this());
 
-    m_graph = new GraphControl();
+    m_graph = GG::Wnd::Create<GraphControl>();
     m_graph->ShowPoints(false);
 
-    SearchEdit* search_edit = new SearchEdit();
+    auto search_edit = GG::Wnd::Create<SearchEdit>();
     m_search_edit = search_edit;
-    GG::Connect(search_edit->TextEnteredSignal,     &EncyclopediaDetailPanel::HandleSearchTextEntered,  this);
+    search_edit->TextEnteredSignal.connect(
+        boost::bind(&EncyclopediaDetailPanel::HandleSearchTextEntered, this));
 
     AttachChild(m_search_edit);
     AttachChild(m_graph);
@@ -634,14 +666,13 @@ EncyclopediaDetailPanel::EncyclopediaDetailPanel(GG::Flags<GG::WndFlag> flags, c
     SetChildClippingMode(ClipToWindow);
     DoLayout();
     MoveChildUp(m_graph);
+    SaveDefaultedOptions();
 
     AddItem(TextLinker::ENCYCLOPEDIA_TAG, "ENC_INDEX");
 }
 
-EncyclopediaDetailPanel::~EncyclopediaDetailPanel() {
-    if (m_graph && m_graph->Parent() != this)
-    delete m_graph;
-}
+EncyclopediaDetailPanel::~EncyclopediaDetailPanel()
+{}
 
 void EncyclopediaDetailPanel::DoLayout() {
     const int PTS = ClientUI::Pts();
@@ -654,7 +685,8 @@ void EncyclopediaDetailPanel::DoLayout() {
     const int BTN_WIDTH = 24;
     const int Y_OFFSET = 22;
 
-    SectionedScopedTimer timer("EncyclopediaDetailPanel::DoLayout", std::chrono::milliseconds(1));
+    SectionedScopedTimer timer("EncyclopediaDetailPanel::DoLayout",
+                               std::chrono::milliseconds(1));
 
     // name
     GG::Pt ul = GG::Pt(GG::X(6), GG::Y(Y_OFFSET));
@@ -725,7 +757,9 @@ void EncyclopediaDetailPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
         RequirePreRender();
 }
 
-void EncyclopediaDetailPanel::KeyPress(GG::Key key, std::uint32_t key_code_point, GG::Flags<GG::ModKey> mod_keys) {
+void EncyclopediaDetailPanel::KeyPress(GG::Key key, std::uint32_t key_code_point,
+                                       GG::Flags<GG::ModKey> mod_keys)
+{
     if (key == GG::GGK_RETURN || key == GG::GGK_KP_ENTER) {
         GG::GUI::GetGUI()->SetFocusWnd(m_search_edit);
     } else if (key == GG::GGK_BACKSPACE) {
@@ -887,6 +921,8 @@ void EncyclopediaDetailPanel::HandleLinkClick(const std::string& link_type, cons
             this->SetGraph(data);
         } else if (link_type == TextLinker::URL_TAG) {
             HumanClientApp::GetApp()->OpenURL(data);
+        } else if (link_type == TextLinker::BROWSE_PATH_TAG) {
+            HumanClientApp::GetApp()->BrowsePath(FilenameToPath(data));
         }
 
     } catch (const boost::bad_lexical_cast&) {
@@ -943,6 +979,9 @@ namespace {
     std::unordered_map<std::string, std::pair<std::string, std::string>>
         GetSubDirs(const std::string& dir_name, int depth = 0)
     {
+        ScopedTimer subdir_timer("GetSubDirs(" + dir_name + ", " + std::to_string(depth) + ")",
+                                 true, std::chrono::milliseconds(500));
+
         depth++;
         std::unordered_map<std::string, std::pair<std::string, std::string>> retval;
         // safety check to pre-empt potential infinite loop
@@ -952,10 +991,11 @@ namespace {
             return retval;
         }
 
+
         std::unordered_map<std::string, std::pair<std::string, std::string>> sub_dirs;
         std::multimap<std::string, std::pair<std::string, std::string>> sorted_entries;
         GetSortedPediaDirEntires(dir_name, sorted_entries);
-        for (auto&& entry : sorted_entries) {
+        for (auto& entry : sorted_entries) {
             // explicitly exclude textures
             if (entry.second.second == "ENC_TEXTURES")
                 continue;
@@ -964,7 +1004,7 @@ namespace {
         }
 
         // Add each article for this directory
-        for (auto&& article : sub_dirs) {
+        for (auto& article : sub_dirs) {
             if (article.first == dir_name)
                 continue;
             // If a sub-category, add this article and any nested categories
@@ -992,7 +1032,7 @@ void EncyclopediaDetailPanel::HandleSearchTextEntered() {
 
     // find distinct words in search text
     std::set<std::string> words_in_search_text;
-    for (const std::pair<GG::StrSize, GG::StrSize>& word_range : GG::GUI::GetGUI()->FindWordsStringIndices(search_text)) {
+    for (const auto& word_range : GG::GUI::GetGUI()->FindWordsStringIndices(search_text)) {
         if (word_range.first == word_range.second)
             continue;
         std::string word(search_text.begin() + Value(word_range.first), search_text.begin() + Value(word_range.second));
@@ -1012,7 +1052,7 @@ void EncyclopediaDetailPanel::HandleSearchTextEntered() {
     std::multimap<std::string, std::string> partial_match_report;
     std::multimap<std::string, std::string> article_match_report;
 
-    bool search_desc = GetOptionsDB().Get<bool>("UI.encyclopedia.search.articles");
+    bool search_desc = GetOptionsDB().Get<bool>("ui.pedia.search.articles.enabled");
 
     for (const auto& entry : all_pedia_entries_list) {
         // search for exact title matches
@@ -1100,12 +1140,12 @@ namespace {
             return INVALID_OBJECT_ID;
         }
         // get a location where the empire might build something.
-        std::shared_ptr<const UniverseObject> location = GetUniverseObject(empire->CapitalID());
+        auto location = GetUniverseObject(empire->CapitalID());
         // no capital?  scan through all objects to find one owned by this empire
         // TODO: only loop over planets?
         // TODO: pass in a location condition, and pick a location that matches it if possible
         if (!location) {
-            for (std::shared_ptr<const UniverseObject> obj : Objects()) {
+            for (const auto& obj : Objects()) {
                 if (obj->OwnedBy(empire_id)) {
                     location = obj;
                     break;
@@ -1118,7 +1158,7 @@ namespace {
     std::vector<std::string> TechsThatUnlockItem(const ItemSpec& item) {
         std::vector<std::string> retval;
 
-        for (const Tech* tech : GetTechManager()) {
+        for (const auto& tech : GetTechManager()) {
             if (!tech) continue;
             const std::string& tech_name = tech->Name();
 
@@ -1146,6 +1186,7 @@ namespace {
         case OBJ_FIELD:         return UserString("ENC_FIELD");         break;
         case OBJ_POP_CENTER:    return UserString("ENC_POP_CENTER");    break;
         case OBJ_PROD_CENTER:   return UserString("ENC_PROD_CENTER");   break;
+        case OBJ_FIGHTER:       return UserString("ENC_FIGHTER");       break;
         default:                return EMPTY_STRING;
         }
     }
@@ -1173,13 +1214,27 @@ namespace {
                 % TextForGalaxySetupSetting(gsd.m_specials_freq)
                 % TextForGalaxySetupSetting(gsd.m_monster_freq)
                 % TextForGalaxySetupSetting(gsd.m_native_freq)
-                % TextForAIAggression(gsd.m_ai_aggr));
+                % TextForAIAggression(gsd.m_ai_aggr)
+                % gsd.m_game_uid);
 
+            return;
+        } else if (item_name == "ENC_GAME_RULES") {
+            const GameRules& rules = GetGameRules();
+
+            for (auto& rule : rules) {
+                if (rule.second.ValueIsDefault()) {
+                    detailed_description += UserString(rule.first) + " : "
+                                         + rule.second.ValueToString() + "\n";
+                } else {
+                    detailed_description += "<u>" + UserString(rule.first) + " : "
+                                         + rule.second.ValueToString() + "</u>\n";
+                }
+            }
             return;
         }
 
         // search for article in custom pedia entries.
-        for (const std::map<std::string, std::vector<EncyclopediaArticle>>::value_type& entry : GetEncyclopedia().articles) {
+        for (const auto& entry : GetEncyclopedia().Articles()) {
             for (const EncyclopediaArticle& article : entry.second) {
                 if (article.name != item_name)
                     continue;
@@ -1247,10 +1302,10 @@ namespace {
         if (!slot_types_list.empty())
             detailed_description += "\n\n" + UserString("ENC_SHIP_PART_CAN_MOUNT_IN_SLOT_TYPES") + slot_types_list;
 
-        const std::set<std::string>& exclusions = part->Exclusions();
+        const auto& exclusions = part->Exclusions();
         if (!exclusions.empty()) {
             detailed_description += "\n\n" + UserString("ENC_SHIP_EXCLUSIONS");
-            for (const std::string& exclusion : exclusions) {
+            for (const auto& exclusion : exclusions) {
                 if (GetPartType(exclusion)) {
                     detailed_description += LinkTaggedText(VarText::SHIP_PART_TAG, exclusion) + "  ";
                 } else if (GetHullType(exclusion)) {
@@ -1261,15 +1316,15 @@ namespace {
             }
         }
 
-        std::vector<std::string> unlocked_by_techs = TechsThatUnlockItem(ItemSpec(UIT_SHIP_PART, item_name));
+        auto unlocked_by_techs = TechsThatUnlockItem(ItemSpec(UIT_SHIP_PART, item_name));
         if (!unlocked_by_techs.empty()) {
             detailed_description += "\n\n" + UserString("ENC_UNLOCKED_BY");
-            for (const std::string& tech_name : unlocked_by_techs)
+            for (const auto& tech_name : unlocked_by_techs)
             { detailed_description += LinkTaggedText(VarText::TECH_TAG, tech_name) + "  "; }
             detailed_description += "\n\n";
         }
 
-        if (GetOptionsDB().Get<bool>("UI.dump-effects-descriptions")) {
+        if (GetOptionsDB().Get<bool>("resource.effects.description.shown")) {
             if (part->Location())
                 detailed_description += "\n" + part->Location()->Dump();
             if (!part->Effects().empty())
@@ -1306,7 +1361,7 @@ namespace {
             % hull->Speed()
             % hull->Structure());
 
-        const std::set<std::string>& exclusions = hull->Exclusions();
+        const auto& exclusions = hull->Exclusions();
         if (!exclusions.empty()) {
             detailed_description += "\n\n" + UserString("ENC_SHIP_EXCLUSIONS");
             for (const std::string& exclusion : exclusions) {
@@ -1320,15 +1375,15 @@ namespace {
             }
         }
 
-        std::vector<std::string> unlocked_by_techs = TechsThatUnlockItem(ItemSpec(UIT_SHIP_HULL, item_name));
+        auto unlocked_by_techs = TechsThatUnlockItem(ItemSpec(UIT_SHIP_HULL, item_name));
         if (!unlocked_by_techs.empty()) {
             detailed_description += "\n\n" + UserString("ENC_UNLOCKED_BY");
-            for (const std::string& tech_name : unlocked_by_techs)
+            for (const auto& tech_name : unlocked_by_techs)
             { detailed_description += LinkTaggedText(VarText::TECH_TAG, tech_name) + "  "; }
             detailed_description += "\n\n";
         }
 
-        if (GetOptionsDB().Get<bool>("UI.dump-effects-descriptions")) {
+        if (GetOptionsDB().Get<bool>("resource.effects.description.shown")) {
             if (hull->Location())
                 detailed_description += "\n" + hull->Location()->Dump();
             if (!hull->Effects().empty())
@@ -1363,13 +1418,13 @@ namespace {
             % ""
             % UserString(tech->ShortDescription()));
 
-        const std::set<std::string>& unlocked_techs = tech->UnlockedTechs();
-        const std::vector<ItemSpec>& unlocked_items = tech->UnlockedItems();
+        const auto& unlocked_techs = tech->UnlockedTechs();
+        const auto& unlocked_items = tech->UnlockedItems();
         if (!unlocked_techs.empty() || !unlocked_items.empty())
             detailed_description += UserString("ENC_UNLOCKS");
 
         if (!unlocked_techs.empty()) {
-            for (const std::string& tech_name : unlocked_techs) {
+            for (const auto& tech_name : unlocked_techs) {
                 std::string link_text = LinkTaggedText(VarText::TECH_TAG, tech_name);
                 detailed_description += str(FlexibleFormat(UserString("ENC_TECH_DETAIL_UNLOCKED_ITEM_STR"))
                     % UserString("UIT_TECH")
@@ -1406,11 +1461,11 @@ namespace {
 
         detailed_description += UserString(tech->Description());
 
-        if (GetOptionsDB().Get<bool>("UI.dump-effects-descriptions") && !tech->Effects().empty()) {
+        if (GetOptionsDB().Get<bool>("resource.effects.description.shown") && !tech->Effects().empty()) {
             detailed_description += "\n" + Dump(tech->Effects());
         }
 
-        const std::set<std::string>& unlocked_by_techs = tech->Prerequisites();
+        const auto& unlocked_by_techs = tech->Prerequisites();
         if (!unlocked_by_techs.empty()) {
             detailed_description += "\n\n" + UserString("ENC_UNLOCKED_BY");
             for (const std::string& tech_name : unlocked_by_techs)
@@ -1437,7 +1492,7 @@ namespace {
         name = UserString(item_name);
         texture = ClientUI::BuildingIcon(item_name);
         int default_location_id = DefaultLocationForEmpire(client_empire_id);
-        const MapWnd* map_wnd = ClientUI::GetClientUI()->GetMapWnd();
+        const auto& map_wnd = ClientUI::GetClientUI()->GetMapWnd();
         int this_location_id = map_wnd->SelectedPlanetID();
         turns = building_type->ProductionTime(client_empire_id, default_location_id);
         cost = building_type->ProductionCost(client_empire_id, default_location_id);
@@ -1450,7 +1505,7 @@ namespace {
             detailed_description += str(FlexibleFormat(UserString("ENC_AUTO_TIME_COST_INVARIANT_STR")) % UserString("ENC_VERB_PRODUCE_STR"));
         } else {
             detailed_description += str(FlexibleFormat(UserString("ENC_AUTO_TIME_COST_VARIABLE_STR")) % UserString("ENC_VERB_PRODUCE_STR"));
-            if (std::shared_ptr<const Planet> planet = GetPlanet(this_location_id)) {
+            if (auto planet = GetPlanet(this_location_id)) {
                 int local_cost = building_type->ProductionCost(client_empire_id, this_location_id);
                 int local_time = building_type->ProductionTime(client_empire_id, this_location_id);
                 std::string local_name = planet->Name();
@@ -1458,20 +1513,22 @@ namespace {
                                         % local_name % local_cost % cost_units % local_time);
             }
         }
-        if (GetOptionsDB().Get<bool>("UI.dump-effects-descriptions")) {
+        if (GetOptionsDB().Get<bool>("resource.effects.description.shown")) {
             if (!building_type->ProductionCostTimeLocationInvariant()) {
                 if (building_type->Cost() && !building_type->Cost()->ConstantExpr())
-                    detailed_description += "\n" + building_type->Cost()->Dump();
+                    detailed_description += "\n\nProduction Cost:\n" + building_type->Cost()->Dump();
                 if (building_type->Time() && !building_type->Time()->ConstantExpr())
-                    detailed_description += "\n" + building_type->Time()->Dump();
+                    detailed_description += "\n\n Production Time:\n" + building_type->Time()->Dump();
             }
+            if (building_type->EnqueueLocation())
+                detailed_description += "\n\nEnqueue Requirement:\n" + building_type->EnqueueLocation()->Dump();
             if (building_type->Location())
-                detailed_description += "\n" + building_type->Location()->Dump();
+                detailed_description += "\n\nLocation Requirement:\n" + building_type->Location()->Dump();
             if (!building_type->Effects().empty())
-                detailed_description += "\n" + Dump(building_type->Effects());
+                detailed_description += "\n\nEffects:\n" + Dump(building_type->Effects());
         }
 
-        std::vector<std::string> unlocked_by_techs = TechsThatUnlockItem(ItemSpec(UIT_BUILDING, item_name));
+        auto unlocked_by_techs = TechsThatUnlockItem(ItemSpec(UIT_BUILDING, item_name));
         if (!unlocked_by_techs.empty()) {
             detailed_description += "\n\n" + UserString("ENC_UNLOCKED_BY");
             for (const std::string& tech_name : unlocked_by_techs)
@@ -1502,26 +1559,26 @@ namespace {
 
         // objects that have special
         std::vector<std::shared_ptr<const UniverseObject>> objects_with_special;
-        for (std::shared_ptr<const UniverseObject> obj : Objects())
-            if (obj->Specials().find(item_name) != obj->Specials().end())
+        for (const auto& obj : Objects())
+            if (obj->Specials().count(item_name))
                 objects_with_special.push_back(obj);
 
         if (!objects_with_special.empty()) {
             detailed_description += "\n\n" + UserString("OBJECTS_WITH_SPECIAL");
-            for (std::shared_ptr<const UniverseObject> obj : objects_with_special) {
-                if (std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(obj))
+            for (auto& obj : objects_with_special) {
+                if (auto ship = std::dynamic_pointer_cast<const Ship>(obj))
                     detailed_description += LinkTaggedIDText(VarText::SHIP_ID_TAG, ship->ID(), ship->PublicName(client_empire_id)) + "  ";
 
-                else if (std::shared_ptr<const Fleet> fleet = std::dynamic_pointer_cast<const Fleet>(obj))
+                else if (auto fleet = std::dynamic_pointer_cast<const Fleet>(obj))
                     detailed_description += LinkTaggedIDText(VarText::FLEET_ID_TAG, fleet->ID(), fleet->PublicName(client_empire_id)) + "  ";
 
-                else if (std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(obj))
+                else if (auto planet = std::dynamic_pointer_cast<const Planet>(obj))
                     detailed_description += LinkTaggedIDText(VarText::PLANET_ID_TAG, planet->ID(), planet->PublicName(client_empire_id)) + "  ";
 
-                else if (std::shared_ptr<const Building> building = std::dynamic_pointer_cast<const Building>(obj))
+                else if (auto building = std::dynamic_pointer_cast<const Building>(obj))
                     detailed_description += LinkTaggedIDText(VarText::BUILDING_ID_TAG, building->ID(), building->PublicName(client_empire_id)) + "  ";
 
-                else if (std::shared_ptr<const System> system = std::dynamic_pointer_cast<const System>(obj))
+                else if (auto system = std::dynamic_pointer_cast<const System>(obj))
                     detailed_description += LinkTaggedIDText(VarText::SYSTEM_ID_TAG, system->ID(), system->PublicName(client_empire_id)) + "  ";
 
                 else
@@ -1530,7 +1587,7 @@ namespace {
             detailed_description += "\n";
         }
 
-        if (GetOptionsDB().Get<bool>("UI.dump-effects-descriptions")) {
+        if (GetOptionsDB().Get<bool>("resource.effects.description.shown")) {
             if (special->Location())
                 detailed_description += "\n" + special->Location()->Dump();
             if (!special->Effects().empty())
@@ -1558,9 +1615,9 @@ namespace {
 
         int client_empire_id = HumanClientApp::GetApp()->EmpireID();
 
-        // Empires
+        // Capital
         name = empire->Name();
-        std::shared_ptr<const Planet> capital = GetPlanet(empire->CapitalID());
+        auto capital = GetPlanet(empire->CapitalID());
         if (capital)
             detailed_description += UserString("EMPIRE_CAPITAL") +
                 LinkTaggedIDText(VarText::PLANET_ID_TAG, capital->ID(), capital->Name());
@@ -1573,16 +1630,21 @@ namespace {
         // Empire meters
         if (empire->meter_begin() != empire->meter_end()) {
             detailed_description += "\n\n";
-            for (std::map<std::string, Meter>::const_iterator meter_it = empire->meter_begin();
+            for (auto meter_it = empire->meter_begin();
                  meter_it != empire->meter_end(); ++meter_it)
-            { detailed_description += UserString(meter_it->first) + ": " + DoubleToString(meter_it->second.Initial(), 3, false); }
+            {
+                detailed_description += UserString(meter_it->first) + ": "
+                                     + DoubleToString(meter_it->second.Initial(), 3, false)
+                                     + "\n";
+            }
         }
 
+
         // Planets
-        std::vector<std::shared_ptr<UniverseObject>> empire_planets = Objects().FindObjects(OwnedVisitor<Planet>(empire_id));
+        auto empire_planets = Objects().FindObjects(OwnedVisitor<Planet>(empire_id));
         if (!empire_planets.empty()) {
             detailed_description += "\n\n" + UserString("OWNED_PLANETS");
-            for (std::shared_ptr<const UniverseObject> obj : empire_planets) {
+            for (auto& obj : empire_planets) {
                 detailed_description += LinkTaggedIDText(VarText::PLANET_ID_TAG, obj->ID(), obj->PublicName(client_empire_id)) + "  ";
             }
         } else {
@@ -1591,17 +1653,17 @@ namespace {
 
         // Fleets
         std::vector<std::shared_ptr<const UniverseObject>> nonempty_empire_fleets;
-        for (std::shared_ptr<UniverseObject> maybe_fleet : Objects().FindObjects(OwnedVisitor<Fleet>(empire_id))) {
-            if (std::shared_ptr<const Fleet> fleet = std::dynamic_pointer_cast<const Fleet>(maybe_fleet))
+        for (auto& maybe_fleet : Objects().FindObjects(OwnedVisitor<Fleet>(empire_id))) {
+            if (auto fleet = std::dynamic_pointer_cast<const Fleet>(maybe_fleet))
                 if (!fleet->Empty())
                     nonempty_empire_fleets.push_back(fleet);
         }
         if (!nonempty_empire_fleets.empty()) {
             detailed_description += "\n\n" + UserString("OWNED_FLEETS") + "\n";
-            for (std::shared_ptr<const UniverseObject> obj : nonempty_empire_fleets) {
+            for (auto& obj : nonempty_empire_fleets) {
                 std::string fleet_link = LinkTaggedIDText(VarText::FLEET_ID_TAG, obj->ID(), obj->PublicName(client_empire_id));
                 std::string system_link;
-                if (std::shared_ptr<const System> system = GetSystem(obj->SystemID())) {
+                if (auto system = GetSystem(obj->SystemID())) {
                     std::string sys_name = system->ApparentName(client_empire_id);
                     system_link = LinkTaggedIDText(VarText::SYSTEM_ID_TAG, system->ID(), sys_name);
                     detailed_description += str(FlexibleFormat(UserString("OWNED_FLEET_AT_SYSTEM"))
@@ -1615,13 +1677,68 @@ namespace {
             detailed_description += "\n\n" + UserString("NO_OWNED_FLEETS_KNOWN");
         }
 
+
+        // Techs
+        auto techs = empire->ResearchedTechs();
+        if (!techs.empty()) {
+            detailed_description += "\n\n" + UserString("RESEARCHED_TECHS");
+            std::multimap<int, std::string> sorted_techs;
+            for (const auto& tech_entry : techs) {
+                sorted_techs.emplace(tech_entry.second, tech_entry.first);
+            }
+            for (const auto& sorted_tech_entry : sorted_techs) {
+                detailed_description += "\n";
+                std::string turn_text;
+                if (sorted_tech_entry.first == BEFORE_FIRST_TURN)
+                    turn_text = UserString("BEFORE_FIRST_TURN");
+                else
+                    turn_text = UserString("TURN") + " " + std::to_string(sorted_tech_entry.first);
+                detailed_description += LinkTaggedText(VarText::TECH_TAG, sorted_tech_entry.second)
+                                     + " : " + turn_text;
+            }
+        } else {
+            detailed_description += "\n\n" + UserString("NO_TECHS_RESEARCHED");
+        }
+
+        // WIP: Parts, Hulls, Buildings, ... available
+        auto parts = empire->AvailableShipParts();
+        if (!parts.empty()) {
+            detailed_description += "\n\n" + UserString("AVAILABLE_PARTS");
+            for (const auto& part_name : parts) {
+                detailed_description += "\n";
+                detailed_description += LinkTaggedText(VarText::SHIP_PART_TAG, part_name);
+            }
+        } else {
+            detailed_description += "\n\n" + UserString("NO_PARTS_AVAILABLE");
+        }
+        auto hulls = empire->AvailableShipHulls();
+        if (!hulls.empty()) {
+            detailed_description += "\n\n" + UserString("AVAILABLE_HULLS");
+            for (const auto& hull_name : hulls) {
+                detailed_description += "\n";
+                detailed_description += LinkTaggedText(VarText::SHIP_HULL_TAG, hull_name);
+            }
+        } else {
+            detailed_description += "\n\n" + UserString("NO_HULLS_AVAILABLE");
+        }
+        auto buildings = empire->AvailableBuildingTypes();
+        if (!buildings.empty()) {
+            detailed_description += "\n\n" + UserString("AVAILABLE_BUILDINGS");
+            for (const auto& building_name : buildings) {
+                detailed_description += "\n";
+                detailed_description += LinkTaggedText(VarText::BUILDING_TYPE_TAG, building_name);
+            }
+        } else {
+            detailed_description += "\n\n" + UserString("NO_BUILDINGS_AVAILABLE");
+        }
+
         // Misc. Statistics
 
         // empire destroyed ships...
-        const std::map<int, int>&           empire_ships_destroyed = empire->EmpireShipsDestroyed();
+        const auto& empire_ships_destroyed = empire->EmpireShipsDestroyed();
         if (!empire_ships_destroyed.empty())
             detailed_description += "\n\n" + UserString("EMPIRE_SHIPS_DESTROYED");
-        for (const std::map<int, int>::value_type& entry : empire_ships_destroyed) {
+        for (const auto& entry : empire_ships_destroyed) {
             std::string num_str = std::to_string(entry.second);
             const Empire* target_empire = GetEmpire(entry.first);
             std::string target_empire_name;
@@ -1635,10 +1752,10 @@ namespace {
 
 
         // ship designs destroyed
-        const std::map<int, int>&           empire_designs_destroyed = empire->ShipDesignsDestroyed();
+        const auto& empire_designs_destroyed = empire->ShipDesignsDestroyed();
         if (!empire_designs_destroyed.empty())
             detailed_description += "\n\n" + UserString("SHIP_DESIGNS_DESTROYED");
-        for (const std::map<int, int>::value_type& entry : empire_designs_destroyed) {
+        for (const auto& entry : empire_designs_destroyed) {
             std::string num_str = std::to_string(entry.second);
             const ShipDesign* design = GetShipDesign(entry.first);
             std::string design_name;
@@ -1652,10 +1769,10 @@ namespace {
 
 
         // species ships destroyed
-        const std::map<std::string, int>&   species_ships_destroyed = empire->SpeciesShipsDestroyed();
+        const auto& species_ships_destroyed = empire->SpeciesShipsDestroyed();
         if (!species_ships_destroyed.empty())
             detailed_description += "\n\n" + UserString("SPECIES_SHIPS_DESTROYED");
-        for (const std::map<std::string, int>::value_type& entry : species_ships_destroyed) {
+        for (const auto& entry : species_ships_destroyed) {
             std::string num_str = std::to_string(entry.second);
             std::string species_name;
             if (entry.first.empty())
@@ -1667,10 +1784,10 @@ namespace {
 
 
         // species planets invaded
-        const std::map<std::string, int>&   species_planets_invaded = empire->SpeciesPlanetsInvaded();
+        const auto& species_planets_invaded = empire->SpeciesPlanetsInvaded();
         if (!species_planets_invaded.empty())
             detailed_description += "\n\n" + UserString("SPECIES_PLANETS_INVADED");
-        for (const std::map<std::string, int>::value_type& entry : species_planets_invaded) {
+        for (const auto& entry : species_planets_invaded) {
             std::string num_str = std::to_string(entry.second);
             std::string species_name;
             if (entry.first.empty())
@@ -1682,10 +1799,10 @@ namespace {
 
 
         // species ships produced
-        const std::map<std::string, int>&   species_ships_produced = empire->SpeciesShipsProduced();
+        const auto& species_ships_produced = empire->SpeciesShipsProduced();
         if (!species_ships_produced.empty())
             detailed_description += "\n\n" + UserString("SPECIES_SHIPS_PRODUCED");
-        for (const std::map<std::string, int>::value_type& entry : species_ships_produced) {
+        for (const auto& entry : species_ships_produced) {
             std::string num_str = std::to_string(entry.second);
             std::string species_name;
             if (entry.first.empty())
@@ -1697,10 +1814,10 @@ namespace {
 
 
         // ship designs produced
-        const std::map<int, int>&           ship_designs_produced = empire->ShipDesignsProduced();
+        const auto& ship_designs_produced = empire->ShipDesignsProduced();
         if (!ship_designs_produced.empty())
             detailed_description += "\n\n" + UserString("SHIP_DESIGNS_PRODUCED");
-        for (const std::map<int, int>::value_type& entry : ship_designs_produced) {
+        for (const auto& entry : ship_designs_produced) {
             std::string num_str = std::to_string(entry.second);
             const ShipDesign* design = GetShipDesign(entry.first);
             std::string design_name;
@@ -1714,10 +1831,10 @@ namespace {
 
 
         // species ships lost
-        const std::map<std::string, int>&   species_ships_lost = empire->SpeciesShipsLost();
+        const auto& species_ships_lost = empire->SpeciesShipsLost();
         if (!species_ships_lost.empty())
             detailed_description += "\n\n" + UserString("SPECIES_SHIPS_LOST");
-        for (const std::map<std::string, int>::value_type& entry : species_ships_lost) {
+        for (const auto& entry : species_ships_lost) {
             std::string num_str = std::to_string(entry.second);
             std::string species_name;
             if (entry.first.empty())
@@ -1729,10 +1846,10 @@ namespace {
 
 
         // ship designs lost
-        const std::map<int, int>&           ship_designs_lost = empire->ShipDesignsLost();
+        const auto& ship_designs_lost = empire->ShipDesignsLost();
         if (!ship_designs_lost.empty())
             detailed_description += "\n\n" + UserString("SHIP_DESIGNS_LOST");
-        for (const std::map<int, int>::value_type& entry : ship_designs_lost) {
+        for (const auto& entry : ship_designs_lost) {
             std::string num_str = std::to_string(entry.second);
             const ShipDesign* design = GetShipDesign(entry.first);
             std::string design_name;
@@ -1746,10 +1863,10 @@ namespace {
 
 
         // species ships scrapped
-        const std::map<std::string, int>&   species_ships_scrapped = empire->SpeciesShipsScrapped();
+        const auto& species_ships_scrapped = empire->SpeciesShipsScrapped();
         if (!species_ships_scrapped.empty())
             detailed_description += "\n\n" + UserString("SPECIES_SHIPS_SCRAPPED");
-        for (const std::map<std::string, int>::value_type& entry : species_ships_scrapped) {
+        for (const auto& entry : species_ships_scrapped) {
             std::string num_str = std::to_string(entry.second);
             std::string species_name;
             if (entry.first.empty())
@@ -1761,10 +1878,10 @@ namespace {
 
 
         // ship designs scrapped
-        const std::map<int, int>&           ship_designs_scrapped = empire->ShipDesignsScrapped();
+        const auto& ship_designs_scrapped = empire->ShipDesignsScrapped();
         if (!ship_designs_scrapped.empty())
             detailed_description += "\n\n" + UserString("SHIP_DESIGNS_SCRAPPED");
-        for (const std::map<int, int>::value_type& entry : ship_designs_scrapped) {
+        for (const auto& entry : ship_designs_scrapped) {
             std::string num_str = std::to_string(entry.second);
             const ShipDesign* design = GetShipDesign(entry.first);
             std::string design_name;
@@ -1778,10 +1895,10 @@ namespace {
 
 
         // species planets depopulated
-        const std::map<std::string, int>&   species_planets_depoped = empire->SpeciesPlanetsDepoped();
+        const auto& species_planets_depoped = empire->SpeciesPlanetsDepoped();
         if (!species_planets_depoped.empty())
             detailed_description += "\n\n" + UserString("SPECIES_PLANETS_DEPOPED");
-        for (const std::map<std::string, int>::value_type& entry : species_planets_depoped) {
+        for (const auto& entry : species_planets_depoped) {
             std::string num_str = std::to_string(entry.second);
             std::string species_name;
             if (entry.first.empty())
@@ -1793,10 +1910,10 @@ namespace {
 
 
         // species planets bombed
-        const std::map<std::string, int>&   species_planets_bombed = empire->SpeciesPlanetsBombed();
+        const auto& species_planets_bombed = empire->SpeciesPlanetsBombed();
         if (!species_planets_bombed.empty())
             detailed_description += "\n\n" + UserString("SPECIES_PLANETS_BOMBED");
-        for (const std::map<std::string, int>::value_type& entry : species_planets_bombed) {
+        for (const auto& entry : species_planets_bombed) {
             std::string num_str = std::to_string(entry.second);
             std::string species_name;
             if (entry.first.empty())
@@ -1808,10 +1925,10 @@ namespace {
 
 
         // buildings produced
-        const std::map<std::string, int>&   building_types_produced = empire->BuildingTypesProduced();
+        const auto& building_types_produced = empire->BuildingTypesProduced();
         if (!building_types_produced.empty())
             detailed_description += "\n\n" + UserString("BUILDING_TYPES_PRODUCED");
-        for (const std::map<std::string, int>::value_type& entry : building_types_produced) {
+        for (const auto& entry : building_types_produced) {
             std::string num_str = std::to_string(entry.second);
             std::string building_type_name;
             if (entry.first.empty())
@@ -1823,10 +1940,10 @@ namespace {
 
 
         // buildings scrapped
-        const std::map<std::string, int>&   building_types_scrapped = empire->BuildingTypesScrapped();
+        const auto& building_types_scrapped = empire->BuildingTypesScrapped();
         if (!building_types_scrapped.empty())
             detailed_description += "\n\n" + UserString("BUILDING_TYPES_SCRAPPED");
-        for (const std::map<std::string, int>::value_type& entry : building_types_scrapped) {
+        for (const auto& entry : building_types_scrapped) {
             std::string num_str = std::to_string(entry.second);
             std::string building_type_name;
             if (entry.first.empty())
@@ -1835,6 +1952,8 @@ namespace {
                 building_type_name = UserString(entry.first);
             detailed_description += "\n" + building_type_name + " : " + num_str;
         }
+
+        detailed_description += "\n";
     }
 
     void RefreshDetailPanelSpeciesTag(      const std::string& item_type, const std::string& item_name,
@@ -1878,10 +1997,10 @@ namespace {
 
         // environmental preferences
         detailed_description += "\n\n";
-        const std::map<PlanetType, PlanetEnvironment>& pt_env_map = species->PlanetEnvironments();
+        const auto& pt_env_map = species->PlanetEnvironments();
         if (!pt_env_map.empty()) {
             detailed_description += UserString("ENVIRONMENTAL_PREFERENCES") + "\n";
-            for (const std::map<PlanetType, PlanetEnvironment>::value_type& pt_env : pt_env_map) {
+            for (const auto& pt_env : pt_env_map) {
                 detailed_description += UserString(boost::lexical_cast<std::string>(pt_env.first)) + " : " +
                                         UserString(boost::lexical_cast<std::string>(pt_env.second)) + "\n";
                 // add blank line between cyclical environments and asteroids and gas giants
@@ -1893,7 +2012,7 @@ namespace {
             detailed_description += "\n";
         }
 
-        if (GetOptionsDB().Get<bool>("UI.dump-effects-descriptions") && !species->Effects().empty()) {
+        if (GetOptionsDB().Get<bool>("resource.effects.description.shown") && !species->Effects().empty()) {
             detailed_description += "\n" + Dump(species->Effects());
         }
 
@@ -1908,7 +2027,7 @@ namespace {
         } else {
             detailed_description += UserString("HOMEWORLD") + "\n";
             for (int hw_id : species->Homeworlds()) {
-                if (std::shared_ptr<const Planet> homeworld = GetPlanet(hw_id))
+                if (auto homeworld = GetPlanet(hw_id))
                     detailed_description += LinkTaggedIDText(VarText::PLANET_ID_TAG, hw_id,
                                                              homeworld->PublicName(client_empire_id)) + "\n";
                 else
@@ -1918,12 +2037,12 @@ namespace {
 
         // occupied planets
         std::vector<std::shared_ptr<const Planet>> species_occupied_planets;
-        std::map<std::string, std::map<int, float>>& species_object_populations = GetSpeciesManager().SpeciesObjectPopulations();
-        std::map<std::string, std::map<int, float>>::const_iterator sp_op_it = species_object_populations.find(item_name);
+        auto& species_object_populations = GetSpeciesManager().SpeciesObjectPopulations();
+        auto sp_op_it = species_object_populations.find(item_name);
         if (sp_op_it != species_object_populations.end()) {
-            const std::map<int, float>& object_pops = sp_op_it->second;
-            for (const std::map<int, float>::value_type& object_pop : object_pops) {
-                std::shared_ptr<const Planet> plt = GetPlanet(object_pop.first);
+            const auto& object_pops = sp_op_it->second;
+            for (const auto& object_pop : object_pops) {
+                auto plt = GetPlanet(object_pop.first);
                 if (!plt)
                     continue;
                 if (plt->SpeciesName() != item_name) {
@@ -1936,7 +2055,7 @@ namespace {
 
         if (!species_occupied_planets.empty()) {
             detailed_description += "\n" + UserString("OCCUPIED_PLANETS") + "\n";
-            for (std::shared_ptr<const Planet> planet : species_occupied_planets) {
+            for (auto& planet : species_occupied_planets) {
                 detailed_description += LinkTaggedIDText(VarText::PLANET_ID_TAG, planet->ID(),
                                                          planet->PublicName(client_empire_id)) + "  ";
             }
@@ -1944,11 +2063,11 @@ namespace {
         }
 
         // empire opinions
-        const std::map<std::string, std::map<int, float>>& seom = GetSpeciesManager().GetSpeciesEmpireOpinionsMap();
-        std::map<std::string, std::map<int, float>>::const_iterator species_it = seom.find(species->Name());
+        const auto& seom = GetSpeciesManager().GetSpeciesEmpireOpinionsMap();
+        auto species_it = seom.find(species->Name());
         if (species_it != seom.end()) {
             detailed_description += "\n" + UserString("OPINIONS_OF_EMPIRES") + "\n";
-            for (const std::map<int, float>::value_type& entry : species_it->second) {
+            for (const auto& entry : species_it->second) {
                 const Empire* empire = GetEmpire(entry.first);
                 if (!empire)
                     continue;
@@ -1956,11 +2075,11 @@ namespace {
         }
 
         // species opinions
-        const std::map<std::string, std::map<std::string, float>>& ssom = GetSpeciesManager().GetSpeciesSpeciesOpinionsMap();
-        std::map<std::string, std::map<std::string, float>>::const_iterator species_it2 = ssom.find(species->Name());
+        const auto& ssom = GetSpeciesManager().GetSpeciesSpeciesOpinionsMap();
+        auto species_it2 = ssom.find(species->Name());
         if (species_it2 != ssom.end()) {
             detailed_description += "\n" + UserString("OPINIONS_OF_OTHER_SPECIES") + "\n";
-            for (const std::map<std::string, float>::value_type& entry : species_it2->second) {
+            for (const auto& entry : species_it2->second) {
                 const Species* species2 = GetSpecies(entry.first);
                 if (!species2)
                     continue;
@@ -1991,7 +2110,7 @@ namespace {
 
         detailed_description += UserString(field_type->Description());
 
-        if (GetOptionsDB().Get<bool>("UI.dump-effects-descriptions")) {
+        if (GetOptionsDB().Get<bool>("resource.effects.description.shown")) {
             if (!field_type->Effects().empty())
                 detailed_description += "\n" + Dump(field_type->Effects());
         }
@@ -2012,7 +2131,7 @@ namespace {
         texture = ClientUI::MeterIcon(meter_type);
         general_type = UserString("ENC_METER_TYPE");
 
-        std::pair<std::string, std::string> meter_name = MeterValueLabelAndString(meter_type);
+        auto meter_name = MeterValueLabelAndString(meter_type);
 
         name = meter_name.first;
 
@@ -2026,7 +2145,7 @@ namespace {
     std::string GetDetailedDescriptionBase(const ShipDesign* design) {
         std::string hull_link;
         if (!design->Hull().empty())
-                hull_link = LinkTaggedText(VarText::SHIP_HULL_TAG, design->Hull());
+            hull_link = LinkTaggedText(VarText::SHIP_HULL_TAG, design->Hull());
 
         std::string parts_list;
         std::map<std::string, int> non_empty_parts_count;
@@ -2035,8 +2154,8 @@ namespace {
                 continue;
             non_empty_parts_count[part_name]++;
         }
-        for (std::map<std::string, int>::const_iterator part_it = non_empty_parts_count.begin();
-                part_it != non_empty_parts_count.end(); ++part_it)
+        for (auto part_it = non_empty_parts_count.begin();
+             part_it != non_empty_parts_count.end(); ++part_it)
         {
             if (part_it != non_empty_parts_count.begin())
                 parts_list += ", ";
@@ -2050,14 +2169,21 @@ namespace {
         % parts_list);
     }
 
-    std::string GetDetailedDescriptionStats(const std::shared_ptr<Ship> ship, const ShipDesign* design,
-                                            float enemy_DR, std::set<float> enemy_shots, float cost)
+    std::string GetDetailedDescriptionStats(const std::shared_ptr<Ship> ship,
+                                            const ShipDesign* design,
+                                            float enemy_DR,
+                                            std::set<float> enemy_shots, float cost)
     {
         //The strength of a fleet is approximately weapons * armor, or
         //(weapons - enemyShield) * armor / (enemyWeapons - shield). This
         //depends on the enemy's weapons and shields, so we estimate the
         //enemy technology from the turn.
-        const std::string& species = ship->SpeciesName().empty() ? "Generic" : UserString(ship->SpeciesName());
+
+        // use the current meter values here, not initial, as this is used
+        // within a loop that sets the species, updates meter, then checks
+        // meter values for display
+
+        auto& species = ship->SpeciesName().empty() ? "Generic" : UserString(ship->SpeciesName());
         float structure = ship->CurrentMeterValue(METER_MAX_STRUCTURE);
         float shield = ship->CurrentMeterValue(METER_MAX_SHIELD);
         float attack = ship->TotalWeaponsDamage();
@@ -2074,8 +2200,8 @@ namespace {
             % ship->CurrentMeterValue(METER_STEALTH)
             % ship->CurrentMeterValue(METER_SPEED)
             % ship->CurrentMeterValue(METER_MAX_FUEL)
-            % design->ColonyCapacity()
-            % ship->TroopCapacity()
+            % ship->SumCurrentPartMeterValuesForPartClass(METER_CAPACITY, PC_COLONY)
+            % ship->SumCurrentPartMeterValuesForPartClass(METER_CAPACITY, PC_TROOPS)
             % ship->FighterMax()
             % (attack - ship->TotalWeaponsDamage(0.0f, false))
             % ship->SumCurrentPartMeterValuesForPartClass(METER_MAX_CAPACITY, PC_FIGHTER_BAY)
@@ -2120,19 +2246,24 @@ namespace {
         DebugLogger() << "default enemy stats:: tech_level: " << tech_level << "   DR: " << enemy_DR << "   attack: " << typical_shot;
         std::set<float> enemy_shots;
         enemy_shots.insert(typical_shot);
+
+
+        // select which species to show info for
+
         std::set<std::string> additional_species; // from currently selected planet and fleets, if any
-        const MapWnd* map_wnd = ClientUI::GetClientUI()->GetMapWnd();
-        if (const std::shared_ptr<Planet> planet = GetPlanet(map_wnd->SelectedPlanetID())) {
+        const auto& map_wnd = ClientUI::GetClientUI()->GetMapWnd();
+        if (const auto planet = GetPlanet(map_wnd->SelectedPlanetID())) {
             if (!planet->SpeciesName().empty())
                 additional_species.insert(planet->SpeciesName());
         }
+
         FleetUIManager& fleet_manager = FleetUIManager::GetFleetUIManager();
         std::set<int> chosen_ships;
         int selected_ship = fleet_manager.SelectedShipID();
         const FleetWnd* fleet_wnd = FleetUIManager::GetFleetUIManager().ActiveFleetWnd();
         if ((selected_ship == INVALID_OBJECT_ID) && fleet_wnd) {
-            std::set< int > selected_fleets = fleet_wnd->SelectedFleetIDs();
-            std::set< int > selected_ships = fleet_wnd->SelectedShipIDs();
+            auto selected_fleets = fleet_wnd->SelectedFleetIDs();
+            auto selected_ships = fleet_wnd->SelectedShipIDs();
             if (selected_ships.size() > 0)
                 selected_ship = *selected_ships.begin();
             else {
@@ -2141,7 +2272,7 @@ namespace {
                     selected_fleet_id = *selected_fleets.begin();
                 else if (fleet_wnd->FleetIDs().size() > 0)
                     selected_fleet_id = *fleet_wnd->FleetIDs().begin();
-                if (std::shared_ptr<Fleet> selected_fleet = GetFleet(selected_fleet_id))
+                if (auto selected_fleet = GetFleet(selected_fleet_id))
                     if (!selected_fleet->ShipIDs().empty())
                         selected_ship = *selected_fleet->ShipIDs().begin();
             }
@@ -2149,14 +2280,14 @@ namespace {
 
         if (selected_ship != INVALID_OBJECT_ID) {
             chosen_ships.insert(selected_ship);
-            if (const std::shared_ptr<Ship> this_ship = GetShip(selected_ship)) {
+            if (const auto this_ship = GetShip(selected_ship)) {
                 if (!this_ship->SpeciesName().empty())
                     additional_species.insert(this_ship->SpeciesName());
                 if (!this_ship->OwnedBy(client_empire_id)) {
-                    enemy_DR = this_ship->CurrentMeterValue(METER_MAX_SHIELD);
+                    enemy_DR = this_ship->InitialMeterValue(METER_MAX_SHIELD);
                     DebugLogger() << "Using selected ship for enemy values, DR: " << enemy_DR;
                     enemy_shots.clear();
-                    std::vector< float > this_damage = this_ship->AllWeaponsMaxDamage();
+                    auto this_damage = this_ship->AllWeaponsMaxDamage();
                     for (float shot : this_damage)
                         DebugLogger() << "Weapons Dmg " << shot;
                     enemy_shots.insert(this_damage.begin(), this_damage.end());
@@ -2164,13 +2295,13 @@ namespace {
             }
         } else if (fleet_manager.ActiveFleetWnd()) {
             for (int fleet_id : fleet_manager.ActiveFleetWnd()->SelectedFleetIDs()) {
-                if (const std::shared_ptr<Fleet> this_fleet = GetFleet(fleet_id)) {
+                if (const auto this_fleet = GetFleet(fleet_id)) {
                     chosen_ships.insert(this_fleet->ShipIDs().begin(), this_fleet->ShipIDs().end());
                 }
             }
         }
         for (int ship_id : chosen_ships)
-            if (const std::shared_ptr<Ship> this_ship = GetShip(ship_id))
+            if (const auto this_ship = GetShip(ship_id))
                 if (!this_ship->SpeciesName().empty())
                     additional_species.insert(this_ship->SpeciesName());
         std::vector<std::string> species_list(additional_species.begin(), additional_species.end());
@@ -2178,37 +2309,36 @@ namespace {
 
 
         // temporary ship to use for estimating design's meter values
-        std::shared_ptr<Ship> temp = GetUniverse().CreateShip(client_empire_id, design_id, "",
-                                                              client_empire_id, TEMPORARY_OBJECT_ID);
+        auto temp = GetUniverse().InsertTemp<Ship>(client_empire_id, design_id, "", client_empire_id);
 
         // apply empty species for 'Generic' entry
-        GetUniverse().UpdateMeterEstimates(TEMPORARY_OBJECT_ID);
+        GetUniverse().UpdateMeterEstimates(temp->ID());
         temp->Resupply();
         detailed_description.append(GetDetailedDescriptionStats(temp, design, enemy_DR, enemy_shots, cost));
 
         // apply various species to ship, re-calculating the meter values for each
         for (const std::string& species_name : species_list) {
             temp->SetSpecies(species_name);
-            GetUniverse().UpdateMeterEstimates(TEMPORARY_OBJECT_ID);
+            GetUniverse().UpdateMeterEstimates(temp->ID());
             temp->Resupply();
             detailed_description.append(GetDetailedDescriptionStats(temp, design, enemy_DR, enemy_shots, cost));
         }
 
-        GetUniverse().Delete(TEMPORARY_OBJECT_ID);
+        GetUniverse().Delete(temp->ID());
         GetUniverse().InhibitUniverseObjectSignals(false);
 
 
 
         // ships of this design
         std::vector<std::shared_ptr<const Ship>> design_ships;
-        for (const std::map<int, std::shared_ptr<UniverseObject>>::value_type& entry : Objects().ExistingShips()) {
-            std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(entry.second);
+        for (const auto& entry : Objects().ExistingShips()) {
+            auto ship = std::dynamic_pointer_cast<const Ship>(entry.second);
             if (ship && ship->DesignID() == design_id)
                 design_ships.push_back(ship);
         }
         if (!design_ships.empty()) {
             detailed_description += "\n\n" + UserString("SHIPS_OF_DESIGN");
-            for (std::shared_ptr<const Ship> ship : design_ships) {
+            for (auto& ship : design_ships) {
                 detailed_description += LinkTaggedIDText(VarText::SHIP_ID_TAG, ship->ID(),
                                                          ship->PublicName(client_empire_id)) + "  ";
             }
@@ -2227,7 +2357,7 @@ namespace {
         int client_empire_id = HumanClientApp::GetApp()->EmpireID();
         general_type = UserString("ENC_INCOMPETE_SHIP_DESIGN");
 
-        std::shared_ptr<const ShipDesign> incomplete_design = inc_design.lock();
+        auto incomplete_design = inc_design.lock();
         if (!incomplete_design)
             return;
 
@@ -2248,7 +2378,7 @@ namespace {
         cost = incomplete_design->ProductionCost(client_empire_id, default_location_id);
         cost_units = UserString("ENC_PP");
 
-        GetUniverse().InsertShipDesignID(new ShipDesign(*incomplete_design), TEMPORARY_OBJECT_ID);
+        GetUniverse().InsertShipDesignID(new ShipDesign(*incomplete_design), client_empire_id, TEMPORARY_OBJECT_ID);
 
         float tech_level = boost::algorithm::clamp(CurrentTurn() / 400.0f, 0.0f, 1.0f);
         float typical_shot = 3 + 27 * tech_level;
@@ -2257,8 +2387,8 @@ namespace {
         std::set<float> enemy_shots;
         enemy_shots.insert(typical_shot);
         std::set<std::string> additional_species; // TODO: from currently selected planet and ship, if any
-        const MapWnd* map_wnd = ClientUI::GetClientUI()->GetMapWnd();
-        if (const std::shared_ptr<Planet> planet = GetPlanet(map_wnd->SelectedPlanetID())) {
+        const auto& map_wnd = ClientUI::GetClientUI()->GetMapWnd();
+        if (const auto planet = GetPlanet(map_wnd->SelectedPlanetID())) {
             if (!planet->SpeciesName().empty())
                 additional_species.insert(planet->SpeciesName());
         }
@@ -2267,12 +2397,12 @@ namespace {
         int selected_ship = fleet_manager.SelectedShipID();
         if (selected_ship != INVALID_OBJECT_ID) {
             chosen_ships.insert(selected_ship);
-            if (const std::shared_ptr<Ship> this_ship = GetShip(selected_ship)) {
-                if (!additional_species.empty() && ((this_ship->CurrentMeterValue(METER_MAX_SHIELD) > 0) || !this_ship->OwnedBy(client_empire_id))) {
-                    enemy_DR = this_ship->CurrentMeterValue(METER_MAX_SHIELD);
+            if (const auto this_ship = GetShip(selected_ship)) {
+                if (!additional_species.empty() && ((this_ship->InitialMeterValue(METER_MAX_SHIELD) > 0) || !this_ship->OwnedBy(client_empire_id))) {
+                    enemy_DR = this_ship->InitialMeterValue(METER_MAX_SHIELD);
                     DebugLogger() << "Using selected ship for enemy values, DR: " << enemy_DR;
                     enemy_shots.clear();
-                    std::vector< float > this_damage = this_ship->AllWeaponsMaxDamage();
+                    auto this_damage = this_ship->AllWeaponsMaxDamage();
                     for (float shot : this_damage)
                         DebugLogger() << "Weapons Dmg " << shot;
                     enemy_shots.insert(this_damage.begin(), this_damage.end());
@@ -2280,13 +2410,13 @@ namespace {
             }
         } else if (fleet_manager.ActiveFleetWnd()) {
             for (int fleet_id : fleet_manager.ActiveFleetWnd()->SelectedFleetIDs()) {
-                if (const std::shared_ptr<Fleet> this_fleet = GetFleet(fleet_id)) {
+                if (const auto this_fleet = GetFleet(fleet_id)) {
                     chosen_ships.insert(this_fleet->ShipIDs().begin(), this_fleet->ShipIDs().end());
                 }
             }
         }
         for (int ship_id : chosen_ships)
-            if (const std::shared_ptr<Ship> this_ship = GetShip(ship_id))
+            if (const auto this_ship = GetShip(ship_id))
                 if (!this_ship->SpeciesName().empty())
                     additional_species.insert(this_ship->SpeciesName());
         std::vector<std::string> species_list(additional_species.begin(), additional_species.end());
@@ -2294,24 +2424,24 @@ namespace {
 
 
         // temporary ship to use for estimating design's meter values
-        std::shared_ptr<Ship> temp = GetUniverse().CreateShip(client_empire_id, TEMPORARY_OBJECT_ID, "",
-                                                              client_empire_id, TEMPORARY_OBJECT_ID);
+        auto temp = GetUniverse().InsertTemp<Ship>(client_empire_id, TEMPORARY_OBJECT_ID, "",
+                                                   client_empire_id);
 
         // apply empty species for 'Generic' entry
-        GetUniverse().UpdateMeterEstimates(TEMPORARY_OBJECT_ID);
+        GetUniverse().UpdateMeterEstimates(temp->ID());
         temp->Resupply();
         detailed_description.append(GetDetailedDescriptionStats(temp, incomplete_design.get(), enemy_DR, enemy_shots, cost));
 
         // apply various species to ship, re-calculating the meter values for each
         for (const std::string& species_name : species_list) {
             temp->SetSpecies(species_name);
-            GetUniverse().UpdateMeterEstimates(TEMPORARY_OBJECT_ID);
+            GetUniverse().UpdateMeterEstimates(temp->ID());
             temp->Resupply();
             detailed_description.append(GetDetailedDescriptionStats(temp, incomplete_design.get(), enemy_DR, enemy_shots, cost));
         }
 
 
-        GetUniverse().Delete(TEMPORARY_OBJECT_ID);
+        GetUniverse().Delete(temp->ID());
         GetUniverse().DeleteShipDesign(TEMPORARY_OBJECT_ID);
         GetUniverse().InhibitUniverseObjectSignals(false);
     }
@@ -2328,7 +2458,7 @@ namespace {
             return;
         int client_empire_id = HumanClientApp::GetApp()->EmpireID();
 
-        std::shared_ptr<const UniverseObject> obj = GetUniverseObject(id);
+        auto obj = GetUniverseObject(id);
         if (!obj) {
             ErrorLogger() << "EncyclopediaDetailPanel::Refresh couldn't find UniverseObject with id " << item_name;
             return;
@@ -2343,71 +2473,46 @@ namespace {
         }
     }
 
-    void RefreshDetailPanelSuitabilityTag(  const std::string& item_type, const std::string& item_name,
-                                            std::string& name, std::shared_ptr<GG::Texture>& texture,
-                                            std::shared_ptr<GG::Texture>& other_texture, int& turns,
-                                            float& cost, std::string& cost_units, std::string& general_type,
-                                            std::string& specific_type, std::string& detailed_description,
-                                            GG::Clr& color, GG::X width)
-    {
-        general_type = UserString("SP_PLANET_SUITABILITY");
+    std::unordered_set<std::string> ReportedSpeciesForPlanet(std::shared_ptr<Planet> planet) {
+        std::unordered_set<std::string> retval;
 
-        int planet_id = boost::lexical_cast<int>(item_name);
-        std::shared_ptr<Planet> planet = GetPlanet(planet_id);
-
-        // show image of planet environment at the top of the suitability report
-        std::string planet_type = boost::lexical_cast<std::string>(planet->Type());
-        boost::algorithm::to_lower(planet_type);
-        detailed_description += "<img src=\"encyclopedia/planet_environments/" + planet_type + ".png\"></img>";
-
-        std::string original_planet_species = planet->SpeciesName();
-        int original_owner_id = planet->Owner();
-        float orig_initial_target_pop = planet->GetMeter(METER_TARGET_POPULATION)->Initial();
-        name = planet->PublicName(planet_id);
-
-        int empire_id = HumanClientApp::GetApp()->EmpireID();
-        Empire* empire = HumanClientApp::GetApp()->GetEmpire(empire_id);
+        auto empire_id = HumanClientApp::GetApp()->EmpireID();
+        auto empire = HumanClientApp::GetApp()->GetEmpire(empire_id);
         if (!empire) {
-            return;
+            return retval;
         }
-        const std::vector<int> pop_center_ids = empire->GetPopulationPool().PopCenterIDs();
-
-        std::set<std::string> species_names;
-        std::map<std::string, std::pair<PlanetEnvironment, float>> population_counts;
-        const auto& empire_avialable_techs = empire->AvailableTechs();
 
         // Collect species colonizing/environment hospitality information
         // start by building roster-- any species tagged as 'ALWAYS_REPORT' plus any species
         // represented in this empire's PopCenters
-        for (const std::map<std::string, Species*>::value_type& entry : GetSpeciesManager()) {
+        for (const auto& entry : GetSpeciesManager()) {
             if (!entry.second)
                 continue;
             const std::string& species_str = entry.first;
-            const std::set<std::string>& species_tags = entry.second->Tags();
-            if (species_tags.find(TAG_ALWAYS_REPORT) != species_tags.end()) {
-                species_names.insert(species_str);
+            const auto& species_tags = entry.second->Tags();
+            if (species_tags.count(TAG_ALWAYS_REPORT)) {
+                retval.insert(species_str);
                 continue;
             }
             // Add extinct species if their tech is known
             // Extinct species and enabling tech should have an EXTINCT tag
-            if (species_tags.find(TAG_EXTINCT) != species_tags.end()) {
-                for (const auto& avail_tech : empire_avialable_techs) {
+            if (species_tags.count(TAG_EXTINCT)) {
+                for (const auto& tech : empire->ResearchedTechs()) {
                     // Check for presence of tags in tech
-                    const auto& tech_tags = GetTech(avail_tech)->Tags();
-                    if ((tech_tags.find(species_str) != tech_tags.end()) &&
-                        (tech_tags.find(TAG_EXTINCT) != tech_tags.end()))
+                    const auto& tech_tags = GetTech(tech.first)->Tags();
+                    if (tech_tags.count(species_str) && tech_tags.count(TAG_EXTINCT))
                     {
                         // Add the species and exit loop
-                        species_names.insert(species_str);
+                        retval.insert(species_str);
                         break;
                     }
                 }
             }
         }
 
-        for (int pop_center_id : pop_center_ids) {
-            std::shared_ptr<const UniverseObject> obj = GetUniverseObject(pop_center_id);
-            std::shared_ptr<const PopCenter> pc = std::dynamic_pointer_cast<const PopCenter>(obj);
+        for (const auto& pop_center_id : empire->GetPopulationPool().PopCenterIDs()) {
+            auto obj = GetUniverseObject(pop_center_id);
+            auto pc = std::dynamic_pointer_cast<const PopCenter>(obj);
             if (!pc)
                 continue;
 
@@ -2423,110 +2528,234 @@ namespace {
             // are already here (aka: it's their home planet). Showing them on
             // their own planet allows comparison vs other races, which might
             // be better suited to this planet. 
-            if (species->CanColonize() || species_name == planet->SpeciesName())
-                species_names.insert(species_name);
+            if (species->CanColonize() || (planet && species_name == planet->SpeciesName()))
+                retval.insert(species_name);
         }
 
-        std::shared_ptr<GG::Font> font = ClientUI::GetFont();
-        GG::X max_species_name_column1_width(0);
+        return retval;
+    }
+
+    std::multimap<float, std::pair<std::string, PlanetEnvironment>>
+        SpeciesEnvByTargetPop(Planet& planet, const std::unordered_set<std::string>& species_names)
+    {
+        std::multimap<float, std::pair<std::string, PlanetEnvironment>> retval;
+
+        if (species_names.empty())
+            return retval;
+
+        // store original state of planet
+        auto original_planet_species = planet.SpeciesName();
+        auto original_owner_id = planet.Owner();
+        auto orig_initial_target_pop = planet.GetMeter(METER_TARGET_POPULATION)->Initial();
+
+        auto planet_id = planet.ID();
+        std::vector<int> planet_id_vec { planet_id };
+        auto empire_id = HumanClientApp::GetApp()->EmpireID();
 
         GetUniverse().InhibitUniverseObjectSignals(true);
 
-        for (const std::string& species_name : species_names) {
-            std::string species_name_column1 = str(FlexibleFormat(UserString("ENC_SPECIES_PLANET_TYPE_SUITABILITY_COLUMN1")) % UserString(species_name)); 
-            GG::Flags<GG::TextFormat> format = GG::FORMAT_NONE;
-            std::vector<std::shared_ptr<GG::Font::TextElement>> text_elements =
-                font->ExpensiveParseFromTextToTextElements(species_name_column1, format);
-            std::vector<GG::Font::LineData> lines = font->DetermineLines(
-                species_name_column1, format, GG::X(1 << 15), text_elements);
-            GG::Pt extent = font->TextExtent(lines);
-            max_species_name_column1_width = std::max(extent.x, max_species_name_column1_width);
-
+        for (const auto& species_name : species_names) {
             // Setting the planet's species allows all of it meters to reflect
             // species (and empire) properties, such as environment type
             // preferences and tech.
-            // @see also: MapWnd::UpdateMeterEstimates()
-            planet->SetSpecies(species_name);
-            planet->SetOwner(empire_id);
-            planet->GetMeter(METER_TARGET_POPULATION)->Set(0.0, 0.0);
-            GetUniverse().UpdateMeterEstimates(planet_id);
+            // @see also: MapWnd::ApplyMeterEffectsAndUpdateMeters
+            // NOTE: Overridding current or initial value of METER_TARGET_POPULATION prior to update
+            //       results in incorrect estimates for at least effects with a min target population of 0
+            planet.SetSpecies(species_name);
+            planet.SetOwner(empire_id);
+            GetUniverse().ApplyMeterEffectsAndUpdateMeters(planet_id_vec, false);
 
-            const Species* species = GetSpecies(species_name);
-            PlanetEnvironment planet_environment = PE_UNINHABITABLE;
+            const auto species = GetSpecies(species_name);
+            auto planet_environment = PE_UNINHABITABLE;
             if (species)
-                planet_environment = species->GetPlanetEnvironment(planet->Type());
+                planet_environment = species->GetPlanetEnvironment(planet.Type());
 
-            double planet_capacity = ((planet_environment == PE_UNINHABITABLE) ? 0 : planet->CurrentMeterValue(METER_TARGET_POPULATION));
+            float planet_capacity = ((planet_environment == PE_UNINHABITABLE) ?
+                                     0.0f : planet.CurrentMeterValue(METER_TARGET_POPULATION)); // want value after temporary meter update, so get current, not initial value of meter
 
-            population_counts[species_name].first = planet_environment;
-            population_counts[species_name].second = planet_capacity;
+            retval.insert({planet_capacity, {species_name, planet_environment}});
         }
 
-        std::multimap<float, std::pair<std::string, PlanetEnvironment>> target_population_species;
-        for (std::map<std::string, std::pair<PlanetEnvironment, float>>::value_type& entry : population_counts) {
-            target_population_species.insert({entry.second.second, {entry.first, entry.second.first}});
+        // restore planet to original state
+        planet.SetSpecies(original_planet_species);
+        planet.SetOwner(original_owner_id);
+        planet.GetMeter(METER_TARGET_POPULATION)->Set(orig_initial_target_pop, orig_initial_target_pop);
+
+        GetUniverse().InhibitUniverseObjectSignals(false);
+        GetUniverse().ApplyMeterEffectsAndUpdateMeters(planet_id_vec, false);
+
+        return retval;
+    }
+
+    GG::Pt HairSpaceExtent() {
+        static GG::Pt retval;
+        if (retval > GG::Pt(GG::X0, GG::Y0))
+            return retval;
+
+        GG::Flags<GG::TextFormat> format = GG::FORMAT_NONE;
+        auto font = ClientUI::GetFont();
+
+        const std::string hair_space_str { u8"\u200A" };
+        auto elems = font->ExpensiveParseFromTextToTextElements(hair_space_str, format);
+        auto lines = font->DetermineLines(hair_space_str, format, GG::X(1 << 15), elems);
+        retval = font->TextExtent(lines);
+        return retval;
+    }
+
+    std::unordered_map<std::string, std::string> SpeciesSuitabilityColumn1(const std::unordered_set<std::string>& species_names) {
+        std::unordered_map<std::string, std::string> retval;
+        auto font = ClientUI::GetFont();
+
+        for (const auto& species_name : species_names) {
+            retval[species_name] = str(FlexibleFormat(UserString("ENC_SPECIES_PLANET_TYPE_SUITABILITY_COLUMN1"))
+                                       % LinkTaggedText(VarText::SPECIES_TAG, species_name));
         }
+
+        // determine widest column, storing extents of each row for later alignment
+        GG::Flags<GG::TextFormat> format = GG::FORMAT_NONE;
+        GG::X longest_width { 0 };
+        std::unordered_map<std::string, GG::Pt> column1_species_extents;
+        for (const auto& it : retval) {
+            auto text_elements = font->ExpensiveParseFromTextToTextElements(it.second, format);
+            auto lines = font->DetermineLines(it.second, format, GG::X(1 << 15), text_elements);
+            GG::Pt extent = font->TextExtent(lines);
+            column1_species_extents[it.first] = extent;
+            longest_width = std::max(longest_width, extent.x);
+        }
+
+        // align end of column with end of longest row
+        auto hair_space_width = HairSpaceExtent().x;
+        auto hair_space_width_str = std::to_string(Value(hair_space_width));
+        const std::string hair_space_str { u8"\u200A" };
+        for (auto& it : retval) {
+            if (column1_species_extents.count(it.first) != 1) {
+                ErrorLogger() << "No column1 extent stored for " << it.first;
+                continue;
+            }
+            auto distance = longest_width - column1_species_extents.at(it.first).x;
+            std::size_t num_spaces = Value(distance) / Value(hair_space_width);
+            TraceLogger() << it.first << " Num spaces: " << std::to_string(Value(longest_width))
+                          << " - " << std::to_string(Value(column1_species_extents.at(it.first).x))
+                          << " = " << std::to_string(Value(distance))
+                          << " / " << std::to_string(Value(hair_space_width))
+                          << " = " << std::to_string(num_spaces);;
+            for (std::size_t i = 0; i < num_spaces; ++i)
+                it.second.append(hair_space_str);
+
+            TraceLogger() << "Species Suitability Column 1:\n\t" << it.first << " \"" << it.second << "\"" << [&]() {
+                    std::string out("");
+                    auto col_val = Value(column1_species_extents.at(it.first).x);
+                    out.append("\n\t\t(" + std::to_string(col_val) + " + (" + std::to_string(num_spaces) + " * " + hair_space_width_str);
+                    out.append(") = " + std::to_string(col_val + (num_spaces * Value(hair_space_width))) + ")");
+                    auto text_elements = font->ExpensiveParseFromTextToTextElements(it.second, format);
+                    auto lines = font->DetermineLines(it.second, format, GG::X(1 << 15), text_elements);
+                    out.append(" = " + std::to_string(Value(font->TextExtent(lines).x)));
+                    return out;
+                }();
+        }
+
+        return retval;
+    }
+
+    const std::vector<std::string>& PlanetEnvFilenames(PlanetType planet_type) {
+        static std::unordered_map<int, std::vector<std::string>> filenames_by_type {
+            std::make_pair(INVALID_PLANET_TYPE, std::vector<std::string>())
+        };
+        std::string planet_type_str = boost::lexical_cast<std::string>(planet_type);
+        boost::algorithm::to_lower(planet_type_str);
+
+        if (!filenames_by_type.count(planet_type)) {
+            auto pe_type_func = [planet_type_str](const boost::filesystem::path& path) {
+                return IsExistingFile(path) && boost::algorithm::starts_with(path.filename().string(), planet_type_str);
+            };
+
+            auto pe_path = ClientUI::ArtDir() / "encyclopedia/planet_environments";
+            // retain only the filenames of each path
+            for (const auto& file_path : PathsInDir(pe_path, pe_type_func, false))
+                filenames_by_type[planet_type].emplace_back(PathToString(file_path.filename()));
+        }
+
+        if (filenames_by_type.count(planet_type))
+            return filenames_by_type.at(planet_type);
+        return filenames_by_type.at(INVALID_PLANET_TYPE);
+    }
+
+    void RefreshDetailPanelSuitabilityTag(const std::string& item_type, const std::string& item_name,
+                                          std::string& name, std::shared_ptr<GG::Texture>& texture,
+                                          std::shared_ptr<GG::Texture>& other_texture, int& turns,
+                                          float& cost, std::string& cost_units, std::string& general_type,
+                                          std::string& specific_type, std::string& detailed_description,
+                                          GG::Clr& color, GG::X width)
+    {
+        general_type = UserString("SP_PLANET_SUITABILITY");
+
+        int planet_id = boost::lexical_cast<int>(item_name);
+        auto planet = GetPlanet(planet_id);
+
+        // show image of planet environment at the top of the suitability report
+        const auto& filenames = PlanetEnvFilenames(planet->Type());
+        if (!filenames.empty()) {
+            auto env_img_tag = "<img src=\"encyclopedia/planet_environments/"
+                               + filenames[planet_id % filenames.size()] + "\"></img>";
+            TraceLogger() << "Suitability report env image tag \"" << env_img_tag << "\"";
+            detailed_description.append(env_img_tag);
+        }
+
+        name = planet->PublicName(planet_id);
+
+        auto species_names = ReportedSpeciesForPlanet(planet);
+        auto target_population_species = SpeciesEnvByTargetPop(*planet.get(), species_names);
+        auto species_suitability_column1 = SpeciesSuitabilityColumn1(species_names);
 
         bool positive_header_placed = false;
         bool negative_header_placed = false;
 
-        for (std::multimap<float, std::pair<std::string, PlanetEnvironment>>::const_reverse_iterator
-             it = target_population_species.rbegin(); it != target_population_species.rend(); ++it)
-        {
-            std::string user_species_name = UserString(it->second.first);
-            std::string species_name_column1 = str(FlexibleFormat(UserString("ENC_SPECIES_PLANET_TYPE_SUITABILITY_COLUMN1")) % LinkTaggedText(VarText::SPECIES_TAG, it->second.first));
-
-            GG::Flags<GG::TextFormat> format = GG::FORMAT_NONE;
-            std::vector<std::shared_ptr<GG::Font::TextElement>> text_elements =
-                font->ExpensiveParseFromTextToTextElements(species_name_column1, format);
-            std::vector<GG::Font::LineData> lines = font->DetermineLines(
-                species_name_column1, format, GG::X(1 << 15), text_elements);
-            GG::Pt extent = font->TextExtent(lines);
-            while (extent.x < max_species_name_column1_width) {
-                species_name_column1 += "\t";
-                text_elements = font->ExpensiveParseFromTextToTextElements(species_name_column1, format);
-                lines = font->DetermineLines(species_name_column1, format, GG::X(1 << 15), text_elements);
-                extent = font->TextExtent(lines);
-            }
+        for (auto it = target_population_species.rbegin(); it != target_population_species.rend(); ++it) {
+            auto species_name_column1_it = species_suitability_column1.find(it->second.first);
+            if (species_name_column1_it == species_suitability_column1.end())
+                continue;
 
             if (it->first > 0) {
                 if (!positive_header_placed) {
-                    detailed_description += str(FlexibleFormat(UserString("ENC_SUITABILITY_REPORT_POSITIVE_HEADER")) % planet->PublicName(planet_id));                    
+                    auto pos_header = str(FlexibleFormat(UserString("ENC_SUITABILITY_REPORT_POSITIVE_HEADER"))
+                                          % planet->PublicName(planet_id));
+                    TraceLogger() << "Suitability report positive header \"" << pos_header << "\"";
+                    detailed_description.append(pos_header);
                     positive_header_placed = true;
                 }
 
-                detailed_description += str(FlexibleFormat(UserString("ENC_SPECIES_PLANET_TYPE_SUITABILITY"))
-                    % species_name_column1
+                auto pos_row = str(FlexibleFormat(UserString("ENC_SPECIES_PLANET_TYPE_SUITABILITY"))
+                    % species_name_column1_it->second
                     % UserString(boost::lexical_cast<std::string>(it->second.second))
                     % (GG::RgbaTag(ClientUI::StatIncrColor()) + DoubleToString(it->first, 2, true) + "</rgba>"));
+                TraceLogger() << "Suitability report positive row \"" << pos_row << "\"";
+                detailed_description.append(pos_row);
 
             } else if (it->first <= 0) {
                 if (!negative_header_placed) {
                     if (positive_header_placed)
                         detailed_description += "\n\n";
 
-                    detailed_description += str(FlexibleFormat(UserString("ENC_SUITABILITY_REPORT_NEGATIVE_HEADER")) % planet->PublicName(planet_id));                    
+                    auto neg_header = str(FlexibleFormat(UserString("ENC_SUITABILITY_REPORT_NEGATIVE_HEADER"))
+                                          % planet->PublicName(planet_id));
+                    TraceLogger() << "Suitability report regative header \"" << neg_header << "\"";
+                    detailed_description.append(neg_header);
                     negative_header_placed = true;
                 }
 
-                detailed_description += str(FlexibleFormat(UserString("ENC_SPECIES_PLANET_TYPE_SUITABILITY"))
-                    % species_name_column1
+                auto neg_row = str(FlexibleFormat(UserString("ENC_SPECIES_PLANET_TYPE_SUITABILITY"))
+                    % species_name_column1_it->second
                     % UserString(boost::lexical_cast<std::string>(it->second.second))
                     % (GG::RgbaTag(ClientUI::StatDecrColor()) + DoubleToString(it->first, 2, true) + "</rgba>"));
+                TraceLogger() << "Suitability report negative row \"" << neg_row << "\"";
+                detailed_description.append(neg_row);
             }
 
             detailed_description += "\n";
         }
 
-        planet->SetSpecies(original_planet_species);
-        planet->SetOwner(original_owner_id);
-        planet->GetMeter(METER_TARGET_POPULATION)->Set(orig_initial_target_pop, orig_initial_target_pop);
-
-        GetUniverse().InhibitUniverseObjectSignals(false);
-
-        GetUniverse().UpdateMeterEstimates(planet_id);
-
-        detailed_description += UserString("ENC_SUITABILITY_REPORT_WHEEL_INTRO") + "<img src=\"encyclopedia/EP_wheel.png\"></img>";
+        detailed_description += UserString("ENC_SUITABILITY_REPORT_WHEEL_INTRO")
+                                + "<img src=\"encyclopedia/EP_wheel.png\"></img>";
     }
 
     void RefreshDetailPanelSearchResultsTag(const std::string& item_type, const std::string& item_name,
@@ -2639,7 +2868,7 @@ void EncyclopediaDetailPanel::PreRender() {
 
 void EncyclopediaDetailPanel::RefreshImpl() {
     if (m_icon) {
-        DeleteChild(m_icon);
+        DetachChild(m_icon);
         m_icon = nullptr;
     }
     m_name_text->Clear();
@@ -2673,27 +2902,24 @@ void EncyclopediaDetailPanel::RefreshImpl() {
     if (m_items_it->first == TextLinker::GRAPH_TAG) {
         const std::string& graph_id = m_items_it->second;
 
-        const std::map<std::string, std::map<int, std::map<int, double>>>&
-            stat_records = GetUniverse().GetStatRecords();
+        const auto& stat_records = GetUniverse().GetStatRecords();
 
-        std::map<std::string, std::map<int, std::map<int, double>>>::const_iterator
-            stat_name_it = stat_records.find(graph_id);
+        auto stat_name_it = stat_records.find(graph_id);
         if (stat_name_it != stat_records.end()) {
-            const std::map<int, std::map<int, double>>& empire_lines = stat_name_it->second;
+            const auto& empire_lines = stat_name_it->second;
             m_graph->Clear();
 
             // add lines for each empire
-            for (const std::map<int, std::map<int, double>>::value_type& entry : empire_lines) {
-                int empire_id = entry.first;
+            for (const auto& empire_linemap : empire_lines) {
+                int empire_id = empire_linemap.first;
 
                 GG::Clr empire_clr = GG::CLR_WHITE;
                 if (const Empire* empire = GetEmpire(empire_id))
                     empire_clr = empire->Color();
 
-                const std::map<int, double>& empire_line = entry.second;
                 // convert formats...
                 std::vector<std::pair<double, double>> line_data_pts;
-                for (const std::map<int, double>::value_type& entry : empire_line)
+                for (const auto& entry : empire_linemap.second)
                 { line_data_pts.push_back({entry.first, entry.second}); }
 
                 m_graph->AddSeries(line_data_pts, empire_clr);
@@ -2710,7 +2936,7 @@ void EncyclopediaDetailPanel::RefreshImpl() {
 
     // Create Icons
     if (texture) {
-        m_icon = new GG::StaticGraphic(texture, GG::GRAPHIC_FITGRAPHIC | GG::GRAPHIC_PROPSCALE);
+        m_icon = GG::Wnd::Create<GG::StaticGraphic>(texture, GG::GRAPHIC_FITGRAPHIC | GG::GRAPHIC_PROPSCALE);
         if (color != GG::CLR_ZERO)
             m_icon->SetColor(color);
     }
@@ -2749,16 +2975,16 @@ void EncyclopediaDetailPanel::AddItem(const std::string& type, const std::string
     if (!m_items.empty()) {
         if (m_items_it->first == type && m_items_it->second == name)
             return;
-        std::list<std::pair <std::string, std::string>>::iterator end = m_items.end();
+        auto end = m_items.end();
         --end;
         if (m_items_it != end) {
-            std::list<std::pair <std::string, std::string>>::iterator i = m_items_it;
+            auto i = m_items_it;
             ++i;
             m_items.erase(i, m_items.end());
         }
     }
 
-    m_items.push_back(std::pair<std::string, std::string>(type, name));
+    m_items.push_back({type, name});
     if (m_items.size() == 1)
         m_items_it = m_items.begin();
     else
@@ -2901,7 +3127,7 @@ void EncyclopediaDetailPanel::SetEmpire(const std::string& empire_id) {
 }
 
 void EncyclopediaDetailPanel::SetDesign(int design_id) {
-    int current_item_id = ShipDesign::INVALID_DESIGN_ID;
+    int current_item_id = INVALID_DESIGN_ID;
     if (m_items_it != m_items.end()) {
         try {
             current_item_id = boost::lexical_cast<int>(m_items_it->second);
@@ -2967,10 +3193,13 @@ void EncyclopediaDetailPanel::SetItem(const Empire* empire)
 { SetEmpire(empire ? empire->EmpireID() : ALL_EMPIRES); }
 
 void EncyclopediaDetailPanel::SetItem(const ShipDesign* design)
-{ SetDesign(design ? design->ID() : ShipDesign::INVALID_DESIGN_ID); }
+{ SetDesign(design ? design->ID() : INVALID_DESIGN_ID); }
 
 void EncyclopediaDetailPanel::SetItem(const MeterType& meter_type)
 { SetMeterType(boost::lexical_cast<std::string>(meter_type)); }
+
+void EncyclopediaDetailPanel::SetEncyclopediaArticle(const std::string& name)
+{ AddItem(TextLinker::ENCYCLOPEDIA_TAG, name); }
 
 void EncyclopediaDetailPanel::OnIndex()
 { AddItem(TextLinker::ENCYCLOPEDIA_TAG, "ENC_INDEX"); }
@@ -2989,7 +3218,7 @@ void EncyclopediaDetailPanel::OnBack() {
 }
 
 void EncyclopediaDetailPanel::OnNext() {
-    std::list<std::pair <std::string, std::string>>::iterator end = m_items.end();
+    auto end = m_items.end();
     --end;
     if (m_items_it != end && !m_items.empty())
         ++m_items_it;

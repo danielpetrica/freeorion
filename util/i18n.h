@@ -9,6 +9,9 @@
 
 #include "Export.h"
 
+/** Returns locale, which may be previously cached */
+FO_COMMON_API std::locale GetLocale(const std::string& name = std::string(""));
+
 /** Returns a language-specific string for the key-string \a str */
 FO_COMMON_API const std::string& UserString(const std::string& str);
 
@@ -77,7 +80,7 @@ boost::format FlexibleFormatList(
 
     boost::format header_fmt = FlexibleFormat(header_template) % boost::lexical_cast<std::string>(words.size());
 
-    for (const typename HeaderContainer::value_type& word : header_words) {
+    for (const auto& word : header_words) {
         header_fmt % word;
     }
 
@@ -124,7 +127,7 @@ boost::format FlexibleFormatList(
 
     boost::format fmt = FlexibleFormat(template_str) % header_fmt.str();
 
-    for (const typename ListContainer::value_type& word : words) {
+    for (const auto& word : words) {
         fmt % word;
     }
 

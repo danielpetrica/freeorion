@@ -6,6 +6,7 @@
 #include "EnumParser.h"
 #include "ValueRefParser.h"
 
+#include "../universe/Tech.h"
 #include "../universe/Effect.h"
 #include "../util/Logger.h"
 #include "../util/Directories.h"
@@ -27,229 +28,7 @@ namespace std {
 }
 #endif
 
-namespace {
-    struct tags_rules {
-        tags_rules() {
-            namespace phoenix = boost::phoenix;
-            namespace qi = boost::spirit::qi;
-
-            using phoenix::insert;
-
-            qi::_1_type _1;
-            qi::_r1_type _r1;
-
-            const parse::lexer& tok = parse::lexer::instance();
-
-            start
-                =  -(
-                        parse::detail::label(Tags_token)
-                    >>  (
-                            ('[' > +tok.string [ insert(_r1, _1) ] > ']')
-                            |   tok.string [ insert(_r1, _1) ]
-                        )
-                    )
-                ;
-
-            start.name("Tags");
-
-#if DEBUG_PARSERS
-            debug(start);
-#endif
-        }
-
-        parse::detail::tags_rule start;
-    };
-
-    struct effects_group_rules {
-        effects_group_rules() {
-            namespace phoenix = boost::phoenix;
-            namespace qi = boost::spirit::qi;
-
-            using phoenix::construct;
-            using phoenix::new_;
-            using phoenix::push_back;
-
-            qi::_1_type _1;
-            qi::_a_type _a;
-            qi::_b_type _b;
-            qi::_c_type _c;
-            qi::_d_type _d;
-            qi::_e_type _e;
-            qi::_f_type _f;
-            qi::_g_type _g;
-            qi::_val_type _val;
-            qi::lit_type lit;
-            qi::eps_type eps;
-
-            const parse::lexer& tok = parse::lexer::instance();
-
-            effects_group
-                =   tok.EffectsGroup_
-                > -(parse::detail::label(Description_token)      > tok.string [ _g = _1 ])
-                >   parse::detail::label(Scope_token)            > parse::detail::condition_parser [ _a = _1 ]
-                > -(parse::detail::label(Activation_token)       > parse::detail::condition_parser [ _b = _1 ])
-                > -(parse::detail::label(StackingGroup_token)    > tok.string [ _c = _1 ])
-                > -(parse::detail::label(AccountingLabel_token)  > tok.string [ _e = _1 ])
-                > ((parse::detail::label(Priority_token)         > tok.int_ [ _f = _1 ]) | eps [ _f = 100 ])
-                >   parse::detail::label(Effects_token)
-                >   (
-                            ('[' > +parse::effect_parser() [ push_back(_d, _1) ] > ']')
-                        |    parse::effect_parser() [ push_back(_d, _1) ]
-                    )
-                    [ _val = new_<Effect::EffectsGroup>(_a, _b, _d, _e, _c, _f, _g) ]
-                ;
-
-            start
-                =    ('[' > +effects_group [ push_back(_val, construct<std::shared_ptr<Effect::EffectsGroup>>(_1)) ] > ']')
-                |     effects_group [ push_back(_val, construct<std::shared_ptr<Effect::EffectsGroup>>(_1)) ]
-                ;
-
-            effects_group.name("EffectsGroup");
-            start.name("EffectsGroups");
-
-#if DEBUG_PARSERS
-            debug(effects_group);
-            debug(start);
-#endif
-        }
-
-        typedef parse::detail::rule<
-            Effect::EffectsGroup* (),
-            boost::spirit::qi::locals<
-                Condition::ConditionBase*,
-                Condition::ConditionBase*,
-                std::string,
-                std::vector<Effect::EffectBase*>,
-                std::string,
-                int,
-                std::string
-            >
-        > effects_group_rule;
-
-        effects_group_rule effects_group;
-        parse::detail::effects_group_rule start;
-    };
-
-    struct color_parser_rules {
-        color_parser_rules() {
-            namespace phoenix = boost::phoenix;
-            namespace qi = boost::spirit::qi;
-
-            using phoenix::construct;
-            using phoenix::if_;
-
-            qi::_1_type _1;
-            qi::_a_type _a;
-            qi::_b_type _b;
-            qi::_c_type _c;
-            qi::_pass_type _pass;
-            qi::_val_type _val;
-            qi::eps_type eps;
-            qi::uint_type uint_;
-
-            const parse::lexer& tok = parse::lexer::instance();
-
-            channel
-                =    tok.int_ [ _val = _1, _pass = 0 <= _1 && _1 <= 255 ]
-                ;
-
-            start
-                =    '(' >> channel [ _a = _1 ]
-                >    ',' >> channel [ _b = _1 ]
-                >    ',' >> channel [ _c = _1 ]
-                >    (
-                        (
-                            ',' > channel [ _val = construct<GG::Clr>(_a, _b, _c, _1) ]
-                        )
-                        |         eps [ _val = construct<GG::Clr>(_a, _b, _c, phoenix::val(255)) ]
-                     )
-                >    ')'
-                ;
-
-            channel.name("colour channel (0 to 255)");
-            start.name("Colour");
-
-#if DEBUG_PARSERS
-            debug(channel);
-            debug(start);
-#endif
-        }
-
-        typedef parse::detail::rule<
-            unsigned int ()
-        > rule;
-
-        rule channel;
-        parse::detail::color_parser_rule start;
-    };
-
-    struct item_spec_parser_rules {
-        item_spec_parser_rules() {
-            namespace phoenix = boost::phoenix;
-            namespace qi = boost::spirit::qi;
-
-            using phoenix::construct;
-
-            qi::_1_type _1;
-            qi::_a_type _a;
-            qi::_val_type _val;
-
-            const parse::lexer& tok = parse::lexer::instance();
-
-            start
-                =    tok.Item_
-                >    parse::detail::label(Type_token) > parse::unlockable_item_type_enum() [ _a = _1 ]
-                >    parse::detail::label(Name_token) > tok.string [ _val = construct<ItemSpec>(_a, _1) ]
-                ;
-
-            start.name("ItemSpec");
-
-#if DEBUG_PARSERS
-            debug(start);
-#endif
-        }
-
-        parse::detail::item_spec_parser_rule start;
-    };
-}
-
 namespace parse {
-    void init() {
-        namespace phoenix = boost::phoenix;
-        namespace qi = boost::spirit::qi;
-
-        using phoenix::static_cast_;
-
-        qi::_1_type _1;
-        qi::_val_type _val;
-
-        const lexer& tok = lexer::instance();
-
-        detail::int_
-            =    '-' >> tok.int_ [ _val = -_1 ]
-            |    tok.int_ [ _val = _1 ]
-            ;
-
-        detail::double_
-            =    '-' >> tok.int_ [ _val = -static_cast_<double>(_1) ]
-            |    tok.int_ [ _val = static_cast_<double>(_1) ]
-            |    '-' >> tok.double_ [ _val = -_1 ]
-            |    tok.double_ [ _val = _1 ]
-            ;
-
-        detail::int_.name("integer");
-        detail::double_.name("real number");
-
-#if DEBUG_PARSERS
-        debug(detail::int_);
-        debug(detail::double_);
-#endif
-
-        int_value_ref();
-
-        condition_parser();
-    }
-
     using namespace boost::xpressive;
     const sregex MACRO_KEY = +_w;   // word character (alnum | _), one or more times, greedy
     const sregex MACRO_TEXT = -*_;  // any character, zero or more times, not greedy
@@ -278,7 +57,7 @@ namespace parse {
                 //DebugLogger() << "text:\n" << macro_text;
 
                 // store macro
-                if (macros.find(macro_key) == macros.end()) {
+                if (!macros.count(macro_key)) {
                     macros[macro_key] = macro_text;
                 } else {
                     ErrorLogger() << "Duplicate macro key foud: " << macro_key << ".  Ignoring duplicate.";
@@ -316,17 +95,17 @@ namespace parse {
     bool macro_deep_referenced_in_text(const std::string& macro_to_find, const std::string& text,
                                        const std::map<std::string, std::string>& macros)
     {
-        //DebugLogger() << "Checking if " << macro_to_find << " deep referenced in text: " << text;
+        TraceLogger() << "Checking if " << macro_to_find << " deep referenced in text: " << text;
         // check of text directly references macro_to_find
         std::set<std::string> macros_directly_referenced_in_input_text = macros_directly_referenced_in_text(text);
         if (macros_directly_referenced_in_input_text.empty())
             return false;
-        if (macros_directly_referenced_in_input_text.find(macro_to_find) != macros_directly_referenced_in_input_text.end())
+        if (macros_directly_referenced_in_input_text.count(macro_to_find))
             return true;
         // check if macros referenced in text reference macro_to_find
         for (const std::string& direct_referenced_macro_key : macros_directly_referenced_in_input_text) {
             // get text of directly referenced macro
-            std::map<std::string, std::string>::const_iterator macro_it = macros.find(direct_referenced_macro_key);
+            auto macro_it = macros.find(direct_referenced_macro_key);
             if (macro_it == macros.end()) {
                 ErrorLogger() << "macro_deep_referenced_in_text couldn't find referenced macro: " << direct_referenced_macro_key;
                 continue;
@@ -341,13 +120,15 @@ namespace parse {
     }
 
     void check_for_cyclic_macro_references(const std::map<std::string, std::string>& macros) {
-        for (const std::map<std::string, std::string>::value_type& macro : macros) {
+        for (const auto& macro : macros) {
             if (macro_deep_referenced_in_text(macro.first, macro.second, macros))
                 ErrorLogger() << "Cyclic macro found: " << macro.first << " references itself (eventually)";
         }
     }
 
-    void replace_macro_references(std::string& text, const std::map<std::string, std::string>& macros) {
+    void replace_macro_references(std::string& text,
+                                  const std::map<std::string, std::string>& macros)
+    {
         try {
             std::size_t position = 0; // position in the text, past the already processed part
             smatch match;
@@ -356,7 +137,7 @@ namespace parse {
                 const std::string& matched_text = match.str();  // [[MACRO_KEY]] or [[MACRO_KEY(foo,bar,...)]]
                 const std::string& macro_key = match[1];        // just MACRO_KEY
                 // look up macro key to insert
-                std::map<std::string, std::string>::const_iterator macro_lookup_it = macros.find(macro_key);
+                auto macro_lookup_it = macros.find(macro_key);
                 if (macro_lookup_it != macros.end()) {
                     // verify that macro is safe: check for cyclic reference of macro to itself
                     if (macro_deep_referenced_in_text(macro_key, macro_lookup_it->second, macros)) {
@@ -405,7 +186,7 @@ namespace parse {
 
         // recursively expand macro keys: replace [[MACRO_KEY]] in other macro
         // text with the macro text corresponding to MACRO_KEY.
-        for (std::map<std::string, std::string>::value_type& macro : macros)
+        for (auto& macro : macros)
         { replace_macro_references(macro.second, macros); }
 
         // substitute macro keys - replace [[MACRO_KEY]] in the input text with
@@ -441,25 +222,33 @@ namespace parse {
      * @param[in] path relative or absolute directory (searched recursively)
      * @return Any *.focs.txt files in path or 'GetResourceDir() / path'.
      */
-    std::vector<boost::filesystem::path> ListScripts(const boost::filesystem::path& path) {
-        std::vector<boost::filesystem::path> retval;
+    std::vector<boost::filesystem::path> ListScripts(const boost::filesystem::path& path, bool allow_permissive) {
+        std::vector<boost::filesystem::path> scripts;
 
         try {
-            for (const boost::filesystem::path& file : ListDir(path)) {
+            const auto& files = ListDir(path);
+            for (const auto& file : files) {
                 std::string fn_ext = file.extension().string();
                 std::string fn_stem_ext = file.stem().extension().string();
                 if (fn_ext == ".txt" && fn_stem_ext == ".focs") {
-                    retval.push_back(file);
+                    scripts.push_back(file);
                 } else {
                     TraceLogger() << "Parse: Skipping file " << file.string()
                                   << " due to extension (" << fn_stem_ext << fn_ext << ")";
                 }
             }
+
+            // If in permissive mode and no scripts are found allow all files to be scripts.
+            if (allow_permissive && scripts.empty() && !files.empty()) {
+                WarnLogger() << PathToString(path) << " does not contain scripts with the expected suffix .focs.txt. "
+                             << " Trying a more permissive mode and ignoring file suffix.";
+                scripts = files;
+            }
         } catch (const boost::filesystem::filesystem_error& ec) {
             ErrorLogger() << "Error accessing file " << ec.path1() << " (" << ec.what() << ")";
         }
 
-        return retval;
+        return scripts;
     }
 
     const sregex FILENAME_TEXT = -+_;   // any character, one or more times, not greedy
@@ -559,9 +348,9 @@ namespace parse {
                     file_content.append("\n");
                     process_include_substitutions(file_content, match_path.parent_path(), files_included);
                     text = regex_replace(text, INCL_ONCE_SEARCH, file_content, regex_constants::format_first_only);
-                } else if (missing_include_files.insert(PathString(match_path)).second) {
-                    ErrorLogger() << "Parse: " << PathString(match_path) << " was not found for inclusion (Path:"
-                                  << PathString(base_path) << ") (File:" << fn_str << ")";
+                } else if (missing_include_files.insert(PathToString(match_path)).second) {
+                    ErrorLogger() << "Parse: " << PathToString(match_path) << " was not found for inclusion (Path:"
+                                  << PathToString(base_path) << ") (File:" << fn_str << ")";
                 }
             }
             // remove any remaining includes of this file
@@ -571,48 +360,165 @@ namespace parse {
     }
 
     namespace detail {
-        double_rule double_;
+    double_grammar::double_grammar(const parse::lexer& tok) :
+        double_grammar::base_type(double_, "double_grammar")
+    {
+        namespace phoenix = boost::phoenix;
+        namespace qi = boost::spirit::qi;
 
-        int_rule int_;
+        using phoenix::static_cast_;
 
-        label_rule& label(const char* name) {
-            static const bool PARSING_LABELS_OPTIONAL = false;
-            static std::map<const char*, label_rule> rules;
-            std::map<const char*, label_rule>::iterator it = rules.find(name);
-            if (it == rules.end()) {
-                const lexer& l = lexer::instance();
-                label_rule& retval = rules[name];
-                if (PARSING_LABELS_OPTIONAL) {
-                    retval = -(l.name_token(name) >> '=');
-                } else {
-                    retval =  (l.name_token(name) >> '=');
-                }
-                retval.name(std::string(name) + " =");
-                return retval;
-            } else {
-                return it->second;
-            }
+        qi::_1_type _1;
+        qi::_val_type _val;
+
+        double_
+            =    '-' >> tok.int_ [ _val = -static_cast_<double>(_1) ]
+            |    tok.int_ [ _val = static_cast_<double>(_1) ]
+            |    '-' >> tok.double_ [ _val = -_1 ]
+            |    tok.double_ [ _val = _1 ]
+            ;
+
+        double_.name("real number");
+
+#if DEBUG_PARSERS
+        debug(double_);
+#endif
+
+    }
+
+    int_grammar::int_grammar(const parse::lexer& tok) :
+        int_grammar::base_type(int_, "int_grammar")
+    {
+
+        namespace phoenix = boost::phoenix;
+        namespace qi = boost::spirit::qi;
+
+        using phoenix::static_cast_;
+
+        qi::_1_type _1;
+        qi::_val_type _val;
+
+        int_
+            =    '-' >> tok.int_ [ _val = -_1 ]
+            |    tok.int_ [ _val = _1 ]
+            ;
+
+        int_.name("integer");
+
+#if DEBUG_PARSERS
+        debug(detail::int_);
+        debug(detail::double_);
+#endif
+    }
+
+#define PARSING_LABELS_OPTIONAL false
+    label_rule& Labeller::operator()(const parse::lexer::string_token_def& token) {
+        auto it = m_rules.find(&token);
+        if (it != m_rules.end())
+            return it->second;
+
+        label_rule& retval = m_rules[&token];
+        if (PARSING_LABELS_OPTIONAL) {
+            retval = -(token >> '=');
+        } else {
+            retval =  (token >> '=');
         }
+        return retval;
+    }
 
-        tags_rule& tags_parser() {
-            static tags_rules rules;
-            return rules.start;
-        }
+    tags_grammar::tags_grammar(const parse::lexer& tok,
+                               Labeller& label) :
+        tags_grammar::base_type(start, "tags_grammar"),
+        one_or_more_string_tokens(tok)
+    {
+        namespace phoenix = boost::phoenix;
+        namespace qi = boost::spirit::qi;
 
-        effects_group_rule& effects_group_parser() {
-            static effects_group_rules rules;
-            return rules.start;
-        }
+        using phoenix::insert;
 
-        color_parser_rule& color_parser() {
-            static color_parser_rules rules;
-            return rules.start;
-        }
+        start %=
+            -(
+                label(tok.Tags_)
+                >>  one_or_more_string_tokens
+            )
+            ;
 
-        item_spec_parser_rule& item_spec_parser() {
-            static item_spec_parser_rules rules;
-            return rules.start;
-        }
+        start.name("Tags");
+
+#if DEBUG_PARSERS
+        debug(start);
+#endif
+    }
+
+    color_parser_grammar::color_parser_grammar(const parse::lexer& tok) :
+        color_parser_grammar::base_type(start, "color_parser_grammar")
+    {
+        namespace phoenix = boost::phoenix;
+        namespace qi = boost::spirit::qi;
+
+        using phoenix::construct;
+        using phoenix::if_;
+
+        qi::_1_type _1;
+        qi::_2_type _2;
+        qi::_3_type _3;
+        qi::_4_type _4;
+        qi::_pass_type _pass;
+        qi::_val_type _val;
+        qi::eps_type eps;
+
+        channel = tok.int_ [ _val = _1, _pass = 0 <= _1 && _1 <= 255 ];
+        alpha   = (',' > channel) [ _val = _1 ] | eps [ _val = 255 ];
+        start
+            =  ( ('(' >> channel )
+            >    (',' >> channel )
+            >    (',' >> channel )
+            >    alpha
+            >    ')'
+               ) [ _val  = construct<GG::Clr>(_1, _2, _3, _4)]
+            ;
+
+        channel.name("colour channel (0 to 255)");
+        alpha.name("alpha channel (0 to 255) defaults to 255");
+        start.name("Colour");
+
+#if DEBUG_PARSERS
+        debug(channel);
+        debug(start);
+#endif
+    }
+
+    item_spec_grammar::item_spec_grammar(
+        const parse::lexer& tok,
+        Labeller& label
+    ) :
+        item_spec_grammar::base_type(start, "item_spec_grammar"),
+        unlockable_item_type_enum(tok)
+    {
+        namespace phoenix = boost::phoenix;
+        namespace qi = boost::spirit::qi;
+
+        using phoenix::construct;
+
+        qi::_1_type _1;
+        qi::_2_type _2;
+        qi::_val_type _val;
+        qi::omit_type omit_;
+
+        start
+            =  ( omit_[tok.Item_]
+            >    label(tok.Type_) > unlockable_item_type_enum
+            >    label(tok.Name_) > tok.string
+               ) [ _val = construct<ItemSpec>(_1, _2) ]
+            ;
+
+        start.name("ItemSpec");
+
+#if DEBUG_PARSERS
+        debug(start);
+#endif
+    }
+
 
         /** \brief Load and parse script file(s) from given path
          * 
@@ -623,9 +529,9 @@ namespace parse {
          * @param[out] first content iterator
          * @param[out] it lexer iterator
          */
-        void parse_file_common(const boost::filesystem::path& path, const parse::lexer& l,
+        void parse_file_common(const boost::filesystem::path& path, const parse::lexer& lexer,
                                std::string& filename, std::string& file_contents,
-                               parse::text_iterator& first, parse::token_iterator& it)
+                               parse::text_iterator& first, parse::text_iterator& last, parse::token_iterator& it)
         {
             filename = path.string();
 
@@ -641,14 +547,40 @@ namespace parse {
             file_substitution(file_contents, path.parent_path());
             macro_substitution(file_contents);
 
-            first = parse::text_iterator(file_contents.begin());
-            parse::text_iterator last(file_contents.end());
+            first = file_contents.begin();
+            last = file_contents.end();
 
-            parse::detail::s_text_it = &first;
-            parse::detail::s_begin = first;
-            parse::detail::s_end = last;
-            parse::detail::s_filename = filename.c_str();
-            it = l.begin(first, last);
+            it = lexer.begin(first, last);
         }
+
+
+        bool parse_file_end_of_file_warnings(const boost::filesystem::path& path,
+                                             bool parser_success,
+                                             std::string& file_contents,
+                                             text_iterator& first,
+                                             text_iterator& last)
+        {
+            if (!parser_success)
+                WarnLogger() << "A parser failed while parsing " << path;
+
+            auto length_of_unparsed_file = std::distance(first, last);
+            bool parse_length_good = ((length_of_unparsed_file == 0)
+                                      || (length_of_unparsed_file == 1 && *first == '\n'));
+
+            if (!parse_length_good
+                && length_of_unparsed_file > 0
+                && static_cast<std::string::size_type>(length_of_unparsed_file) <= file_contents.size())
+            {
+                auto unparsed_section = file_contents.substr(file_contents.size() - std::abs(length_of_unparsed_file));
+                std::copy(first, last, std::back_inserter(unparsed_section));
+                WarnLogger() << "File \"" << path << "\" was incompletely parsed. " << std::endl
+                             << "Unparsed section of file, " << length_of_unparsed_file <<" characters:" << std::endl
+                             << unparsed_section;
+            }
+
+            return parser_success && parse_length_good;
+
+        }
+
     }
 }

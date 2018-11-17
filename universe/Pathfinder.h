@@ -23,6 +23,7 @@ class FO_COMMON_API Pathfinder {
 public:
 
     typedef std::shared_ptr<const Pathfinder> ConstPtr;
+    typedef std::shared_ptr<UniverseObjectVisitor> SystemExclusionPredicateType;
 
     /** \name Structors */ //@{
     Pathfinder();
@@ -59,6 +60,18 @@ public:
       * is out of range, or if the empire ID is not known. */
     std::pair<std::list<int>, double>
                             ShortestPath(int system1_id, int system2_id, int empire_id = ALL_EMPIRES) const;
+
+    /** Shortest path known to an empire between two systems, excluding routes
+     *  for systems containing objects for @p system_predicate.
+     * @param system1_id source System id
+     * @param system2_id destination System id
+     * @param empire_id ID of viewing Empire
+     * @param system_predicate UniverseObjectVisitor, A System is excluded as a potential node in any route
+     *                         if it is or contains a matched object
+     * 
+     * @returns list of System ids, distance between systems */
+    std::pair<std::list<int>, double> ShortestPath(int system1_id, int system2_id, int empire_id,
+                                                   const SystemExclusionPredicateType& system_predicate) const;
 
     /** Returns the shortest starlane path distance between any two objects, accounting
       * for cases where one or the other are fleets / ships on starlanes between
@@ -112,7 +125,8 @@ public:
 
     /** Returns the partition (near, far) of the \p candidate objects into two sets, those that are within \p
         jumps of the \p stationary objects and that are not.*/
-    std::pair<std::vector<std::shared_ptr<const UniverseObject>>, std::vector<std::shared_ptr<const UniverseObject>>>
+    std::pair<std::vector<std::shared_ptr<const UniverseObject>>,
+              std::vector<std::shared_ptr<const UniverseObject>>>
         WithinJumpsOfOthers(
             int jumps,
             const std::vector<std::shared_ptr<const UniverseObject>>& candidates,

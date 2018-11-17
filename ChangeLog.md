@@ -4,30 +4,292 @@ Notable changes to the FreeOrion project will be documented in this file.
 
 
 
-## [v0.4.7] - 2017-04-??
+## [v0.4.8] - 2018-08-23
+
+
+### Key Changes
+
+- Imperial stockpile
+    - Unallocated production is stored, and can be used on colonies even if they are are disconnected from the empire supply network
+    - Withdrawal limits are empire wide, based on planet stockpile meters and indicated on map and production screen
+    - Techs, species, and planet focus settings affect stockpiling withdrawal limits
+    - Stockpiling-focused species added: the Sly
+
+- Game rules options which can be modified or enabled to affect balance, content, and game mechanics
+
+- Unallocated research points are automatically allocated to the cheapest available tech
+
+- UI Improvements
+    - Fleet icon representation on the map
+    - Blockade indicators
+    - Ship designs, hulls, and parts can be edited, saved, obsoleted, and reordered
+
+- Multiplayer improvements
+    - Server run in hostless mode, with server-determined rules
+    - Password-based player authentication
+    - Observers and moderators can join ongoing games
+    - Option to concede a game, subject to conditions
+    - Allied victory rules
+
+- Extensive AI improvements
+
+
+### Detailed Changelog
+
+
+#### Graphics / Interface
+
+- Galaxy Map
+    - Improved handling of overlapping fleets and fleet buttons.
+    - Added right-click popup command to dismiss sensor ghosts.
+    - Added option to ignore hostile ships while auto-exploring.
+    - Added ship design breakdown info to fleets indicator at top of screen.
+    - Made pressing escape close open windows in last-opened first-closed order.
+    - Added system shield, defense, troops, and supply summary indicators to top of system sidepanel.
+    - Let fleets window track moving fleets together.
+    - Added an indicator that a fleet is blockaded.
+
+- Research
+    - Items can be deleted from the research queue with ctrl + left click.
+    - Added right click popup commands to research list view rows.
+    - Added or adjusted tech list view colour highlighting, rounded borders, icon sizes.
+    - Added research list tooltips.
+    - List view scrollbar position should retain its position better.
+
+- Production
+    - Fixed erroneous early projected completion times for production queue items with multiple repetitions.
+    - Added commands to split or duplicate production items on the queue.
+    - If the selected system is a production item's rally location, this is indicated on the item in the queue.
+
+- Design screen
+    - Ship designs can be reordered, which will affect their ordering on the production screen.
+    - Removed dialog for saving ship designs; a right click popup command is used instead.
+    - Added right-click popup commands to obsolete parts, hulls, or ship designs, or to delete designs.
+    - Added buttons to toggle part / hull obsolete filters.
+    - Indicated part / design availability and obsolescence with desaturated borders in lists.
+    - Added prompt to toggle availability filters when the hulls list is empty.
+    - Added prompt to saved designs to suggest adding some.
+    - Fixed bug where replacing a design twice started added designs.
+    - Allowed monster designs to be viewed, edited, and saved.
+    - When dragging a part over a slot, a part already in the slot should be hidden unless the part in the slot is being dragged.
+    - Ctrl-Dragged parts will remove or replace all parts of the same type.
+    - Removed restriction on setting blank design descriptions.
+
+- Multiplayer
+    - Multiplayer lobby remembers previously-used settings when returning to the lobby after a game.
+    - Added option to limit manipulation of settings in multiplayer lobby to the host.
+    - Added server player name / passwords list, which can require players to password authenticate to join a server.
+        - Players may be assigned roles, which control what they can do in the lobby.
+    - Added optional timestamps to chat in multiplayer lobby and in-game chat.
+    - Ready button in multiplayer lobby will lock if not enough players.
+    - Added choice of client type in the network connection window.
+    - Disambiguated "Player" connection type from "Human", which is also an in-game species.
+    - Allowed joining an game being played as a moderator or observer.
+    - Split Resign button into a Concede button and a Resign button.
+       - Conceding from a multiplayer game, when conditions allow it, eliminates the empires' assets from the universe.
+    - Hid load button in multiplayer games.
+
+- Misc
+    - Improved objects list filter dialog layout.
+    - Added granular log detail-level options for specific game systems and clients / sever
+    - Made some droplists not respond to mousewheel events when not open (dropped), so that they won't be unintentionally manipulated.
+    - Added options for whether to auto-add default or saved designs to the player's empire.
+    - Game will auto-save when quitting or resigning. This can be aborted during the save by the user.
+    - Added options to enable autosaves at start and end of turns.
+    - Improved thoroughness of effect accounting information.
+    - Added continue button (and command line switch) to load the most recent saved game.
+    - Continue and load buttons only appear if suitable save files are detected.
+    - Added button on options screen to save a persistent config file, which will remain after version updates, and will override any subsequent option adjustments when restarting program.
+    - Don't render mouse cursor if game window doesn't have OS focus.
+    - The pedia and sitreps can now include links to files in the OS file manager or websites.
+    - Replaced "planet bombarded" sitreps with "planet attacked" to disambiguation between bombardment and a planet being in a combat.
+    - Made chat history longer.
+    - Prevented changing the resource directory during a running game.
+    - Made resource directory changes when not running a game cause the content to be re-parsed.
+    - Various additional optimizations to GUI layout code, particularly when resizing windows.
+    - Attempt to determine the system language when initializing stringtable option for the first time.
+    - Added random species option to species droplists when setting up games.
+    - Clicking the random seed button on the galaxy setup screen now sets the seed to "Random" which will be replaced by the server with a randomly-generated seed.
+    - Various values in GUI should now round to nearest rather than next lower value for their displayed precision.
+    - Added lists of available parts, hulls, and buildings to empire pedia articles.
+    - Sorted researched techs list on empire pedia article by researched turn.
+    - Made several GUI widgets react immediately to being pressed, instead of waiting until the mouse is released to complete the "click".
+
+#### Content / Gameplay
+
+- New pedia articles, article categorization, extended articles, corrections
+- Translation updates: French, Russian
+- Added dimensional matrix engine part.
+- Made additional species playable.
+- Added Replicon species.
+- Tweaked various default ship designs.
+- Replaced multiple fuel parts with upgrades to a single part.
+- Added Nest Eradicator building.
+- Added support for pedia articles for planets having different landscape images per-planet.
+- Added population statistic.
+- Added a sitrep when a ship naturally goes from 0.x to 1.x fuel.
+- Added the Flux Bubble hull.
+- Make the default diplomatic status be war rather than peace.
+- Game rules:
+    - Enable random reseeding
+    - Stockpile import limits
+    - Ship, buildings, techs are 1 PP/RP and 1 turn to produce / research
+    - Number of rounds of combat
+    - Enable Experimentors
+    - Enable super test takeover building
+    - Enable conceding and max allowed colonies when conceding from a multiplayer game
+    - Restrictions on allied victories
+    - Scale ship speed, ship structure, building cost, tech cost, hull cost, part cost
+    - Planet size balance adjustments
+    - How much to over-allocate on production queue to prevent rounding-related extra turns to complete items
+
+#### Balance
+
+- Super testers now have perfect stealth, which allows testing without AI interference.
+- Restricted engine, detector, stealth, and shield parts to one per ship.
+- Adjusted various species' balance.
+- Made scrying sphere set visibility to the greater of current and partial visibility.
+- Made telepathic detection set visibility to the greater of current and basic visibility.
+- Reworked resupply / upgrading of ship parts, based on the last turn a ship was resupplied and the turn a tech was researched.
+    - Upgrades now don't happen during the pre-combat movement phase of turns.
+- Reduced cost of Transcendent Design tech.
+- Required gifted fleets to be stationary.
+- Gas Giant Generator now gives a smaller bonus if the planet is populated.
+- Reduced Space Elevator bonus for Gas Giants by 1.
+- Increased Colony Base hull cost to 3.
+- Newly created ships and monsters now cannot block supply (until they have survived a turn) or enemy fleet movement.
+- Do not remove production/research on dying planets while there is still remaining population.
+
+#### AI
+
+- Made AI consider cancelling colony buildings if a better species becomes available.
+- Improved scout dispatch, to nearby instead of nearest to capital.
+- Improved fleet management during invasions.
+- Improved estimation of troop requirements for invasions.
+- Made AI consider planet defenses more significant when bolstered by fleets.
+- Added limit to troops in AI ship designs, to avoid waste.
+- Let AI grow larger (by adjusting limit on number of colonies it will attempt to create).
+- Made AI avoid blockaded starlanes when moving unarmed fleets.
+- Adjusted AI tech priorities.
+- Made AI consider refueling when calculating fleet routes.
+- Improved AI interaction with stealthed planets.
+
+#### Bugs
+
+- Ancient guardians self-destruction only triggers on planets, rather than all possible objects with species.
+- Reduced incidence of the mouse cursor or starlanes disappearing.
+- Fixed issue where allied visibility of ship didn't include knowledge of the ship design.
+- Fixed issue preventing multiplayer games from starting with moderators or observers.
+- Made phototropic effects evaluate after target population setting effects, on which they depend.
+- Fixed issue with negative target population being made closer to zero rather than more negative by effects intended to reduce target population.
+- Fixed various potential crashes while exiting the client.
+- Fixed various GUI memory leaks.
+- Fixed crash if program was closed while a popup window was open on the map.
+- Fixed crash if right-clicking slots while dragging a ship part on the design screen.
+- Fixed issue with visibility-related supply obstructions lasting a turn longer than they should.
+- Fixed issues with manual saves while an autosave was ongoing.
+- Fixed issue where autocycling turns would cause an save-in-progress popup to never go away.
+- Fixed issue with pedia links not highlighting when moused over.
+- Fixed issue when an AI lost all its planets but still had a military fleet, its fleets could not be reassigned.
+- Fixed issue with AI supply calculations.
+- Fixed possible client hang when requesting previews of save files.
+- Fixed issue with filenames with multi-byte characters being shown corrupted on Windows.
+- Fixed various other AI bugs and incorrect or outdated calculations.
+- Fixed memory leaks in content script parsers.
+- Fixed issues with fleet move paths when fleet ownership is changed.
+- Fixed issue with AI not setting research focus on planets without industry focus available.
+- Fixed various issues with the movement blockading mechanic of fleets, space monsters, etc.
+    - Fixed issue when a blockaded fleet became not blockaded and its route became invalid.
+    - Fixed issue where fleets which had never been moved since their creation were unable to enforce blockades.
+- Fixed potential crash when updating meters on many objects.
+- Fixed erroneous / unnecessary cases of "Unknown" contributions to meter values in accounting tooltips.
+- Fixed issue where troop strength shown before a ground combat was inconsistent with what was actually used.
+- Fixed issue where ship designs could only be redesigned on the turn they were created.
+- Fixed issue where a planet couldn't be colonized on the first turn due to a Tidal Lock special.
+- Fixed issues with AIs replaying their turns when loading a game.
+- Fixed combat log layout / scrollbar issues.
+- Fixed issues with compressed XML saves containing invalid XML.
+- Use correct auto aggression icon for new fleet aggression button tooltip.
+- Fixed missing combat sensor ghosts.
+- Fixed issues with visibility of stale objects.
+
+#### Technical / Internal
+
+- OSX version is now built as 64 bit binary.
+- Improved unit testing infrastructure.
+- Removed synchronous messaging; all client-server messaging now uses asynchronous message-response. This should resolve some client hang and lag issues.
+- Changed logging format to show Year-Month-Day only on the initial line.
+- If parsing a ship design fails, just fail that design, not the whole directory.
+- Added UUIDs to ship designs.
+- Added FOCS conditions: binary and ternary comparison operators between arbitrary values, which match all objects if true, or none otherwise.
+- Added FOCS value refs: binary comparison operators between arbitrary values, which return the equivalent of 1 if true, or 0 otherwise.
+- Added FOCS value refs: ternary and quaternary expressions, like binary comparison, but with a value to return if true, or values for both true or false.
+- Various FOCS values exposed: SpecialCapacity, SpecialAddedOnTurn, EmpireObjectVisibility, TurnTechResearched, LastTurnConquered, LastTurnAttackedByShip
+- Exposed FOCS value: HabitableSize (which replaces SizeAsDouble or SizeAsInt)
+- Parallelized and deferred content parsing, reducing program startup lag time.
+- Improved error logging when parsing an invalid ship design.
+- Added checksums to parsed content, so that client and server content can be checked for consistency.
+- Universe object ID generation no longer requires clients to request a new ID from the server for each new object.
+- Don't autosave immediately after loading a game.
+- Don't autosave at end of host's turn in multiplayer, as other players may not have finished their turns yet.
+- Rework Python logging to use standard interface, and to log all errors, not just those manually logged.
+- For Hulls, parts, and buildings, non-trivial cost and production time can now be evaluated in more cases when a source or target object aren't or can't be specified, such as in the pedia rather than on the production screen where the empire and production location are known.
+- Improved robustness of networking when errors happen, hopefully preventing some hung AI processes.
+- Added CMake option to build server only (without requiring client-specific dependencies).
+- Reworked mechanics of effect-set visibility.
+- Reorganized various content scripts into separate files instead of having many definitions in one file.
+- Prevented server from closing when an unestablished client drops its connection.
+- Made human client check for an existing server before launching another.
+- Made AI client respond to command line arguments.
+- Made server have a dedicated saves folder, outside of which clients cannot query for directory contents.
+- Standardized names of options on command line.
+- Added categorized listing of options on command line with --help option, instead of a single list of all.
+- Implemented custom AI state string encoder, which should be safer to load.
+- Improved OpenBSD support.
+- Various meter modifications have been moved out of the engine and into scripted effects.
+- Added FOCS access to immediate meter values, in addition to "initial" values after the last meter update.
+- Converted contents of global_settings.txt into game rules.
+- Added an ID to each game, which can be viewed in the pedia.
+
+
+## [v0.4.7.1] - 2017-09-03
+
+
+#### Bug Fixes
+
+- Production queue: reverted behavior when increasing batch size of a build item back to a proportional reduction of the progress already made, instead of resetting progress to 0.
+- Fixed bug in production queue projections.
+- Several fixes to AI calculations regarding population/colonization.
+- Fixed potential issues for phototrophic species.
+- Fixed issues with visibility after combat resolution.
+- Fixed bug which caused starlanes not to be rendered on certain systems/setups.
+
+
+
+## [v0.4.7] - 2017-04-24
 
 
 ### Key Changes
 
 - Fighters
--- Launch during combat and attack on subsequent rounds
--- Ignore shields when attacking
--- Cannot attack planets and are not attacked by planets
--- Destroyed by any attack by other fighters or ships
--- Flak weapon shoots multiple times per round and can destroy fighters, but does minimal damage to ships
+    - Launch during combat and attack on subsequent rounds
+    - Ignore shields when attacking
+    - Cannot attack planets and are not attacked by planets
+    - Destroyed by any attack by other fighters or ships
+    - Flak weapon shoots multiple times per round and can destroy fighters, but does minimal damage to ships
 
 - Alliance Supply
--- Empires may propose and agree to an alliance with eachother
--- Allied empires connect their supply networks through eachothers' supply connections
--- Allied empires resupply ships within eachothers' supplied systems
--- Allied empires share visibility information
+    - Empires may propose and agree to an alliance with each other
+    - Allied empires connect their supply networks through each others' supply connections
+    - Allied empires resupply ships within each others' supplied systems
+    - Allied empires share visibility information
 
 - Fractional Production Progress
--- Production item progress is now stored as a fraction of completion, rather than amount of PP accumulated.
--- Changes in the production cost now can't instantly complete something that has had its production cost reduced.
+    - Production item progress is now stored as a fraction of completion, rather than amount of PP accumulated.
+    - Changes in the production cost now can't instantly complete something that has had its production cost reduced.
 
 - Beginner Bonus
--- When the max AI aggression is set to Beginner Mode, the human player gets bonuses to ship shields, planet troop garrisons, and resource output.
+    - When the max AI aggression is set to Beginner Mode, the human player gets bonuses to ship shields, planet troop garrisons, and resource output.
 
 - AI Improvements
 - Many new pedia articles, categorization, and improved search
@@ -40,64 +302,94 @@ Notable changes to the FreeOrion project will be documented in this file.
 
 #### Graphics / GUI
 
-- Added access to pedia from intro screen.
-- Made ctrl + left click in the design window obsolete designs.
-- Reworked window layout updates and rendering timing to improve GUI responsiveness.
-- Made some options window GUI widgets resize with window.
-- Enable screensaver when minimizing the game and disable when maximizing.
-- Added right-click pause and resume commands to research queue in GUI.
-- Added pause and resume research functions to Empire, and getters to check if a tech / queue id is paused to research queue.
-- Made tech list columns sortable.
-- Included more pedia articles in search results
-- Changed Fleets window quick close option from right click to left click
-- Added numerous new column options in the Objects window, and reorganized the options.
-- Made some tooltips use the set browse time option value, rather than a default other time
-- Made ordering of systems in cycling commands alphabetical.
-- Allowed SitRep right-click menu from majority of sitrep area.
-- Added Copy to sitrep right-click context menu.
-- Made tooltip rendering more consistent in style.
-- Added link to help article on sitrep entry right click menu.
-- Added turn sound option.
-- Added right click context to hide/show types of SitReps.
-- Added automatic selection of ships for bombarding.
-- Added more and more flexible indicator icons to fleet and ship panels.
-- Fixed formatting and layout in the save file dialog.
-- Reworked layout in multiplayer lobby window.
-- Multiplayer game starts when all human players are ready.
-- Made droplists close when Esc is pressed and respond better to mouse actions.
-- Added right-click context menus for various icons in the GUI, such as meters in the planet panels.
-- Showed empire name in fleets window for fleets in transit.
-- Added ability to rename systems in SidePanel. System sorting considers the system's id to disambiguate if necessary.
-- Made mousewheel not scroll drop lists when the pointer is outside the list.
-- Made droplists scroll to keep the selected row visible when navigating with the keyboard.
-- Made numpad keys work with droplist navigation.
-- Made current item visible when drop down list opens.
-- Changed colours used to render some scanlines (indicating a not-visible object).
-- Added right-click menu command to split from a fleet ships that have less than full fighter complement.
-- Used human player's name as default empire's name in multiplayer.
-- Added option for random species selection during game setup.
-- Displayed identical parts as one entry in ship browse windows.
-- Changed default extended tooltip delay to 3.5 s.
-- Displayed source planet in growth special accounting labels.
-- Changed combat log to use empire color to designate destroyed objects.
-- Added a tooltip to fleet summary icon at top of screen.
-- Added option to show IDs after object names in GUI.
-- Changed display of map scale distance to integers.
-- Prevented multiple players from having the same name in a multiplayer game by adding numeric postfixes.
-- Made mousewheel manipulate credits scrolling.
-- Fixed droplists falling outside the application window.
-- Added new galaxy type images.
-- Made Enter/Return KeyPress events on EncyclopediaDetailPanel set the focus to the search edit.
-- Made some scrollable GUI widgets respond to keypresses to scroll their contents.
-- Made ListBox header show for empty list boxes.
-- Paused music when the application loses focus.
-- Closed credits if the app is resized.
-- Update FPS immediately when the option changes.
-- Adjusted planet suitability report for tech-gated species.
-- Stopped save file dialog from reloading saves after window focus changes.
-- Added indication of defending troops to invade button.
-- Added an inner system circle on the galaxy map, which is drawn for systems with colonies.
-- Addded dialog to ask user about waiting for savegame to complete before quitting.
+- General
+    - Reworked window layout updates and rendering timing to improve GUI responsiveness.
+    - Made some options window GUI widgets resize with window.
+    - Enable screensaver when minimizing the game and disable when maximizing.
+    - Made some tooltips use the set browse time option value, rather than a default other time
+    - Made tooltip rendering more consistent in style.
+    - Added turn sound option.
+    - Made droplists close when Esc is pressed and respond better to mouse actions.
+    - Added right-click context menus for various icons in the GUI, such as meters in the planet panels.
+    - Made mousewheel not scroll drop lists when the pointer is outside the list.
+    - Made droplists scroll to keep the selected row visible when navigating with the keyboard.
+    - Made numpad keys work with droplist navigation.
+    - Made current item visible when drop down list opens.
+    - Fixed formatting and layout in the save file dialog.
+    - Changed default extended tooltip delay to 3.5 s.
+    - Added a tooltip to fleet summary icon at top of screen.
+    - Added option to show IDs after object names in GUI.
+    - Made mousewheel manipulate credits scrolling.
+    - Fixed droplists falling outside the application window.
+    - Made some scrollable GUI widgets respond to keypresses to scroll their contents.
+    - Made ListBox header show for empty list boxes.
+    - Paused music when the application loses focus.
+    - Closed credits if the app is resized.
+    - Update FPS immediately when the option changes.
+    - Stopped save file dialog from reloading saves after window focus changes.
+    - Added dialog to ask user about waiting for savegame to complete before quitting.
+
+- Pedia
+    - Added access to pedia from intro screen.
+    - Included more pedia articles in search results
+    - Displayed identical parts as one entry in ship browse windows.
+    - Made Enter/Return KeyPress events on EncyclopediaDetailPanel set the focus to the search edit.
+    - Adjusted planet suitability report for tech-gated species.
+
+- Map Window
+    - Changed Fleets window quick close option from right click to left click
+    - Made ordering of systems in cycling commands alphabetical.
+    - Changed colours used to render some scanlines (indicating a not-visible object).
+    - Changed display of map scale distance to integers.
+    - Added an inner system circle on the galaxy map, which is drawn for systems with colonies.
+
+- Sidepanel
+    - Added automatic selection of ships for bombarding.
+    - Added ability to rename systems in SidePanel. System sorting considers the system's id to disambiguate if necessary.
+    - Displayed source planet in growth special accounting labels.
+    - Added indication of defending troops to invade button.
+    - In sidepanel, displayed tooltip not only for the selected focus, but also for available focus settings in the focus dropdown list.
+
+- Fleet Window
+    - Added greater variety and more flexible indicator icons to fleet and ship panels.
+    - Labeled fleets window as "Near System X" for fleets in transit.
+    - Showed empire name in fleets window for fleets in transit.
+    - Added right-click menu command to split from a fleet ships that have less than full fighter complement.
+
+- SitRep Window / Combat Log
+    - Allowed SitRep right-click menu from majority of sitrep area.
+    - Added Copy to sitrep right-click context menu.
+    - Added link to help article on sitrep entry right click menu.
+    - Added right click context to hide/show types of SitReps.
+    - Changed combat log to use empire color to designate destroyed objects.
+    - Added SitRep navigation for meter type pedia links.
+    - Fixed combat log window layout issues.
+
+- Objects Window
+    - Added numerous new column options in the Objects window, and reorganized the options.
+    - Reapportioned horizontal space in filter dialog parameter dropdown to improve legibility.
+
+- Design Window
+    - Made ctrl + left click in the design window obsolete designs.
+    - Fixed hull list display issue.
+
+- Research Window
+    - Added right-click pause and resume commands to research queue in GUI.
+    - Added pause and resume research functions to Empire, and getters to check if a tech / queue id is paused to research queue.
+    - Made tech list columns sortable.
+    - Display preferences for complete, researchable, unresearchable and partially unlocked techs will now persist between games
+
+- Production Window
+    - Fixed double click on production queue item so that it completes the map window system selection.
+    - Fixed planet selection when the production window is open so that the production window info panel gets updated when another planet is selected.
+
+- Game setup / Multiplayer Lobby
+    - Reworked layout in multiplayer lobby window.
+    - Multiplayer game starts when all human players are ready.
+    - Used human player's name as default empire's name in multiplayer.
+    - Added option for random species selection during game setup.
+    - Prevented multiple players from having the same name in a multiplayer game by adding numeric postfixes.
+    - Added new galaxy type images.
 
 
 #### Content
@@ -112,6 +404,7 @@ Notable changes to the FreeOrion project will be documented in this file.
 - Added the Automated History Analyser building.
 - Added Ancient Guardians as alternative to Sentries for Specials.
 - Added the native species Lembala'Lam.
+- Added mention of star type restriction to energy shipyard descriptions.
 
 
 #### Balance
@@ -119,10 +412,10 @@ Notable changes to the FreeOrion project will be documented in this file.
 - Added stealth effects to Spatial Flux hull and increased build cost.
 - Reset to 0 a planet's detection upon conquering.
 - Adjusted supply propagation by adding tie-breaking conditions related to (unobstructed) distance to the nearest supply source.
-- Removed build cost increase mechanic from stargate.
+- Removed build cost increase mechanic from Stargate.
 - Massively increased cost of the Transformer building.
 - Reduced other buildings' production times to equal the Transformer's production time.
-- Prevented Ancient Guardians on homeworlds.
+- Prevented Ancient Guardians on native homeworlds.
 - Restricted growth focus to be available on homeworlds of species that are on the planet, not any species' homeworld.
 - Removed frontloading of production (due to changing to fractional production progress mechanic).
 - Salted the PRNG seed with galaxy setup seed to hopefully avoid often getting the same random effect results due to using just the turn number as the seed.
@@ -140,11 +433,14 @@ Notable changes to the FreeOrion project will be documented in this file.
 - Made Cultural Archives required for research bonus of Auto History Analyser.
 - Added allied diplomatic status between empires. Allies share visibility and supply networks.
 - Tweaked AI ship designer logic.
+- Adjusted build costs and stats of the Solar hull, raised build costs of Titanic and Scattered Asteroid hulls.
+- Lowered Protoplasmic and Symbiotic hull base stealth.
+- Have the AI combat planning deem planetary defenses to be more significant when they are bolstered by fleet forces.
 
 
 #### Bugs
 
-- Fixed window installer continuing install before uninstall completes.
+- Fixed Windows installer continuing install before uninstall completes.
 - Fixed issues with non-ascii characters in Windows usernames / filenames.
 - Made the map distance scale circle track the selected system when the production window is open.
 - Fixed some meter change estimates not considering some contributions, such as ship fuel regeneration.
@@ -172,6 +468,13 @@ Notable changes to the FreeOrion project will be documented in this file.
 - Fixed issue with AIs not storing their aggression correctly in save games.
 - Fixed AI trying to enqueue unresearchable techs.
 - Fix for client crash / access violation upon receiving fatal error message from server.
+- Fixed bug which prevented construction of colony buildings for tech gated species when a player doesn't have the required tech, but owns a colony of the species.
+- Fixed unowned mines not destroying ships after reducing their structure to 0.
+- Fixed numbers in planet suitability report being wrong on the turn right after a planet has been depopulated.
+- Fixed issue with the Starlane Nexus building where lanes created together can be closer in angle than allowed, causing problems with later lane creations.
+- Fixed bug causing AIs to be crippled by eventually switching an excessively high amount of colonies to research focus.
+- Fixed issue in network code which could cause AI client processes to hang.
+- Fixed issues with AI troop ship design and production.
 
 
 #### Technical / Internal
@@ -183,7 +486,7 @@ Notable changes to the FreeOrion project will be documented in this file.
 - Dropped support for MSVC compilers before 2015 version.
 - Added separate description strings for binary and xml save files. Previously, the XML text was appearing in readable form in the binary save files.
 - Hopefully made binary saving an automatic fallback for when xml serialization fails.
-- Implemented <sup> and <sub> text formatting tags.
+- Implemented sup and sub text formatting tags.
 - Optimizations of effect evaluation.
 - Optimized universe generation, substantially reducing time for bigger galaxies and many empires setups.
 - Made universe generation more robust to platform / operating system differences.

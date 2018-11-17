@@ -69,6 +69,7 @@ public:
     FileDlg(const std::string& directory, const std::string& filename, bool save, bool multi, const std::shared_ptr<Font>& font,
             Clr color, Clr border_color, Clr text_color = CLR_BLACK);
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ ///@{
     std::set<std::string> Result() const; ///< returns a set of strings that contains the files chosen by the user; there will be only one file if \a multi == false was passed to the ctor
@@ -135,12 +136,9 @@ protected:
     static const Y DEFAULT_HEIGHT; ///< default height for the dialog
 
 private:
-    void CreateChildren(bool multi);
     void DoLayout();
     void AttachSignalChildren();
     void DetachSignalChildren();
-    void Init(const std::string& directory);
-    void ConnectSignals();
     void OkClicked();
     void OkHandler(bool double_click);
     void CancelClicked();
@@ -171,14 +169,17 @@ private:
     std::string      m_save_str;
     std::string      m_open_str;
 
-    TextControl*     m_curr_dir_text;
-    ListBox*         m_files_list;
-    Edit*            m_files_edit;
-    DropDownList*    m_filter_list;
-    Button*          m_ok_button;
-    Button*          m_cancel_button;
-    TextControl*     m_files_label;
-    TextControl*     m_file_types_label;
+    std::shared_ptr<TextControl>     m_curr_dir_text;
+    std::shared_ptr<ListBox>         m_files_list;
+    std::shared_ptr<Edit>            m_files_edit;
+    std::shared_ptr<DropDownList>    m_filter_list;
+    std::shared_ptr<Button>          m_ok_button;
+    std::shared_ptr<Button>          m_cancel_button;
+    std::shared_ptr<TextControl>     m_files_label;
+    std::shared_ptr<TextControl>     m_file_types_label;
+
+    std::string      m_init_directory; ///< directory passed to constructor
+    std::string      m_init_filename; ///< filename passed to constructor
 
     static boost::filesystem::path s_working_dir; ///< declared static so each instance of FileDlg opens up the same directory
 };

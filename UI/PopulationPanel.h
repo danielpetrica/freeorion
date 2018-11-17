@@ -19,6 +19,7 @@ public:
     PopulationPanel(GG::X w, int object_id);
     ~PopulationPanel();
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ //@{
     int PopCenterID() const { return m_popcenter_id; }
@@ -55,12 +56,12 @@ private:
     std::shared_ptr<const PopCenter> GetPopCenter() const;
 
     /** Icons for the associated meter type. */
-    std::vector<std::pair<MeterType, StatisticIcon*>> m_meter_stats;
+    std::vector<std::pair<MeterType, std::shared_ptr<StatisticIcon>>> m_meter_stats;
 
     /** textually / numerically indicates population */
-    MultiIconValueIndicator* m_multi_icon_value_indicator;
+    std::shared_ptr<MultiIconValueIndicator> m_multi_icon_value_indicator;
     /** graphically indicates meter values */
-    MultiMeterStatusBar* m_multi_meter_status_bar;
+    std::shared_ptr<MultiMeterStatusBar> m_multi_meter_status_bar;
 
     /** map indexed by popcenter ID indicating whether the PopulationPanel for each object is expanded (true) or collapsed (false) */
     static std::map<int, bool> s_expanded_map;

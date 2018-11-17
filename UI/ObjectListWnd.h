@@ -13,6 +13,7 @@ class ObjectListWnd : public CUIWnd {
 public:
     //! \name Structors //!@{
     ObjectListWnd(const std::string& config_name = "");
+    void CompleteConstruction() override;
     //!@}
 
     /** \name Mutators */ //@{
@@ -42,9 +43,9 @@ private:
     void            FilterClicked();
     void            CollapseExpandClicked();
 
-    ObjectListBox*              m_list_box;
-    GG::Button*                 m_filter_button;
-    GG::Button*                 m_collapse_button;
+    std::shared_ptr<ObjectListBox>              m_list_box;
+    std::shared_ptr<GG::Button>                 m_filter_button;
+    std::shared_ptr<GG::Button>                 m_collapse_button;
 };
 
 #endif // _ObjectListWnd_h_

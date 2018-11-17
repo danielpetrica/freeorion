@@ -1,17 +1,21 @@
 target_sources(freeorioncommon
     PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}/AppInterface.h
+        ${CMAKE_CURRENT_LIST_DIR}/base64_filter.h
         ${CMAKE_CURRENT_LIST_DIR}/blocking_combiner.h
+        ${CMAKE_CURRENT_LIST_DIR}/CheckSums.h
         ${CMAKE_CURRENT_LIST_DIR}/Directories.h
         ${CMAKE_CURRENT_LIST_DIR}/EnumText.h
         ${CMAKE_CURRENT_LIST_DIR}/i18n.h
         ${CMAKE_CURRENT_LIST_DIR}/Logger.h
+        ${CMAKE_CURRENT_LIST_DIR}/LoggerWithOptionsDB.h
         ${CMAKE_CURRENT_LIST_DIR}/ModeratorAction.h
         ${CMAKE_CURRENT_LIST_DIR}/MultiplayerCommon.h
         ${CMAKE_CURRENT_LIST_DIR}/OptionsDB.h
         ${CMAKE_CURRENT_LIST_DIR}/OptionValidators.h
         ${CMAKE_CURRENT_LIST_DIR}/Order.h
         ${CMAKE_CURRENT_LIST_DIR}/OrderSet.h
+        ${CMAKE_CURRENT_LIST_DIR}/Pending.h
         ${CMAKE_CURRENT_LIST_DIR}/Process.h
         ${CMAKE_CURRENT_LIST_DIR}/Random.h
         ${CMAKE_CURRENT_LIST_DIR}/SaveGamePreviewUtils.h
@@ -25,10 +29,13 @@ target_sources(freeorioncommon
         ${CMAKE_CURRENT_LIST_DIR}/XMLDoc.h
     PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}/AppInterface.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/CheckSums.cpp
         ${CMAKE_CURRENT_LIST_DIR}/Directories.cpp
         ${CMAKE_CURRENT_LIST_DIR}/EnumText.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/GameRules.cpp
         ${CMAKE_CURRENT_LIST_DIR}/i18n.cpp
         ${CMAKE_CURRENT_LIST_DIR}/Logger.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/LoggerWithOptionsDB.cpp
         ${CMAKE_CURRENT_LIST_DIR}/ModeratorAction.cpp
         ${CMAKE_CURRENT_LIST_DIR}/MultiplayerCommon.cpp
         ${CMAKE_CURRENT_LIST_DIR}/OptionsDB.cpp
@@ -61,7 +68,9 @@ target_sources(freeorionca
         ${CMAKE_CURRENT_LIST_DIR}/DependencyVersions.cpp
 )
 
-target_sources(freeorion
-    PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}/DependencyVersions.cpp
-)
+if(NOT BUILD_HEADLESS)
+    target_sources(freeorion
+        PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}/DependencyVersions.cpp
+    )
+endif()

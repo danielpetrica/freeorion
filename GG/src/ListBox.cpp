@@ -24,9 +24,9 @@
 
 #include <GG/ListBox.h>
 
-#include <GG/GUI.h>
-#include <GG/DrawUtil.h>
 #include <GG/DeferredLayout.h>
+#include <GG/DrawUtil.h>
+#include <GG/GUI.h>
 #include <GG/Scroll.h>
 #include <GG/StyleFactory.h>
 #include <GG/TextControl.h>
@@ -60,7 +60,7 @@ namespace {
         {
             std::cerr << "GG SIGNAL : " << m_name << "(sels=[ ";
 
-            for (const ListBox::SelectionSet::value_type& sel : sels)
+            for (const auto& sel : sels)
             { std::cerr << RowIndex(sel) << ' '; }
 
             std::cerr << "])" << std::endl;
@@ -91,6 +91,8 @@ namespace {
             m_invert(invert)
         {}
 
+        bool operator()(const std::shared_ptr<ListBox::Row>& l, const std::shared_ptr<ListBox::Row>& r)
+        { return m_invert ? m_cmp(*r, *l, m_sort_col) : m_cmp(*l, *r, m_sort_col); }
         bool operator()(const ListBox::Row* l, const ListBox::Row* r)
         { return m_invert ? m_cmp(*r, *l, m_sort_col) : m_cmp(*l, *r, m_sort_col); }
 
@@ -101,7 +103,10 @@ namespace {
     };
 
     ListBox::Row* SafeDeref(const ListBox::iterator& it, const ListBox::iterator& end)
-    { return it == end ? nullptr : *it; }
+    { return it == end ? nullptr : it->get(); }
+
+    std::shared_ptr<ListBox::Row> IteratorToShared(const ListBox::iterator& it, const ListBox::iterator& end)
+    { return it == end ? std::shared_ptr<ListBox::Row>() : std::shared_ptr<ListBox::Row>(*it); }
 
     bool RowAboveOrIsRow(ListBox::iterator lhs, ListBox::iterator rhs, ListBox::iterator end)
     {
@@ -205,7 +210,7 @@ ListBox::Row::Row() :
     m_margin(ListBox::DEFAULT_MARGIN),
     m_ignore_adjust_layout(false),
     m_is_normalized(false)
-{ SetLayout(new DeferredLayout(X0, Y0, Width(), Height(), 1, 1, m_margin, m_margin)); }
+{}
 
 ListBox::Row::Row(X w, Y h, const std::string& drag_drop_data_type,
                   Alignment align/* = ALIGN_VCENTER*/, unsigned int margin/* = 2*/) : 
@@ -218,10 +223,10 @@ ListBox::Row::Row(X w, Y h, const std::string& drag_drop_data_type,
     m_margin(margin),
     m_ignore_adjust_layout(false),
     m_is_normalized(false)
-{
-    SetLayout(new DeferredLayout(X0, Y0, w, h, 1, 1, m_margin, m_margin));
-    SetDragDropDataType(drag_drop_data_type);
-}
+{ SetDragDropDataType(drag_drop_data_type); }
+
+void ListBox::Row::CompleteConstruction()
+{ SetLayout(Wnd::Create<DeferredLayout>(X0, Y0, Width(), Height(), 1, 1, m_margin, m_margin)); }
 
 ListBox::Row::~Row()
 {}
@@ -244,7 +249,7 @@ bool ListBox::Row::empty() const
 { return m_cells.empty(); }
 
 Control* ListBox::Row::at(std::size_t n) const
-{ return m_cells.at(n); }
+{ return m_cells.at(n).get(); }
 
 Alignment ListBox::Row::RowAlignment() const
 { return m_row_alignment; }
@@ -272,14 +277,14 @@ void ListBox::Row::GrowWidthsStretchesAlignmentsTo(std::size_t nn) {
     }
 }
 
-void ListBox::Row::push_back(Control* c)
+void ListBox::Row::push_back(std::shared_ptr<Control> c)
 {
     m_cells.push_back(c);
     GrowWidthsStretchesAlignmentsTo(m_cells.size());
     auto ii = m_cells.size() - 1;
-    Layout* layout = GetLayout();
+    auto&& layout = GetLayout();
     if (c) {
-        layout->Add(c, 0, ii, m_row_alignment | m_col_alignments[ii]);
+        layout->Add(std::forward<std::shared_ptr<Control>>(c), 0, ii, m_row_alignment | m_col_alignments[ii]);
         layout->SetMinimumColumnWidth(ii, m_col_widths.back());
         layout->SetColumnStretch(ii, m_col_stretches.back());
     }
@@ -289,8 +294,8 @@ void ListBox::Row::clear()
 {
     m_cells.clear();
     RemoveLayout();
-    DeleteChildren();
-    SetLayout(new DeferredLayout(X0, Y0, Width(), Height(), 1, 1, m_margin, m_margin));
+    DetachChildren();
+    SetLayout(Wnd::Create<DeferredLayout>(X0, Y0, Width(), Height(), 1, 1, m_margin, m_margin));
 }
 
 void ListBox::Row::resize(std::size_t n)
@@ -298,16 +303,15 @@ void ListBox::Row::resize(std::size_t n)
     if (n == m_cells.size())
         return;
 
-    Layout* layout = GetLayout();
-    for (Control* cell : m_cells) {
-        layout->Remove(cell);
+    auto&& layout = GetLayout();
+    for (auto& cell : m_cells) {
+        layout->Remove(cell.get());
     }
 
     std::size_t old_size = m_cells.size();
 
     for (std::size_t ii = n; ii < old_size; ++ii) {
-        delete m_cells[ii];
-        m_cells[ii] = nullptr;
+        m_cells[ii].reset();
     }
     m_cells.resize(n, nullptr);
     m_col_widths.resize(n);
@@ -323,7 +327,7 @@ void ListBox::Row::resize(std::size_t n)
     SetLayout(layout);
 
     bool nonempty_cell_found = false;
-    for (Control* control : m_cells) {
+    for (auto& control : m_cells) {
         if (control) {
             nonempty_cell_found = true;
             break;
@@ -348,16 +352,16 @@ void ListBox::Row::resize(std::size_t n)
     }
 }
 
-void ListBox::Row::SetCell(std::size_t n, Control* c)
+void ListBox::Row::SetCell(std::size_t n, const std::shared_ptr<Control>& c)
 {
     if (c == m_cells[n])
         return;
 
-    Layout* layout = GetLayout();
+    auto&& layout = GetLayout();
 
     if (m_cells.size() > n && m_cells[n]) {
-        layout->Remove(m_cells[n]);
-        delete m_cells[n];
+        layout->Remove(m_cells[n].get());
+        m_cells[n].reset();
     }
 
     m_cells[n] = c;
@@ -373,11 +377,11 @@ Control* ListBox::Row::RemoveCell(std::size_t n)
 {
     if (m_cells.size() <= n)
         return nullptr;
-    Layout* layout = GetLayout();
-    Control* retval = m_cells[n];
-    layout->Remove(retval);
-    m_cells[n] = nullptr;
-    return retval;
+    auto&& layout = GetLayout();
+    auto& retval = m_cells[n];
+    layout->Remove(retval.get());
+    m_cells[n].reset();
+    return retval.get();
 }
 
 void ListBox::Row::SetRowAlignment(Alignment align)
@@ -387,7 +391,7 @@ void ListBox::Row::SetRowAlignment(Alignment align)
 
     m_row_alignment = align;
 
-    Layout* layout = GetLayout();
+    auto&& layout = GetLayout();
     for (std::size_t ii = 0; ii < m_cells.size(); ++ii) {
         if (m_cells[ii])
             layout->Add(m_cells[ii], 0, ii,
@@ -403,10 +407,10 @@ void ListBox::Row::SetColAlignment(std::size_t n, Alignment align)
         return;
 
     m_col_alignments[n] = align;
-    Layout* layout = GetLayout();
-    ValidateLayoutSize(layout, n + 1);
+    auto&& layout = GetLayout();
+    ValidateLayoutSize(layout.get(), n + 1);
     if (m_cells[n])
-        layout->SetChildAlignment(m_cells[n], m_row_alignment | align);
+        layout->SetChildAlignment(m_cells[n].get(), m_row_alignment | align);
 }
 
 void ListBox::Row::SetColWidth(std::size_t n, X width)
@@ -417,8 +421,8 @@ void ListBox::Row::SetColWidth(std::size_t n, X width)
 
     m_col_widths[n] = width;
 
-    Layout* layout = GetLayout();
-    ValidateLayoutSize(layout, n + 1);
+    auto&& layout = GetLayout();
+    ValidateLayoutSize(layout.get(), n + 1);
     layout->SetMinimumColumnWidth(n, width);
 }
 
@@ -428,11 +432,12 @@ void ListBox::Row::SetColAlignments(const std::vector<Alignment>& aligns)
         return;
 
     m_col_alignments = aligns;
-    Layout* layout = GetLayout();
-    ValidateLayoutSize(layout, aligns.size());
+    m_col_alignments.resize(m_cells.size(), ALIGN_NONE);
+    auto&& layout = GetLayout();
+    ValidateLayoutSize(layout.get(), aligns.size());
     for (std::size_t ii = 0; ii < m_cells.size(); ++ii) {
         if (m_cells[ii])
-            layout->SetChildAlignment(m_cells[ii], m_row_alignment | m_col_alignments[ii]);
+            layout->SetChildAlignment(m_cells[ii].get(), m_row_alignment | m_col_alignments[ii]);
     }
 }
 
@@ -442,10 +447,10 @@ void ListBox::Row::ClearColAlignments()
         return;
 
     m_col_alignments.clear();
-    Layout* layout = GetLayout();
-    for (Control* control : m_cells) {
+    auto&& layout = GetLayout();
+    for (auto& control : m_cells) {
         if (control)
-            layout->SetChildAlignment(control, m_row_alignment);
+            layout->SetChildAlignment(control.get(), m_row_alignment);
     }
 }
 
@@ -455,8 +460,9 @@ void ListBox::Row::SetColWidths(const std::vector<X>& widths)
         return;
 
     m_col_widths = widths;
-    Layout* layout = GetLayout();
-    ValidateLayoutSize(layout, widths.size());
+    m_col_widths.resize(m_cells.size(), GG::X(5));
+    auto&& layout = GetLayout();
+    ValidateLayoutSize(layout.get(), widths.size());
     for (std::size_t ii = 0; ii < m_cells.size(); ++ii) {
         layout->SetMinimumColumnWidth(ii, m_col_widths[ii]);
     }
@@ -468,8 +474,8 @@ void ListBox::Row::ClearColWidths()
         return;
 
     m_col_widths.clear();
-    Layout* layout = GetLayout();
-    ValidateLayoutSize(layout, m_cells.size());
+    auto&& layout = GetLayout();
+    ValidateLayoutSize(layout.get(), m_cells.size());
     for (std::size_t ii = 0; ii < m_cells.size(); ++ii) {
         layout->SetMinimumColumnWidth(ii, GG::X0);
     }
@@ -481,8 +487,9 @@ void ListBox::Row::SetColStretches(const std::vector<double>& stretches)
         return;
 
     m_col_stretches = stretches;
-    Layout* layout = GetLayout();
-    ValidateLayoutSize(layout, m_col_stretches.size());
+    m_col_stretches.resize(m_cells.size(), 0.0);
+    auto&& layout = GetLayout();
+    ValidateLayoutSize(layout.get(), m_col_stretches.size());
     for (std::size_t ii = 0; ii < m_cells.size(); ++ii) {
         layout->SetColumnStretch(ii, m_col_stretches[ii]);
     }
@@ -494,7 +501,7 @@ void ListBox::Row::SetMargin(unsigned int margin)
         return;
 
     m_margin = margin;
-    Layout* layout = GetLayout();
+    auto&& layout = GetLayout();
     layout->SetBorderMargin(margin);
     layout->SetCellMargin(margin);
 }
@@ -519,89 +526,75 @@ bool ListBox::RowPtrIteratorLess::operator()(const ListBox::iterator& lhs, const
 
 ListBox::ListBox(Clr color, Clr interior/* = CLR_ZERO*/) :
     Control(X0, Y0, X1, Y1, INTERACTIVE),
-    m_rows(),
-    m_vscroll(nullptr),
-    m_hscroll(nullptr),
-    m_vscroll_wheel_scroll_increment(0),
-    m_hscroll_wheel_scroll_increment(0),
     m_caret(m_rows.end()),
-    m_selections(),
     m_old_sel_row(m_rows.end()),
-    m_old_sel_row_selected(false),
     m_old_rdown_row(m_rows.end()),
     m_lclick_row(m_rows.end()),
     m_rclick_row(m_rows.end()),
     m_last_row_browsed(m_rows.end()),
-    m_first_row_offset(Pt(X(BORDER_THICK), Y(BORDER_THICK))),
     m_first_row_shown(m_rows.end()),
-    m_first_col_shown(0),
-    m_num_cols(1),
-    m_col_widths(),
-    m_col_alignments(),
-    m_col_stretches(),
     m_cell_margin(DEFAULT_MARGIN),
     m_int_color(interior),
-    m_hilite_color(CLR_SHADOW),
-    m_style(LIST_NONE),
-    m_header_row(new Row()),
-    m_keep_col_widths(false),
-    m_clip_cells(false),
-    m_sort_col(0),
-    m_sort_cmp(DefaultRowCmp<Row>()),
-    m_auto_scroll_during_drag_drops(true),
-    m_auto_scroll_margin(8),
-    m_auto_scrolling_up(false),
-    m_auto_scrolling_down(false),
-    m_auto_scrolling_left(false),
-    m_auto_scrolling_right(false),
-    m_auto_scroll_timer(250),
-    m_normalize_rows_on_insert(true),
-    m_manage_column_props(true),
-    m_add_padding_at_end(true)
+    m_header_row(Wnd::Create<Row>()),
+    m_sort_cmp(DefaultRowCmp<Row>())
 {
     Control::SetColor(color);
+}
+
+void ListBox::CompleteConstruction()
+{
     ValidateStyle();
     SetChildClippingMode(ClipToClient);
     m_auto_scroll_timer.Stop();
     m_auto_scroll_timer.Connect(this);
 
-    InstallEventFilter(this);
+    InstallEventFilter(shared_from_this());
 
     if (INSTRUMENT_ALL_SIGNALS) {
-        Connect(ClearedSignal,          ListSignalEcho(*this, "ListBox::ClearedSignal"));
-        Connect(BeforeInsertSignal,     ListSignalEcho(*this, "ListBox::BeforeInsertSignal"));
-        Connect(AfterInsertSignal,      ListSignalEcho(*this, "ListBox::AfterinsertSignal"));
-        Connect(SelChangedSignal,       ListSignalEcho(*this, "ListBox::SelChangedSignal"));
-        Connect(DroppedSignal,          ListSignalEcho(*this, "ListBox::DroppedSignal"));
-        Connect(DropAcceptableSignal,   ListSignalEcho(*this, "ListBox::DropAcceptableSignal"));
-        Connect(LeftClickedSignal,      ListSignalEcho(*this, "ListBox::LeftClickedSignal"));
-        Connect(RightClickedSignal,     ListSignalEcho(*this, "ListBox::RightClickedSignal"));
-        Connect(DoubleClickedSignal,    ListSignalEcho(*this, "ListBox::DoubleClickedSignal"));
-        Connect(BeforeEraseSignal,      ListSignalEcho(*this, "ListBox::BeforeEraseSignal"));
-        Connect(AfterEraseSignal,       ListSignalEcho(*this, "ListBox::AfterEraseSignal"));
-        Connect(BrowsedSignal,          ListSignalEcho(*this, "ListBox::BrowsedSignal"));
+        ClearedRowsSignal.connect(ListSignalEcho(*this, "ListBox::ClearedRowsSignal"));
+        BeforeInsertRowSignal.connect(ListSignalEcho(*this, "ListBox::BeforeInsertRowSignal"));
+        AfterInsertRowSignal.connect(ListSignalEcho(*this, "ListBox::AfterInsertRowSignal"));
+        SelRowsChangedSignal.connect(ListSignalEcho(*this, "ListBox::SelRowsChangedSignal"));
+        DroppedRowSignal.connect(ListSignalEcho(*this, "ListBox::DroppedRowSignal"));
+        LeftClickedRowSignal.connect(ListSignalEcho(*this, "ListBox::LeftClickedRowSignal"));
+        RightClickedRowSignal.connect(ListSignalEcho(*this, "ListBox::RightClickedRowSignal"));
+        DoubleClickedRowSignal.connect(ListSignalEcho(*this, "ListBox::DoubleClickedRowSignal"));
+        BeforeEraseRowSignal.connect(ListSignalEcho(*this, "ListBox::BeforeEraseRowSignal"));
+        AfterEraseRowSignal.connect(ListSignalEcho(*this, "ListBox::AfterEraseRowSignal"));
+        BrowsedRowSignal.connect(ListSignalEcho(*this, "ListBox::BrowsedRowSignal"));
     }
 }
 
 ListBox::~ListBox()
-{ delete m_header_row; }
+{}
+
+void ListBox::AllowDrops(bool allow)
+{ m_allow_drops = allow; }
+
+bool ListBox::AllowingDrops()
+{ return m_allow_drops; }
+
+void ListBox::AllowAllDropTypes(bool allow) {
+    // If all types are allow use boost::none as a sentinel
+    if (allow)
+        m_allowed_drop_types = boost::none;
+
+    // Otherwise hold each allowed type in a set.
+    else if (!m_allowed_drop_types)
+        m_allowed_drop_types = std::unordered_set<std::string>();
+}
 
 void ListBox::DropsAcceptable(DropsAcceptableIter first, DropsAcceptableIter last,
                               const Pt& pt, Flags<ModKey> mod_keys) const
 {
-    for (std::map<const Wnd*, bool>::iterator it = first; it != last; ++it) {
-        it->second = false;
-        const Row* row = dynamic_cast<const Row*>(it->first);
-        if (row &&
-            (m_allowed_drop_types.find("") != m_allowed_drop_types.end() ||
-             m_allowed_drop_types.find(row->DragDropDataType()) != m_allowed_drop_types.end()))
-        {
-            iterator insertion_it = RowUnderPt(pt);
-            try {
-                DropAcceptableSignal(insertion_it);
-                it->second = true;
-            } catch (const DontAcceptDrop&) {}
-        }
+    for (auto& it = first; it != last; ++it) {
+        const auto& row = dynamic_cast<const Row* const>(it->first);
+
+        bool allowed = (m_allow_drops
+                        && row
+                        && AllowedDropType(row->DragDropDataType()));
+
+        it->second = allowed;
     }
 }
 
@@ -609,7 +602,7 @@ void ListBox::HandleRowRightClicked(const Pt& pt, GG::Flags<GG::ModKey> mod) {
     iterator row_it = RowUnderPt(pt);
     if (row_it != m_rows.end()) {
         m_rclick_row = row_it;
-        RightClickedSignal(row_it, pt, mod);
+        RightClickedRowSignal(row_it, pt, mod);
     }
 }
 
@@ -650,7 +643,7 @@ const ListBox::SelectionSet& ListBox::Selections() const
 { return m_selections; }
 
 bool ListBox::Selected(iterator it) const
-{ return it != m_rows.end() && m_selections.find(it) != m_selections.end(); }
+{ return it != m_rows.end() && m_selections.count(it); }
 
 Clr ListBox::InteriorColor() const
 { return m_int_color; }
@@ -694,7 +687,7 @@ std::size_t ListBox::LastVisibleCol() const
     // Find the last column that is entirely left of the rightmost pixel.
     X rightmost_pixel = ClientLowerRight().x;
     std::size_t ii_last_visible(0);
-    for (Wnd* cell : (*m_first_row_shown)->GetLayout()->Children()) {
+    for (auto& cell : (*m_first_row_shown)->GetLayout()->Children()) {
         if (cell->UpperLeft().x >= rightmost_pixel)
             break;
         if ((cell->UpperLeft().x < rightmost_pixel) && (cell->LowerRight().x >= rightmost_pixel))
@@ -732,8 +725,11 @@ Alignment ListBox::RowAlignment(iterator it) const
 double ListBox::ColStretch(std::size_t n) const
 { return m_col_stretches[n]; }
 
-const std::set<std::string>& ListBox::AllowedDropTypes() const
-{ return m_allowed_drop_types; }
+bool ListBox::AllowedDropType(const std::string& type) const
+{
+    return (!m_allowed_drop_types                 // all types allowed
+            || m_allowed_drop_types->count(type)); //this type allowed;
+}
 
 bool ListBox::AutoScrollDuringDragDrops() const
 { return m_auto_scroll_during_drag_drops; }
@@ -751,14 +747,12 @@ void ListBox::StartingChildDragDrop(const Wnd* wnd, const Pt& offset)
     if (m_rows.empty())
         return;
 
-    iterator wnd_it = std::find(m_rows.begin(), m_rows.end(), wnd);
-    //assert(wnd_it != m_rows.end());   // replaced with following test and return to avoid crashes
+    iterator wnd_it = std::find_if(m_rows.begin(), m_rows.end(),
+                                   [&wnd](const std::shared_ptr<Row>& x){ return x.get() == wnd; });
     if (wnd_it == m_rows.end())
         return;
 
-    SelectionSet::iterator wnd_sel_it = m_selections.find(wnd_it);
-    //assert(wnd_sel_it != m_selections.end()); // replaced with following test and return to avoid crashes
-    if (wnd_sel_it == m_selections.end())
+    if (!m_selections.count(wnd_it))
         return;
 
     // Preserve the displayed row order in the dragged selections by finding the y offset of wnd
@@ -769,17 +763,17 @@ void ListBox::StartingChildDragDrop(const Wnd* wnd, const Pt& offset)
     }
 
     Y vertical_offset = offset.y;
-    for (const std::map<GG::Y, SelectionSet::iterator>::value_type& sorted_sel : selections_Y_sorted) {
-        Wnd* row_wnd = **(sorted_sel.second);
-        if (row_wnd == wnd)
+    for (const auto& sorted_sel : selections_Y_sorted) {
+        auto row_wnd = **(sorted_sel.second);
+        if (row_wnd.get() == wnd)
             break;
         vertical_offset += row_wnd->Height();
     }
 
-    for (const std::map<GG::Y, SelectionSet::iterator>::value_type& sorted_sel : selections_Y_sorted) {
-        Wnd* row_wnd = **(sorted_sel.second);
-        if (row_wnd != wnd) {
-            GUI::GetGUI()->RegisterDragDropWnd(row_wnd, Pt(offset.x, vertical_offset), this);
+    for (const auto& sorted_sel : selections_Y_sorted) {
+        auto row_wnd = **(sorted_sel.second);
+        if (row_wnd.get() != wnd) {
+            GUI::GetGUI()->RegisterDragDropWnd(row_wnd, Pt(offset.x, vertical_offset), shared_from_this());
             vertical_offset -= row_wnd->Height();
         } else {
             vertical_offset -= wnd->Height();
@@ -787,14 +781,18 @@ void ListBox::StartingChildDragDrop(const Wnd* wnd, const Pt& offset)
     }
 }
 
-void ListBox::AcceptDrops(const Pt& pt, const std::vector<Wnd*>& wnds, Flags<ModKey> mod_keys)
+void ListBox::AcceptDrops(const Pt& pt, std::vector<std::shared_ptr<Wnd>> wnds, Flags<ModKey> mod_keys)
 {
-    // TODO: Pull the call to RowUnderPt() out and reuse the value in each loop iteration.
-    for (Wnd* wnd : wnds) {
-        Row* row = boost::polymorphic_downcast<Row*>(wnd);
-        iterator insertion_it = RowUnderPt(pt);
-        Insert(row, insertion_it, true, true);
+    iterator insertion_it = RowUnderPt(pt);
+    bool inserting_at_first_row = insertion_it == m_first_row_shown;
+    for (auto& wnd : wnds) {
+        if (const auto& row = std::dynamic_pointer_cast<Row>(wnd))
+            Insert(row, insertion_it, true);
     }
+
+    // Adjust to show rows inserted before the first row.
+    if (inserting_at_first_row)
+        SetFirstRowShown(std::prev(m_first_row_shown, wnds.size()));
 }
 
 void ListBox::ChildrenDraggedAway(const std::vector<Wnd*>& wnds, const Wnd* destination)
@@ -802,18 +800,20 @@ void ListBox::ChildrenDraggedAway(const std::vector<Wnd*>& wnds, const Wnd* dest
     if (MatchesOrContains(this, destination))
         return;
 
-    std::vector<Row*> initially_selected_rows;
+    std::vector<std::shared_ptr<Row>> initially_selected_rows;
     if (!(m_style & LIST_NOSEL) && !m_selections.empty()) {
         // save selections...
-        for (const SelectionSet::value_type& sel : m_selections)
+        for (const auto& sel : m_selections)
             initially_selected_rows.push_back(*sel);
         m_selections.clear();
     }
 
     // remove dragged-away row from this ListBox
-    for (Wnd* wnd : wnds) {
-        Row* row = boost::polymorphic_downcast<Row*>(wnd);
-        iterator row_it = std::find(m_rows.begin(), m_rows.end(), row);
+    for (auto& wnd : wnds) {
+        auto row = boost::polymorphic_downcast<Row*>(wnd);
+        iterator row_it = std::find_if(m_rows.begin(), m_rows.end(),
+                                       [&row](const std::shared_ptr<Row>& x){ return x.get() == row; });
+
 
         if (row_it == m_rows.end())
             continue;
@@ -824,7 +824,7 @@ void ListBox::ChildrenDraggedAway(const std::vector<Wnd*>& wnds, const Wnd* dest
     if (!(m_style & LIST_NOSEL) && !initially_selected_rows.empty()) {
         // reselect any remaining from old selections
         SelectionSet new_selections;
-        for (Row* row : initially_selected_rows) {
+        for (auto& row : initially_selected_rows) {
             iterator sel_it = std::find(m_rows.begin(), m_rows.end(), row);
             if (sel_it != m_rows.end())
                 new_selections.insert(sel_it);
@@ -833,7 +833,7 @@ void ListBox::ChildrenDraggedAway(const std::vector<Wnd*>& wnds, const Wnd* dest
         m_selections = new_selections;
 
         if (m_selections.size() != initially_selected_rows.size()) {
-            SelChangedSignal(m_selections);
+            SelRowsChangedSignal(m_selections);
         }
     }
 }
@@ -852,10 +852,10 @@ void ListBox::PreRender()
 
     if (m_normalize_rows_on_insert) {
         if (!m_header_row->empty() && !m_header_row->IsNormalized())
-            NormalizeRow(m_header_row);
-        for (Row* row : m_rows)
+            NormalizeRow(m_header_row.get());
+        for (auto& row : m_rows)
             if (!row->IsNormalized())
-                NormalizeRow(row);
+                NormalizeRow(row.get());
     }
 
     // Adding/removing scrolls and prerendering rows may change the row sizes and require a change
@@ -872,7 +872,7 @@ void ListBox::PreRender()
         bool header_size_change = false;
         if (!m_header_row->empty()) {
             auto old_size = m_header_row->Size();
-            GUI::PreRenderWindow(m_header_row);
+            GUI::PreRenderWindow(m_header_row.get());
             header_size_change |= (old_size != m_header_row->Size());
         }
         return visible_row_size_change | header_size_change;
@@ -895,7 +895,7 @@ void ListBox::PreRender()
 
     // Position rows
     Pt pt(m_first_row_offset);
-    for (Row* row : m_rows) {
+    for (auto& row : m_rows) {
         row->MoveTo(pt);
         pt.y += row->Height();
     }
@@ -918,7 +918,7 @@ void ListBox::Render()
         Rect header_area(Pt(ul.x + static_cast<int>(BORDER_THICK), m_header_row->Top()),
                          Pt(lr.x - static_cast<int>(BORDER_THICK), m_header_row->Bottom()));
         BeginScissorClipping(header_area.ul, header_area.lr);
-        GUI::GetGUI()->RenderWindow(m_header_row);
+        GUI::GetGUI()->RenderWindow(m_header_row.get());
         EndScissorClipping();
     }
 
@@ -947,7 +947,7 @@ void ListBox::Render()
     if (m_caret != m_rows.end() &&
         RowAboveOrIsRow(m_first_row_shown, m_caret, m_rows.end()) &&
         RowAboveOrIsRow(m_caret, last_visible_row, m_rows.end()) &&
-        MatchesOrContains(this, GUI::GetGUI()->FocusWnd()))
+        MatchesOrContains(this, GUI::GetGUI()->FocusWnd().get()))
     {
         Pt row_ul = (*m_caret)->UpperLeft();
         Pt row_lr = (*m_caret)->LowerRight();
@@ -958,9 +958,9 @@ void ListBox::Render()
     EndClipping();
 
     if (m_vscroll)
-        GUI::GetGUI()->RenderWindow(m_vscroll);
+        GUI::GetGUI()->RenderWindow(m_vscroll.get());
     if (m_hscroll)
-        GUI::GetGUI()->RenderWindow(m_hscroll);
+        GUI::GetGUI()->RenderWindow(m_hscroll.get());
 }
 
 void ListBox::SizeMove(const Pt& ul, const Pt& lr)
@@ -990,7 +990,7 @@ bool ListBox::ShowVisibleRows(bool do_prerender)
             (*it)->Show();
             if (do_prerender) {
                 auto old_size = (*it)->Size();
-                GUI::PreRenderWindow(*it);
+                GUI::PreRenderWindow(it->get());
                 a_row_size_changed |= (old_size != (*it)->Size());
             }
 
@@ -1003,19 +1003,16 @@ bool ListBox::ShowVisibleRows(bool do_prerender)
     return a_row_size_changed;
 }
 
-void ListBox::Show(bool show_children /* = true*/)
+void ListBox::Show()
 {
-    Control::Show(false);
-
-    if (!show_children)
-        return;
+    Control::Show();
 
     // Deal with the header row and non row children normally
-    for (Wnd* wnd : Children()) {
-        const Row* row(dynamic_cast<Row*>(wnd));
-        bool is_regular_row(row && row != m_header_row);
+    for (auto& wnd : Children()) {
+        const Row* row(dynamic_cast<Row*>(wnd.get()));
+        bool is_regular_row(row && row != m_header_row.get());
         if (!is_regular_row)
-            wnd->Show(true);
+            wnd->Show();
     }
 
     // Show rows that will be visible when rendered but don't prerender them.
@@ -1040,27 +1037,27 @@ void ListBox::SetColor(Clr c)
         m_hscroll->SetColor(c);
 }
 
-ListBox::iterator ListBox::Insert(Row* row, iterator it, bool signal/* = true*/)
-{ return Insert(row, it, false, signal); }
+ListBox::iterator ListBox::Insert(std::shared_ptr<Row> row, iterator it)
+{ return Insert(std::forward<std::shared_ptr<Row>>(row), it, false); }
 
-ListBox::iterator ListBox::Insert(Row* row, bool signal/* = true*/)
-{ return Insert(row, m_rows.end(), false, signal); }
+ListBox::iterator ListBox::Insert(std::shared_ptr<Row> row)
+{ return Insert(std::forward<std::shared_ptr<Row>>(row), m_rows.end(), false); }
 
-void ListBox::Insert(const std::vector<Row*>& rows, iterator it, bool signal/* = true*/)
-{ Insert(rows, it, false, signal); }
+void ListBox::Insert(const std::vector<std::shared_ptr<Row>>& rows, iterator it)
+{ Insert(rows, it, false); }
 
-void ListBox::Insert(const std::vector<Row*>& rows, bool signal/* = true*/)
-{ Insert(rows, m_rows.end(), false, signal); }
+void ListBox::Insert(const std::vector<std::shared_ptr<Row>>& rows)
+{ Insert(rows, m_rows.end(), false); }
 
-ListBox::Row* ListBox::Erase(iterator it, bool signal/* = false*/)
+std::shared_ptr<ListBox::Row> ListBox::Erase(iterator it, bool signal/* = false*/)
 { return Erase(it, false, signal); }
 
 void ListBox::Clear()
 {
     m_rows.clear();
     m_caret = m_rows.end();
-    DetachChild(m_header_row);
-    DeleteChildren();
+    DetachChild(m_header_row.get());
+    DetachChildren();
     AttachChild(m_header_row);
     m_first_row_offset = Pt(X(BORDER_THICK), Y(BORDER_THICK));
     m_first_row_shown = m_rows.end();
@@ -1081,13 +1078,11 @@ void ListBox::Clear()
             m_num_cols = 1;
     }
 
-    DeleteChild(m_vscroll);
-    m_vscroll = nullptr;
-    DeleteChild(m_hscroll);
-    m_hscroll = nullptr;
+    DetachChildAndReset(m_vscroll);
+    DetachChildAndReset(m_hscroll);
 
     RequirePreRender();
-    ClearedSignal();
+    ClearedRowsSignal();
 }
 
 void ListBox::SelectRow(iterator it, bool signal/* = false*/)
@@ -1096,7 +1091,7 @@ void ListBox::SelectRow(iterator it, bool signal/* = false*/)
         return;
     if (it == m_rows.end())
         return;
-    if (m_selections.find(it) != m_selections.end())
+    if (m_selections.count(it))
         return;
 
     SelectionSet previous_selections = m_selections;
@@ -1107,7 +1102,7 @@ void ListBox::SelectRow(iterator it, bool signal/* = false*/)
     m_selections.insert(it);
 
     if (signal && previous_selections != m_selections)
-        SelChangedSignal(m_selections);
+        SelRowsChangedSignal(m_selections);
 }
 
 void ListBox::DeselectRow(iterator it, bool signal/* = false*/)
@@ -1116,11 +1111,11 @@ void ListBox::DeselectRow(iterator it, bool signal/* = false*/)
 
     if (it == m_rows.end())  // always check that an iterator is valid before attempting a search for it
         return;
-    if (m_selections.find(it) != m_selections.end())
+    if (m_selections.count(it))
         m_selections.erase(it);
 
     if (signal && previous_selections != m_selections)
-        SelChangedSignal(m_selections);
+        SelRowsChangedSignal(m_selections);
 }
 
 void ListBox::SelectAll(bool signal/* = false*/)
@@ -1143,7 +1138,7 @@ void ListBox::SelectAll(bool signal/* = false*/)
     }
 
     if (signal && previous_selections != m_selections)
-        SelChangedSignal(m_selections);
+        SelRowsChangedSignal(m_selections);
 }
 
 void ListBox::DeselectAll(bool signal/* = false*/)
@@ -1156,7 +1151,7 @@ void ListBox::DeselectAll(bool signal/* = false*/)
     }
 
     if (signal && previous_selections != m_selections)
-        SelChangedSignal(m_selections);
+        SelRowsChangedSignal(m_selections);
 }
 
 ListBox::iterator ListBox::begin()
@@ -1181,7 +1176,7 @@ void ListBox::SetSelections(const SelectionSet& s, bool signal/* = false*/)
     m_selections = s;
 
     if (signal && previous_selections != m_selections)
-        SelChangedSignal(m_selections);
+        SelRowsChangedSignal(m_selections);
 }
 
 void ListBox::SetCaret(iterator it)
@@ -1251,23 +1246,14 @@ void ListBox::BringRowIntoView(iterator target)
 
 void ListBox::SetFirstRowShown(iterator it)
 {
-    if (it == m_rows.end())
+    if (it == m_rows.end() && !m_rows.empty())
         return;
 
     RequirePreRender();
 
+    m_first_row_shown = it;
+
     AdjustScrolls(false);
-
-    if (!m_vscroll && m_first_row_shown == m_rows.begin())
-        return;
-
-    m_first_row_shown = m_vscroll ? it : m_rows.begin();
-
-    Y acc(0);
-    for (iterator it2 = m_rows.begin(); it2 != m_first_row_shown; ++it2)
-        acc += (*it2)->Height();
-    m_vscroll->ScrollTo(Value(acc));
-    SignalScroll(*m_vscroll, true);
 }
 
 void ListBox::SetVScrollWheelIncrement(unsigned int increment)
@@ -1305,10 +1291,10 @@ void ListBox::SetStyle(Flags<ListBoxStyle> s)
     }
 }
 
-void ListBox::SetColHeaders(Row* r)
+void ListBox::SetColHeaders(const std::shared_ptr<Row>& r)
 {
     Y client_height = ClientHeight();
-    delete m_header_row;
+    DetachChildAndReset(m_header_row);
     if (r) {
         m_header_row = r;
         // if this column header is being added to an empty listbox, the listbox takes on some of the
@@ -1325,7 +1311,7 @@ void ListBox::SetColHeaders(Row* r)
         m_header_row->MoveTo(Pt(X0, -m_header_row->Height()));
         AttachChild(m_header_row);
     } else {
-        m_header_row = new Row();
+        m_header_row = Wnd::Create<Row>();
     }
     if (client_height != ClientHeight())
         AdjustScrolls(true);
@@ -1372,7 +1358,7 @@ void ListBox::SetColWidth(std::size_t n, X w)
         m_col_widths.resize(n + 1);
 
     m_col_widths[n] = w;
-    for (Row* row : m_rows) {
+    for (auto& row : m_rows) {
         row->SetColWidth(n, w);
     }
     AdjustScrolls(false);
@@ -1419,7 +1405,7 @@ void ListBox::SetColAlignment(std::size_t n, Alignment align)
         m_col_alignments.resize(n + 1);
 
     m_col_alignments[n] = align;
-    for (Row* row : m_rows) {
+    for (auto& row : m_rows) {
         row->SetColAlignment(n, align);
     }
 }
@@ -1432,8 +1418,8 @@ void ListBox::SetColStretch(std::size_t n, double x)
         m_col_stretches.resize(n + 1);
 
     m_col_stretches[n] = x;
-    for (Row* row : m_rows) {
-        GG::Layout* layout = row->GetLayout();
+    for (auto& row : m_rows) {
+        auto&& layout = row->GetLayout();
         if (!layout)
             return;
         layout->SetColumnStretch(n, x);
@@ -1450,10 +1436,12 @@ void ListBox::AddPaddingAtEnd(bool enable)
 { m_add_padding_at_end = enable; }
 
 void ListBox::AllowDropType(const std::string& str)
-{ m_allowed_drop_types.insert(str); }
-
-void ListBox::DisallowDropType(const std::string& str)
-{ m_allowed_drop_types.erase(str); }
+{
+    // Create the set if necessary
+    if (!m_allowed_drop_types)
+        m_allowed_drop_types = std::unordered_set<std::string>();
+    m_allowed_drop_types->insert(str);
+}
 
 void ListBox::AutoScrollDuringDragDrops(bool auto_scroll)
 { m_auto_scroll_during_drag_drops = auto_scroll; }
@@ -1475,6 +1463,9 @@ unsigned int ListBox::CellMargin() const
 
 ListBox::iterator ListBox::RowUnderPt(const Pt& pt) const
 {
+    if (!InClient(pt))
+        return m_rows.end();
+
     iterator retval = m_first_row_shown;
     Y acc = ClientUpperLeft().y;
     for ( ; retval != m_rows.end(); ++retval) {
@@ -1516,7 +1507,7 @@ void ListBox::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_
         switch (key) {
         case GGK_SPACE: // space bar (selects item under caret like a mouse click)
             if (m_caret != m_rows.end()) {
-                m_old_sel_row_selected = m_selections.find(m_caret) != m_selections.end();
+                m_old_sel_row_selected = m_selections.count(m_caret);
                 ClickAtRow(m_caret, mod_keys);
             }
             break;
@@ -1524,13 +1515,13 @@ void ListBox::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_
             if (m_style & LIST_USERDELETE) {
                 if (m_style & LIST_NOSEL) {
                     if (m_caret != m_rows.end())
-                        delete Erase(m_caret, false, true);
+                        Erase(m_caret, false, true);
                 } else {
-                    std::vector<iterator> prev_selections;
+                    std::vector<iterator> prev_selections(m_selections.size());
                     std::copy(m_selections.begin(), m_selections.end(), prev_selections.begin());
                     m_selections.clear();
                     for (iterator it : prev_selections) {
-                        delete Erase(it, false, true);
+                        Erase(it, false, true);
                     }
                 }
             } else {
@@ -1579,8 +1570,8 @@ void ListBox::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_
                 break;
 
             --m_first_col_shown;
-            std::list<GG::Wnd*>::const_iterator first_row_first_child((*m_first_row_shown)->GetLayout()->Children().begin());
-            GG::Wnd* first_shown_cell{*std::next(first_row_first_child, m_first_col_shown)};
+            auto&& first_row_first_child((*m_first_row_shown)->GetLayout()->Children().begin());
+            auto first_shown_cell = *std::next(first_row_first_child, m_first_col_shown);
             GG::X new_scroll_offset(first_shown_cell->UpperLeft().x - UpperLeft().x - GG::X(BORDER_THICK));
             m_hscroll->ScrollTo(Value(new_scroll_offset));
             SignalScroll(*m_hscroll, true);
@@ -1593,8 +1584,8 @@ void ListBox::KeyPress(Key key, std::uint32_t key_code_point, Flags<ModKey> mod_
                 break;
 
             ++m_first_col_shown;
-            std::list<GG::Wnd*>::const_iterator first_row_first_child((*m_first_row_shown)->GetLayout()->Children().begin());
-            GG::Wnd* first_shown_cell{*std::next(first_row_first_child, m_first_col_shown)};
+            auto&& first_row_first_child((*m_first_row_shown)->GetLayout()->Children().begin());
+            auto first_shown_cell = *std::next(first_row_first_child, m_first_col_shown);
             GG::X new_scroll_offset(first_shown_cell->UpperLeft().x - UpperLeft().x - GG::X(BORDER_THICK));
             m_hscroll->ScrollTo(Value(new_scroll_offset));
             SignalScroll(*m_hscroll, true);
@@ -1644,9 +1635,8 @@ void ListBox::DragDropHere(const Pt& pt, std::map<const Wnd*, bool>& drop_wnds_a
     m_auto_scrolling_right = client_no_scroll_hole.lr.x < pt.x;
     if (m_auto_scrolling_up || m_auto_scrolling_down || m_auto_scrolling_left || m_auto_scrolling_right) {
         bool acceptable_drop = false;
-        for (std::map<const Wnd*, bool>::value_type& acceptable_wnd : drop_wnds_acceptable) {
-            if (m_allowed_drop_types.find("") != m_allowed_drop_types.end() ||
-                m_allowed_drop_types.find(acceptable_wnd.first->DragDropDataType()) != m_allowed_drop_types.end()) {
+        for (auto& acceptable_wnd : drop_wnds_acceptable) {
+            if (AllowedDropType(acceptable_wnd.first->DragDropDataType())) {
                 acceptable_drop = true;
                 break;
             }
@@ -1723,10 +1713,8 @@ bool ListBox::EventFilter(Wnd* w, const WndEvent& event)
     switch (event.Type()) {
     case WndEvent::LButtonDown: {
         m_old_sel_row = RowUnderPt(pt);
-        if (!InClient(pt)) {
-            m_old_sel_row = m_rows.end();
-        } else if (m_old_sel_row != m_rows.end()) {
-            m_old_sel_row_selected = m_selections.find(m_old_sel_row) != m_selections.end();
+        if (m_old_sel_row != m_rows.end()) {
+            m_old_sel_row_selected = m_selections.count(m_old_sel_row);
             if (!(m_style & LIST_NOSEL) && !m_old_sel_row_selected)
                 ClickAtRow(m_old_sel_row, mod_keys);
         }
@@ -1739,7 +1727,7 @@ bool ListBox::EventFilter(Wnd* w, const WndEvent& event)
     }
 
     case WndEvent::LClick: {
-        if (m_old_sel_row != m_rows.end() && InClient(pt)) {
+        if (m_old_sel_row != m_rows.end()) {
             iterator sel_row = RowUnderPt(pt);
             if (sel_row == m_old_sel_row) {
                 if (m_style & LIST_NOSEL)
@@ -1747,7 +1735,7 @@ bool ListBox::EventFilter(Wnd* w, const WndEvent& event)
                 else
                     ClickAtRow(sel_row, mod_keys);
                 m_lclick_row = sel_row;
-                LeftClickedSignal(sel_row, pt, mod_keys);
+                LeftClickedRowSignal(sel_row, pt, mod_keys);
             }
         }
         break;
@@ -1755,8 +1743,8 @@ bool ListBox::EventFilter(Wnd* w, const WndEvent& event)
 
     case WndEvent::LDoubleClick: {
         iterator row = RowUnderPt(pt);
-        if (row != m_rows.end() && row == m_lclick_row && InClient(pt)) {
-            DoubleClickedSignal(row, pt, mod_keys);
+        if (row != m_rows.end() && row == m_lclick_row) {
+            DoubleClickedRowSignal(row, pt, mod_keys);
             m_old_sel_row = m_rows.end();
         } else {
             LClick(pt, mod_keys);
@@ -1766,7 +1754,7 @@ bool ListBox::EventFilter(Wnd* w, const WndEvent& event)
 
     case WndEvent::RButtonDown: {
         iterator row = RowUnderPt(pt);
-        if (row != m_rows.end() && InClient(pt))
+        if (row != m_rows.end())
             m_old_rdown_row = row;
         else
             m_old_rdown_row = m_rows.end();
@@ -1775,9 +1763,9 @@ bool ListBox::EventFilter(Wnd* w, const WndEvent& event)
 
     case WndEvent::RClick: {
         iterator row = RowUnderPt(pt);
-        if (row != m_rows.end() && row == m_old_rdown_row && InClient(pt)) {
+        if (row != m_rows.end() && row == m_old_rdown_row) {
             m_rclick_row = row;
-            RightClickedSignal(row, pt, mod_keys);
+            RightClickedRowSignal(row, pt, mod_keys);
         }
         m_old_rdown_row = m_rows.end();
         break;
@@ -1786,8 +1774,8 @@ bool ListBox::EventFilter(Wnd* w, const WndEvent& event)
     case WndEvent::MouseEnter: {
         if (m_style & LIST_BROWSEUPDATES) {
             iterator sel_row = RowUnderPt(pt);
-            if (m_last_row_browsed != sel_row)
-                BrowsedSignal(m_last_row_browsed = sel_row);
+            if (sel_row != m_rows.end() && m_last_row_browsed != sel_row)
+                BrowsedRowSignal(m_last_row_browsed = sel_row);
         }
         break;
     }
@@ -1798,7 +1786,7 @@ bool ListBox::EventFilter(Wnd* w, const WndEvent& event)
     case WndEvent::MouseLeave: {
         if (m_style & LIST_BROWSEUPDATES) {
             if (m_last_row_browsed != m_rows.end())
-                BrowsedSignal(m_last_row_browsed = m_rows.end());
+                BrowsedRowSignal(m_last_row_browsed = m_rows.end());
         }
         break;
     }
@@ -1806,7 +1794,7 @@ bool ListBox::EventFilter(Wnd* w, const WndEvent& event)
     case WndEvent::GainingFocus: {
         if (w == this)
             return false;
-        GUI::GetGUI()->SetFocusWnd(this);
+        GUI::GetGUI()->SetFocusWnd(shared_from_this());
         break;
     }
 
@@ -1871,7 +1859,7 @@ void ListBox::DefineColAlignments(const Row& row)
 
 void ListBox::DefineColStretches(const Row& row)
 {
-    GG::Layout* layout = GetLayout();
+    auto&& layout = GetLayout();
     if (!layout)
         return;
 
@@ -1881,7 +1869,7 @@ void ListBox::DefineColStretches(const Row& row)
     }
 }
 
-ListBox::iterator ListBox::Insert(Row* row, iterator it, bool dropped, bool signal)
+ListBox::iterator ListBox::Insert(std::shared_ptr<Row> row, iterator it, bool dropped)
 {
     if(!row)
         return m_rows.end();
@@ -1892,12 +1880,14 @@ ListBox::iterator ListBox::Insert(Row* row, iterator it, bool dropped, bool sign
     if (dropped)
         original_dropped_position = std::find(m_rows.begin(), m_rows.end(), row);
 
+    bool moved = (original_dropped_position != m_rows.end());
+    std::size_t original_dropped_offset = moved ? std::distance(begin(), original_dropped_position) :0;
+
     iterator retval = it;
 
-    row->InstallEventFilter(this);
+    row->InstallEventFilter(shared_from_this());
 
-    if (signal)
-        BeforeInsertSignal(it);
+    BeforeInsertRowSignal(it);
 
     if (m_rows.empty()) {
         m_rows.push_back(row);
@@ -1906,7 +1896,7 @@ ListBox::iterator ListBox::Insert(Row* row, iterator it, bool dropped, bool sign
         if (!(m_style & LIST_NOSORT)) {
             retval = m_rows.begin();
             RowSorter cmp(m_sort_cmp, m_sort_col, m_style & LIST_SORTDESCENDING);
-            while (retval != m_rows.end() && !cmp(row, *retval)) {
+            while (retval != m_rows.end() && !cmp(row.get(), retval->get())) {
                 ++retval;
             }
         }
@@ -1918,77 +1908,46 @@ ListBox::iterator ListBox::Insert(Row* row, iterator it, bool dropped, bool sign
     if (m_first_row_shown == m_rows.end())
         m_first_row_shown = m_rows.begin();
 
-    if (dropped) {
-        // TODO: Can these be inverted without breaking anything?  It would be
-        // semantically clearer if they were.
-        DroppedSignal(retval);
-        if (original_dropped_position != m_rows.end())
-            Erase(original_dropped_position, true, false);
+    if (dropped && moved) {
+        Erase(original_dropped_position, true, false);
+        // keep pointing at the same offset as original location after the erase
+        original_dropped_position = begin();
+        std::advance(original_dropped_position, original_dropped_offset);
     }
 
     row->Hide();
 
     row->Resize(Pt(std::max(ClientWidth(), X(1)), row->Height()));
 
-    if (signal)
-        AfterInsertSignal(it);
+    row->RightClickedSignal.connect(boost::bind(&ListBox::HandleRowRightClicked, this, _1, _2));
 
-    Connect(row->RightClickedSignal, &ListBox::HandleRowRightClicked, this);
+    AfterInsertRowSignal(it);
+    if (dropped)
+        DroppedRowSignal(retval);
+    if (moved)
+        MovedRowSignal(retval, original_dropped_position);
 
     RequirePreRender();
     return retval;
 }
 
-void ListBox::Insert(const std::vector<Row*>& rows, iterator it, bool dropped, bool signal)
+void ListBox::Insert(const std::vector<std::shared_ptr<Row>>& rows, iterator it, bool dropped)
 {
-    if (rows.empty())
-        return;
-
-    if (signal || dropped) {
-        // need to signal or handle dropping for each row, so add individually
-        for (Row* row : rows)
-        { Insert(row, it, dropped, signal); }
-        return;
-    }
-
-    // don't need to signal or handle dropping issues, so can add rows at once
-    // without externally handling after each
-
-    // housekeeping of rows...
-    for (Row* row : rows) {
-        row->InstallEventFilter(this);
-        row->Hide();
-        row->Resize(Pt(std::max(ClientWidth(), X(1)), row->Height()));
-    }
-
-    // add row at requested location (or default end position)
-    m_rows.insert(it, rows.begin(), rows.end());
-
-    if (!(m_style & LIST_NOSORT))
-        Resort();
-
-    // more housekeeping of rows...
-    for (Row* row : rows) {
-        AttachChild(row);
-    }
-
-    RequirePreRender();
-
-    if (m_first_row_shown == m_rows.end())
-        m_first_row_shown = m_rows.begin();
+    for (auto& row : rows)
+    { Insert(row, it, dropped); }
 }
 
-ListBox::Row* ListBox::Erase(iterator it, bool removing_duplicate, bool signal)
+std::shared_ptr<ListBox::Row> ListBox::Erase(iterator it, bool removing_duplicate, bool signal)
 {
     if (it == m_rows.end())
         return nullptr;
 
     RequirePreRender();
 
-    Row* row = *it;
+    auto row = *it;
     if (!removing_duplicate) {
-        DetachChild(row);
-        row->RemoveEventFilter(this);
+        DetachChild(row.get());
+        row->RemoveEventFilter(shared_from_this());
     }
 
     ResetIfEqual(m_old_sel_row,     it, m_rows.end());
@@ -2033,28 +1992,28 @@ void ListBox::ResetAutoScrollVars()
 
 struct ListBox::SelectionCache
 {
-    std::set<const Row*> selections;
-    const Row* caret;
-    const Row* old_sel_row;
-    const Row* old_rdown_row;
-    const Row* lclick_row;
-    const Row* rclick_row;
-    const Row* last_row_browsed;
+    std::set<std::shared_ptr<Row>> selections;
+    std::shared_ptr<Row> caret;
+    std::shared_ptr<Row> old_sel_row;
+    std::shared_ptr<Row> old_rdown_row;
+    std::shared_ptr<Row> lclick_row;
+    std::shared_ptr<Row> rclick_row;
+    std::shared_ptr<Row> last_row_browsed;
 };
 
 // TODO: change to unique_ptr with move mechanics or more the entire definition into the cpp file.
 std::shared_ptr<ListBox::SelectionCache> ListBox::CacheSelections()
 {
     auto cache = std::make_shared<ListBox::SelectionCache>();
-    cache->caret = SafeDeref(m_caret, m_rows.end());
-    for (const SelectionSet::value_type& sel : m_selections) {
+    cache->caret = IteratorToShared(m_caret, m_rows.end());
+    for (const auto& sel : m_selections) {
         cache->selections.insert(*sel);
     }
-    cache->old_sel_row =      SafeDeref(m_old_sel_row, m_rows.end());
-    cache->old_rdown_row =    SafeDeref(m_old_rdown_row, m_rows.end());
-    cache->lclick_row =       SafeDeref(m_lclick_row, m_rows.end());
-    cache->rclick_row =       SafeDeref(m_rclick_row, m_rows.end());
-    cache->last_row_browsed = SafeDeref(m_last_row_browsed, m_rows.end());
+    cache->old_sel_row =      IteratorToShared(m_old_sel_row, m_rows.end());
+    cache->old_rdown_row =    IteratorToShared(m_old_rdown_row, m_rows.end());
+    cache->lclick_row =       IteratorToShared(m_lclick_row, m_rows.end());
+    cache->rclick_row =       IteratorToShared(m_rclick_row, m_rows.end());
+    cache->last_row_browsed = IteratorToShared(m_last_row_browsed, m_rows.end());
 
     m_selections.clear();
 
@@ -2066,7 +2025,7 @@ void ListBox::RestoreCachedSelections(const ListBox::SelectionCache& cache)
     m_selections.clear();
 
     for (iterator it = m_rows.begin(); it != m_rows.end(); ++it) {
-        Row* row = *it;
+        auto row = *it;
         if (cache.caret == row)
             m_caret = it;
         if (cache.selections.count(row))
@@ -2088,7 +2047,7 @@ void ListBox::Resort()
 {
     std::shared_ptr<ListBox::SelectionCache> cached_selections = CacheSelections();
 
-    std::vector<Row*> rows_vec(m_rows.size());
+    std::vector<std::shared_ptr<Row>> rows_vec(m_rows.size());
     std::copy(m_rows.begin(), m_rows.end(), rows_vec.begin());
     std::stable_sort(rows_vec.begin(), rows_vec.end(),
                      RowSorter(m_sort_cmp, m_sort_col, m_style & LIST_SORTDESCENDING));
@@ -2109,9 +2068,9 @@ ListBox::Row& ListBox::ColHeaders()
 void ListBox::ConnectSignals()
 {
     if (m_vscroll)
-        Connect(m_vscroll->ScrolledSignal, &ListBox::VScrolled, this);
+        m_vscroll->ScrolledSignal.connect(boost::bind(&ListBox::VScrolled, this, _1, _2, _3, _4));
     if (m_hscroll)
-        Connect(m_hscroll->ScrolledSignal, &ListBox::HScrolled, this);
+        m_hscroll->ScrolledSignal.connect(boost::bind(&ListBox::HScrolled, this, _1, _2, _3, _4));
 }
 
 void ListBox::ValidateStyle()
@@ -2162,7 +2121,7 @@ std::pair<boost::optional<X>, boost::optional<Y>> ListBox::CheckIfScrollsRequire
 
     X total_x_extent = std::accumulate(m_col_widths.begin(), m_col_widths.end(), X0);
     Y total_y_extent(0);
-    for (Row* row : m_rows)
+    for (auto& row : m_rows)
         total_y_extent += row->Height();
 
     bool vertical_needed =
@@ -2205,7 +2164,7 @@ std::pair<bool, bool> ListBox::AddOrRemoveScrolls(
     // Use the precalculated client size if possible.
     auto cl_sz = maybe_client_size ? *maybe_client_size : ClientSizeExcludingScrolls();
 
-    const std::shared_ptr<const StyleFactory> style = GetStyleFactory();
+    const auto& style = GetStyleFactory();
 
     bool horizontal_needed = (required_total_extents.first ? true : false);
     bool vertical_needed = (required_total_extents.second ? true : false);
@@ -2215,8 +2174,12 @@ std::pair<bool, bool> ListBox::AddOrRemoveScrolls(
     // Remove unecessary vscroll
     if (m_vscroll && !vertical_needed) {
         vscroll_added_or_removed = true;
-        DeleteChild(m_vscroll);
-        m_vscroll = nullptr;
+
+        //Scroll back to zero
+        m_vscroll->ScrollTo(0);
+        SignalScroll(*m_vscroll, true);
+
+        DetachChildAndReset(m_vscroll);
     }
 
     // Add necessary vscroll
@@ -2228,13 +2191,13 @@ std::pair<bool, bool> ListBox::AddOrRemoveScrolls(
         m_vscroll->Resize(Pt(X(SCROLL_WIDTH), cl_sz.y - (horizontal_needed ? SCROLL_WIDTH : 0)));
 
         AttachChild(m_vscroll);
-        Connect(m_vscroll->ScrolledSignal, &ListBox::VScrolled, this);
+        m_vscroll->ScrolledSignal.connect(boost::bind(&ListBox::VScrolled, this, _1, _2, _3, _4));
     }
 
     if (vertical_needed) {
         unsigned int line_size = m_vscroll_wheel_scroll_increment;
         if (line_size == 0 && !this->Empty()) {
-            const Row* row = *begin();
+            const auto& row = *begin();
             line_size = Value(row->Height());
         }
 
@@ -2243,7 +2206,14 @@ std::pair<bool, bool> ListBox::AddOrRemoveScrolls(
         m_vscroll->SizeScroll(0, Value(*required_total_extents.second - 1),
                               line_size, std::max(line_size, page_size));
 
-        MoveChildUp(m_vscroll);
+        MoveChildUp(m_vscroll.get());
+
+        // Scroll to the correct location
+        Y acc(0);
+        for (iterator it2 = m_rows.begin(); it2 != m_first_row_shown; ++it2)
+            acc += (*it2)->Height();
+        m_vscroll->ScrollTo(Value(acc));
+        SignalScroll(*m_vscroll, true);
     }
 
     bool hscroll_added_or_removed = false;
@@ -2251,7 +2221,12 @@ std::pair<bool, bool> ListBox::AddOrRemoveScrolls(
     // Remove unecessary hscroll
     if (m_hscroll && !horizontal_needed) {
         hscroll_added_or_removed = true;
-        DeleteChild(m_hscroll);
+
+        //Scroll back to zero
+        m_hscroll->ScrollTo(0);
+        SignalScroll(*m_hscroll, true);
+
+        DetachChild(m_hscroll.get());
         m_hscroll = nullptr;
     }
 
@@ -2264,13 +2239,13 @@ std::pair<bool, bool> ListBox::AddOrRemoveScrolls(
         m_hscroll->Resize(Pt(cl_sz.x - (vertical_needed ? SCROLL_WIDTH : 0), Y(SCROLL_WIDTH)));
 
         AttachChild(m_hscroll);
-        Connect(m_hscroll->ScrolledSignal, &ListBox::HScrolled, this);
+        m_hscroll->ScrolledSignal.connect(boost::bind(&ListBox::HScrolled, this, _1, _2, _3, _4));
     }
 
     if (horizontal_needed) {
         unsigned int line_size = m_hscroll_wheel_scroll_increment;
         if (line_size == 0 && !this->Empty()) {
-            const Row* row = *begin();
+            const auto& row = *begin();
             line_size = Value(row->Height());
         }
 
@@ -2278,7 +2253,7 @@ std::pair<bool, bool> ListBox::AddOrRemoveScrolls(
 
         m_hscroll->SizeScroll(0, Value(*required_total_extents.first - 1),
                               line_size, std::max(line_size, page_size));
-        MoveChildUp(m_hscroll);
+        MoveChildUp(m_hscroll.get());
     }
 
     return {hscroll_added_or_removed, vscroll_added_or_removed};
@@ -2318,7 +2293,7 @@ void ListBox::AdjustScrolls(bool adjust_for_resize, const std::pair<bool, bool>&
     if (vscroll_added_or_removed || adjust_for_resize) {
         RequirePreRender();
         X row_width(std::max(ClientWidth(), X(1)));
-        for (Row* row : m_rows) {
+        for (auto& row : m_rows) {
             row->Resize(Pt(row_width, row->Height()));
         }
     }
@@ -2397,7 +2372,7 @@ void ListBox::ClickAtRow(iterator it, Flags<ModKey> mod_keys)
                 iterator low  = RowPtrIteratorLess()(m_caret, it) ? m_caret : it;
                 iterator high = RowPtrIteratorLess()(m_caret, it) ? it : m_caret;
 
-                bool erase = m_selections.find(m_caret) == m_selections.end();
+                bool erase = !m_selections.count(m_caret);
                 if (high != m_rows.end())
                     ++high;
                 for (iterator it2 = low; it2 != high; ++it2) {
@@ -2414,7 +2389,7 @@ void ListBox::ClickAtRow(iterator it, Flags<ModKey> mod_keys)
                 m_caret = it;
             }
         } else if (mod_keys & MOD_KEY_SHIFT) { // shift key depressed
-            bool erase = m_caret != m_rows.end() && m_selections.find(m_caret) == m_selections.end();
+            bool erase = m_caret != m_rows.end() && !m_selections.count(m_caret);
             if (!(m_style & LIST_QUICKSEL))
                 m_selections.clear();
             if (m_caret == m_rows.end()) {
@@ -2448,7 +2423,7 @@ void ListBox::ClickAtRow(iterator it, Flags<ModKey> mod_keys)
     }
 
     if (previous_selections != m_selections)
-        SelChangedSignal(m_selections);
+        SelRowsChangedSignal(m_selections);
 }
 
 void ListBox::NormalizeRow(Row* row)

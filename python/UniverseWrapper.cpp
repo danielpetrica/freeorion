@@ -13,8 +13,11 @@
 #include "../universe/Special.h"
 #include "../universe/Species.h"
 #include "../universe/Enums.h"
+#include "../universe/EffectAccounting.h"
+#include "../universe/Predicates.h"
 #include "../util/Logger.h"
 #include "../util/MultiplayerCommon.h"
+#include "../util/GameRules.h"
 
 #include <boost/mpl/vector.hpp>
 #include <boost/python.hpp>
@@ -89,7 +92,7 @@ namespace {
         return retval;
     }
 
-    void                    UpdateMetersWrapper(const Universe& universe, boost::python::list objList) {
+    void                    UpdateMetersWrapper(const Universe& universe, const boost::python::list& objList) {
         std::vector<int> objvec;
         int const numObjects = boost::python::len(objList);
         for (int i = 0; i < numObjects; i++)
@@ -106,10 +109,10 @@ namespace {
     }
     boost::function<double(const Universe&, int, int)> LinearDistanceFunc =                     &LinearDistance;
 
-    int                     JumpDistanceBetweenSystems(const Universe& universe, int system1_id, int system2_id) {
-        return universe.GetPathfinder()->JumpDistanceBetweenSystems(system1_id, system2_id);
+    int                     JumpDistanceBetweenObjects(const Universe& universe, int object1_id, int object2_id) {
+        return universe.GetPathfinder()->JumpDistanceBetweenObjects(object1_id, object2_id);
     }
-    boost::function<int(const Universe&, int, int)> JumpDistanceFunc =                          &JumpDistanceBetweenSystems;
+    boost::function<int(const Universe&, int, int)> JumpDistanceFunc =                          &JumpDistanceBetweenObjects;
 
     std::vector<int>        ShortestPath(const Universe& universe, int start_sys, int end_sys, int empire_id) {
         std::vector<int> retval;
@@ -118,6 +121,20 @@ namespace {
         return retval;
     }
     boost::function<std::vector<int>(const Universe&, int, int, int)> ShortestPathFunc =        &ShortestPath;
+
+    std::vector<int>        ShortestNonHostilePath(const Universe& universe, int start_sys, int end_sys, int empire_id) {
+        std::vector<int> retval;
+        auto fleet_pred = std::make_shared<HostileVisitor<System>>(empire_id);
+        std::pair<std::list<int>, int> path = universe.GetPathfinder()->ShortestPath(start_sys, end_sys, empire_id, fleet_pred);
+        std::copy(path.first.begin(), path.first.end(), std::back_inserter(retval));
+        return retval;
+    }
+    boost::function<std::vector<int>(const Universe&, int, int, int)> ShortestNonHostilePathFunc = &ShortestNonHostilePath;
+
+    double                  ShortestPathDistance(const Universe& universe, int object1_id, int object2_id) {
+        return universe.GetPathfinder()->ShortestPathDistance(object1_id, object2_id);
+    }
+    boost::function<double(const Universe&, int, int)> ShortestPathDistanceFunc =               &ShortestPathDistance;
 
     std::vector<int>        LeastJumpsPath(const Universe& universe, int start_sys, int end_sys, int empire_id) {
         std::vector<int> retval;
@@ -142,7 +159,7 @@ namespace {
 
     std::vector<int>        ImmediateNeighborsP(const Universe& universe, int system1_id, int empire_id = ALL_EMPIRES) {
         std::vector<int> retval;
-        for (const std::multimap<double, int>::value_type& entry : universe.GetPathfinder()->ImmediateNeighbors(system1_id, empire_id))
+        for (const auto& entry : universe.GetPathfinder()->ImmediateNeighbors(system1_id, empire_id))
         { retval.push_back(entry.second); }
         return retval;
     }
@@ -150,7 +167,7 @@ namespace {
 
     std::map<int,double>    SystemNeighborsMapP(const Universe& universe, int system1_id, int empire_id = ALL_EMPIRES) {
         std::map<int,double> retval;
-        for (const std::multimap<double, int>::value_type& entry : universe.GetPathfinder()->ImmediateNeighbors(system1_id, empire_id))
+        for (const auto& entry : universe.GetPathfinder()->ImmediateNeighbors(system1_id, empire_id))
         { retval[entry.second] = entry.first; }
         return retval;
     }
@@ -162,7 +179,7 @@ namespace {
 
     std::vector<std::string> ObjectSpecials(const UniverseObject& object) {
         std::vector<std::string> retval;
-        for (const std::map<std::string, std::pair<int, float>>::value_type& special : object.Specials())
+        for (const auto& special : object.Specials())
         { retval.push_back(special.first); }
         return retval;
     }
@@ -181,7 +198,6 @@ namespace {
 
     bool                    (*ValidDesignHullAndParts)(const std::string& hull,
                                                        const std::vector<std::string>& parts) = &ShipDesign::ValidDesign;
-    bool                    (*ValidDesignDesign)(const ShipDesign&) =                           &ShipDesign::ValidDesign;
 
     const std::vector<std::string>& (ShipDesign::*PartsVoid)(void) const =                      &ShipDesign::Parts;
     // The following (PartsSlotType) is not currently used, but left as an example for this kind of wrapper
@@ -219,6 +235,10 @@ namespace {
     bool EnqueueLocationTest(const BuildingType& building_type, int empire_id, int loc_id)
     { return building_type.EnqueueLocation(empire_id, loc_id);}
 
+    bool RuleExistsAnyType(const GameRules& rules, const std::string& name)
+    { return rules.RuleExists(name); }
+    bool RuleExistsWithType(const GameRules& rules, const std::string& name, GameRules::Type type)
+    { return rules.RuleExists(name, type); }
 }
 
 namespace FreeOrionPython {
@@ -232,6 +252,7 @@ namespace FreeOrionPython {
     using boost::python::reference_existing_object;
     using boost::python::return_by_value;
     using boost::python::return_internal_reference;
+    using boost::python::enum_;
 
     /**
      * CallPolicies:
@@ -263,7 +284,7 @@ namespace FreeOrionPython {
         class_<std::map<int, float>>("IntFltMap")
             .def(boost::python::map_indexing_suite<std::map<int, float>, true>())
         ;
-        class_<std::map<Visibility,int>>("VisibilityIntMap")
+        class_<std::map<Visibility, int>>("VisibilityIntMap")
             .def(boost::python::map_indexing_suite<std::map<Visibility, int>, true>())
         ;
         class_<std::vector<ShipSlotType>>("ShipSlotVec")
@@ -279,6 +300,32 @@ namespace FreeOrionPython {
         ;
         class_<Ship::PartMeterMap>("ShipPartMeterMap")
             .def(boost::python::map_indexing_suite<Ship::PartMeterMap>())
+        ;
+
+        ///////////////////////////
+        //   Effect Accounting   //
+        ///////////////////////////
+        class_<Effect::EffectCause>("EffectCause")
+            .add_property("causeType",          &Effect::AccountingInfo::cause_type)
+            .def_readonly("specificCause",      &Effect::AccountingInfo::specific_cause)
+            .def_readonly("customLabel",        &Effect::AccountingInfo::custom_label)
+        ;
+        class_<Effect::AccountingInfo, bases<Effect::EffectCause>>("AccountingInfo")
+            .add_property("sourceID",           &Effect::AccountingInfo::source_id)
+            .add_property("meterChange",        &Effect::AccountingInfo::meter_change)
+            .add_property("meterRunningTotal",  &Effect::AccountingInfo::running_meter_total)
+        ;
+        class_<std::vector<Effect::AccountingInfo>>("AccountingInfoVec")
+            .def(boost::python::vector_indexing_suite<
+                 std::vector<Effect::AccountingInfo>, true>())
+        ;
+        class_<std::map<MeterType, std::vector<Effect::AccountingInfo>>>("MeterTypeAccountingInfoVecMap")
+            .def(boost::python::map_indexing_suite<
+                 std::map<MeterType, std::vector<Effect::AccountingInfo>>, true>())
+        ;
+        class_<Effect::AccountingMap>("TargetIDAccountingMapMap")
+            .def(boost::python::map_indexing_suite<
+                 Effect::AccountingMap, true>())
         ;
 
         ///////////////
@@ -320,6 +367,8 @@ namespace FreeOrionPython {
                                                 ))
 
             .def("updateMeterEstimates",        &UpdateMetersWrapper)
+            .add_property("effectAccounting",   make_function(&Universe::GetEffectAccountingMap,
+                                                                                    return_value_policy<reference_existing_object>()))
 
             .def("linearDistance",              make_function(
                                                     LinearDistanceFunc,
@@ -331,12 +380,34 @@ namespace FreeOrionPython {
                                                     JumpDistanceFunc,
                                                     return_value_policy<return_by_value>(),
                                                     boost::mpl::vector<int, const Universe&, int, int>()
-                                                ))
+                                                ),
+                                                "If two system ids are passed or both objects are within a system, "
+                                                "return the jump distance between the two systems. If one object "
+                                                "(e.g. a fleet) is on a starlane, then calculate the jump distance "
+                                                "from both ends of the starlane to the target system and "
+                                                "return the smaller one."
+                                                )
 
             .def("shortestPath",                make_function(
                                                     ShortestPathFunc,
                                                     return_value_policy<return_by_value>(),
                                                     boost::mpl::vector<std::vector<int>, const Universe&, int, int, int>()
+                                                ))
+
+            .def("shortestNonHostilePath",      make_function(
+                                                    ShortestNonHostilePathFunc,
+                                                    return_value_policy<return_by_value>(),
+                                                    boost::mpl::vector<std::vector<int>, const Universe&, int, int, int>()
+                                                ),
+                                                "Shortest sequence of System ids and distance from System (number1) to "
+                                                "System (number2) with no hostile Fleets as determined by visibility "
+                                                "of Empire (number3).  (number3) must be a valid empire."
+                                                )
+
+            .def("shortestPathDistance",        make_function(
+                                                    ShortestPathDistanceFunc,
+                                                    return_value_policy<return_by_value>(),
+                                                    boost::mpl::vector<double, const Universe&, int, int>()
                                                 ))
 
             .def("leastJumpsPath",              make_function(
@@ -399,7 +470,6 @@ namespace FreeOrionPython {
             .add_property("containerObject",    &UniverseObject::ContainerObjectID)
             .def("currentMeterValue",           &UniverseObject::CurrentMeterValue)
             .def("initialMeterValue",           &UniverseObject::InitialMeterValue)
-            .def("nextTurnCurrentMeterValue",   &UniverseObject::NextTurnCurrentMeterValue)
             .add_property("tags",               make_function(&UniverseObject::Tags,        return_value_policy<return_by_value>()))
             .def("hasTag",                      &UniverseObject::HasTag)
             .add_property("meters",             make_function(ObjectMeters,                 return_internal_reference<>()))
@@ -438,6 +508,9 @@ namespace FreeOrionPython {
             .add_property("designID",               &Ship::DesignID)
             .add_property("fleetID",                &Ship::FleetID)
             .add_property("producedByEmpireID",     &Ship::ProducedByEmpireID)
+            .add_property("arrivedOnTurn",          &Ship::ArrivedOnTurn)
+            .add_property("lastResuppliedOnTurn",   &Ship::LastResuppliedOnTurn)
+            .add_property("lastTurnActiveInCombat", &Ship::LastTurnActiveInCombat)
             .add_property("isMonster",              &Ship::IsMonster)
             .add_property("isArmed",                &Ship::IsArmed)
             .add_property("hasFighters",            &Ship::HasFighters)
@@ -509,7 +582,6 @@ namespace FreeOrionPython {
             .add_property("dump",               &ShipDesign::Dump)
         ;
         def("validShipDesign",                  ValidDesignHullAndParts, "Returns true (boolean) if the passed hull (string) and parts (StringVec) make up a valid ship design, and false (boolean) otherwise. Valid ship designs don't have any parts in slots that can't accept that type of part, and contain only hulls and parts that exist (and may also need to contain the correct number of parts - this needs to be verified).");
-        def("validShipDesign",                  ValidDesignDesign, "Returns true (boolean) if the passed ship design (ShipDesign) is valid, and false otherwise.");
         def("getShipDesign",                    &GetShipDesign,                             return_value_policy<reference_existing_object>(), "Returns the ship design (ShipDesign) with the indicated id number (int).");
 
         class_<PartType, noncopyable>("partType", no_init)
@@ -579,7 +651,7 @@ namespace FreeOrionPython {
         // ResourceCenter //
         ////////////////////
         class_<ResourceCenter, noncopyable>("resourceCenter", no_init)
-            .add_property("focus",                  make_function(&ResourceCenter::Focus,       return_value_policy<copy_const_reference>()))
+            .add_property("focus",                  make_function(&ResourceCenter::Focus,   return_value_policy<copy_const_reference>()))
             .add_property("turnsSinceFocusChange" , &ResourceCenter::TurnsSinceFocusChange)
             .add_property("availableFoci",          &ResourceCenter::AvailableFoci)
         ;
@@ -589,7 +661,6 @@ namespace FreeOrionPython {
         ///////////////////
         class_<PopCenter, noncopyable>("popCenter", no_init)
             .add_property("speciesName",        make_function(&PopCenter::SpeciesName,      return_value_policy<copy_const_reference>()))
-            .add_property("nextTurnPopGrowth",  &PopCenter::NextTurnPopGrowth)
         ;
 
         //////////////////
@@ -610,8 +681,10 @@ namespace FreeOrionPython {
             .add_property("InitialOrbitalPosition",         &Planet::InitialOrbitalPosition)
             .def("OrbitalPositionOnTurn",                   &Planet::OrbitalPositionOnTurn)
             .add_property("RotationalPeriod",               &Planet::RotationalPeriod)
-            //.add_property("AxialTilt",                      &Planet::AxialTilt)
+            .add_property("LastTurnAttackedByShip",         &Planet::LastTurnAttackedByShip)
+            .add_property("LastTurnConquered",              &Planet::LastTurnConquered)
             .add_property("buildingIDs",                    make_function(&Planet::BuildingIDs,     return_internal_reference<>()))
+            .add_property("habitableSize",                  &Planet::HabitableSize)
         ;
 
         //////////////////
@@ -695,6 +768,29 @@ namespace FreeOrionPython {
             .add_property("specialsFrequency",  make_function(&GalaxySetupData::GetSpecialsFreq,    return_value_policy<return_by_value>()))
             .add_property("monsterFrequency",   make_function(&GalaxySetupData::GetMonsterFreq,     return_value_policy<return_by_value>()))
             .add_property("nativeFrequency",    make_function(&GalaxySetupData::GetNativeFreq,      return_value_policy<return_by_value>()))
-            .add_property("maxAIAggression",    make_function(&GalaxySetupData::GetAggression,      return_value_policy<return_by_value>()));
+            .add_property("maxAIAggression",    make_function(&GalaxySetupData::GetAggression,      return_value_policy<return_by_value>()))
+            .add_property("gameUID",            make_function(&GalaxySetupData::GetGameUID,         return_value_policy<return_by_value>()),
+                                                &GalaxySetupData::SetGameUID);
+
+        //std::vector<std::pair<std::string, std::string>>
+        class_<std::pair<std::string, std::string>>("RuleValueStringStringPair")
+            .add_property("name",   &std::pair<std::string, std::string>::first)
+            .add_property("value",  &std::pair<std::string, std::string>::second)
+        ;
+        class_<std::vector<std::pair<std::string, std::string>>>("RuleValueStringsVec")
+            .def(boost::python::vector_indexing_suite<std::vector<std::pair<std::string, std::string>>, true>())
+        ;
+
+        class_<GameRules, noncopyable>("GameRules", no_init)
+            .add_property("empty",              make_function(&GameRules::Empty,                return_value_policy<return_by_value>()))
+            .add_property("getRulesAsStrings",  make_function(&GameRules::GetRulesAsStrings,    return_value_policy<return_by_value>()))
+            .def("ruleExists",                  RuleExistsAnyType)
+            .def("ruleExistsWithType",          RuleExistsWithType)
+            .def("getDescription",              make_function(&GameRules::GetDescription,       return_value_policy<copy_const_reference>()))
+            .def("getToggle",                   &GameRules::Get<bool>)
+            .def("getInt",                      &GameRules::Get<int>)
+            .def("getDouble",                   &GameRules::Get<double>)
+            .def("getString",                   make_function(&GameRules::Get<std::string>,     return_value_policy<return_by_value>()));
+        def("getGameRules",                     &GetGameRules,                                  return_value_policy<reference_existing_object>(), "Returns the game rules manager, which can be used to look up the names (string) of rules are defined with what type (boolean / toggle, int, double, string), and what values the rules have in the current game.");
     }
 }

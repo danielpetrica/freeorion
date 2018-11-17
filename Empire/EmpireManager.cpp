@@ -3,7 +3,6 @@
 #include "Empire.h"
 #include "../util/Directories.h"
 #include "../util/Logger.h"
-#include "../util/MultiplayerCommon.h"
 #include "../util/XMLDoc.h"
 #include "../universe/Enums.h"
 
@@ -16,18 +15,6 @@ namespace {
 
     const std::string EMPTY_STRING;
 }
-
-DiplomaticStatusUpdateInfo::DiplomaticStatusUpdateInfo() :
-    empire1_id(ALL_EMPIRES),
-    empire2_id(ALL_EMPIRES),
-    diplo_status(INVALID_DIPLOMATIC_STATUS)
-{}
-
-DiplomaticStatusUpdateInfo::DiplomaticStatusUpdateInfo(int empire1_id_, int empire2_id_, DiplomaticStatus status) :
-    empire1_id(empire1_id_),
-    empire2_id(empire2_id_),
-    diplo_status(status)
-{}
 
 EmpireManager::EmpireManager()
 {}
@@ -43,7 +30,7 @@ const EmpireManager& EmpireManager::operator=(EmpireManager& rhs) {
 }
 
 const Empire* EmpireManager::GetEmpire(int id) const {
-    const_iterator it = m_empire_map.find(id);
+    auto it = m_empire_map.find(id);
     return it == m_empire_map.end() ? nullptr : it->second;
 }
 
@@ -53,7 +40,7 @@ std::shared_ptr<const UniverseObject> EmpireManager::GetSource(int id) const {
 }
 
 const std::string& EmpireManager::GetEmpireName(int id) const {
-    const_iterator it = m_empire_map.find(id);
+    auto it = m_empire_map.find(id);
     return it == m_empire_map.end() ? EMPTY_STRING : it->second->Name();
 }
 
@@ -68,7 +55,7 @@ int EmpireManager::NumEmpires() const
 
 std::string EmpireManager::Dump() const {
     std::string retval = "Empires:\n";
-    for (const std::map<int, Empire*>::value_type& entry : m_empire_map)
+    for (const auto& entry : m_empire_map)
         retval += entry.second->Dump();
     retval += DumpDiplomacy();
     return retval;
@@ -76,9 +63,7 @@ std::string EmpireManager::Dump() const {
 
 std::string EmpireManager::DumpDiplomacy() const {
     std::string retval = "Diplomatic Statuses:\n";
-    for (const std::map<std::pair<int, int>, DiplomaticStatus>::value_type&
-         entry : m_empire_diplomatic_statuses)
-    {
+    for (const auto& entry : m_empire_diplomatic_statuses) {
         const Empire* empire1 = GetEmpire(entry.first.first);
         const Empire* empire2 = GetEmpire(entry.first.second);
         if (!empire1 || !empire2)
@@ -116,7 +101,7 @@ EmpireManager::iterator EmpireManager::end()
 { return m_empire_map.end(); }
 
 void EmpireManager::BackPropagateMeters() {
-    for (std::map<int, Empire*>::value_type& entry : m_empire_map)
+    for (auto& entry : m_empire_map)
         entry.second->BackPropagateMeters();
 }
 
@@ -137,7 +122,7 @@ void EmpireManager::InsertEmpire(Empire* empire) {
 
     int empire_id = empire->EmpireID();
 
-    if (m_empire_map.find(empire_id) != m_empire_map.end()) {
+    if (m_empire_map.count(empire_id)) {
         ErrorLogger() << "EmpireManager::InsertEmpire passed empire with id (" << empire_id << ") for which there already is an empire.";
         return;
     }
@@ -146,7 +131,7 @@ void EmpireManager::InsertEmpire(Empire* empire) {
 }
 
 void EmpireManager::Clear() {
-    for (std::map<int, Empire*>::value_type& entry : m_empire_map)
+    for (auto& entry : m_empire_map)
         delete entry.second;
     m_empire_map.clear();
     m_empire_diplomatic_statuses.clear();
@@ -337,14 +322,14 @@ void EmpireManager::ResetDiplomacy() {
     // remove messages
     m_diplomatic_messages.clear();
 
-    // set all empires at peace with eachother (but not themselves)
+    // set all empires at war with each other (but not themselves)
     m_empire_diplomatic_statuses.clear();
     for (auto id_empire_1 : m_empire_map) {
         for (auto id_empire_2 : m_empire_map) {
             if (id_empire_1.first == id_empire_2.first)
                 continue;
             const std::pair<int, int> diplo_key = DiploKey(id_empire_1.first, id_empire_2.first);
-            m_empire_diplomatic_statuses[diplo_key] = DIPLO_PEACE;
+            m_empire_diplomatic_statuses[diplo_key] = DIPLO_WAR;
         }
     }
 }
@@ -361,42 +346,46 @@ void EmpireManager::GetDiplomaticMessagesToSerialize(std::map<std::pair<int, int
     }
 
     // find all messages involving encoding empire
-    for (const std::map<std::pair<int, int>, DiplomaticMessage>::value_type& entry : m_diplomatic_messages) {
+    for (const auto& entry : m_diplomatic_messages) {
         if (entry.first.first == encoding_empire || entry.first.second == encoding_empire)
             messages.insert(entry);
     }
 }
 
-const std::vector<GG::Clr>& EmpireColors() {
+std::vector<GG::Clr>& EmpireColorsNonConst() {
     static std::vector<GG::Clr> colors;
-    if (colors.empty()) {
-        XMLDoc doc;
+    return colors;
+}
 
-        std::string file_name = "empire_colors.xml";
+void InitEmpireColors(const boost::filesystem::path& path) {
+    auto& colors = EmpireColorsNonConst();
 
-        boost::filesystem::ifstream ifs(GetResourceDir() / file_name);
-        if (ifs) {
-            doc.ReadDoc(ifs);
-            ifs.close();
-        } else {
-            ErrorLogger() << "Unable to open data file " << file_name;
-            return colors;
-        }
+    XMLDoc doc;
 
-        for (const XMLElement& elem : doc.root_node.children) {
-            try {
-                std::string hex_colour("#");
-                hex_colour.append(elem.attributes.at("hex"));
-                colors.push_back(GG::HexClr(hex_colour));
-            } catch(const std::exception& e) {
-                std::cerr << "empire_colors.xml: " << e.what() << std::endl;
-            }
+    boost::filesystem::ifstream ifs(path);
+    if (ifs) {
+        doc.ReadDoc(ifs);
+        ifs.close();
+    } else {
+        ErrorLogger() << "Unable to open data file " << path.filename();
+        return;
+    }
+
+    for (const XMLElement& elem : doc.root_node.children) {
+        try {
+            std::string hex_colour("#");
+            hex_colour.append(elem.attributes.at("hex"));
+            colors.push_back(GG::HexClr(hex_colour));
+        } catch(const std::exception& e) {
+            ErrorLogger() << "empire_colors.xml: " << e.what() << std::endl;
         }
     }
+}
+const std::vector<GG::Clr>& EmpireColors() {
+    auto& colors = EmpireColorsNonConst();
     if (colors.empty()) {
         colors = {  GG::Clr(  0, 255,   0, 255),    GG::Clr(  0,   0, 255, 255),    GG::Clr(255,   0,   0, 255),
                     GG::Clr(  0, 255, 255, 255),    GG::Clr(255, 255,   0, 255),    GG::Clr(255,   0, 255, 255)};
     }
     return colors;
 }
-

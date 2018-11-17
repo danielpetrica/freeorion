@@ -27,8 +27,8 @@
 #include <GG/DynamicGraphic.h>
 
 #include <GG/ClrConstants.h>
-#include <GG/GUI.h>
 #include <GG/DrawUtil.h>
+#include <GG/GUI.h>
 #include <GG/Texture.h>
 
 #include <cmath>
@@ -78,8 +78,8 @@ DynamicGraphic::DynamicGraphic(X x, Y y, X w, Y h, bool loop, X frame_width, Y f
     m_last_frame_idx = m_frames - 1;
 
     if (INSTRUMENT_ALL_SIGNALS) {
-        Connect(StoppedSignal, SignalEcho("DynamicGraphic::StoppedSignal"));
-        //Connect(EndFrameSignal, SignalEcho("DynamicGraphic::EndFrameSignal"));
+        StoppedSignal.connect(SignalEcho("DynamicGraphic::StoppedSignal"));
+        //EndFrameSignal.connect(SignalEcho("DynamicGraphic::EndFrameSignal"));
     }
 }
 

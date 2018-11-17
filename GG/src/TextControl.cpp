@@ -37,8 +37,10 @@ namespace {
 ////////////////////////////////////////////////
 // GG::TextControl
 ////////////////////////////////////////////////
-TextControl::TextControl(X x, Y y, X w, Y h, const std::string& str, const std::shared_ptr<Font>& font, Clr color/* = CLR_BLACK*/,
-                         Flags<TextFormat> format/* = FORMAT_NONE*/, Flags<WndFlag> flags/* = NO_WND_FLAGS*/) :
+TextControl::TextControl(X x, Y y, X w, Y h, const std::string& str,
+                         const std::shared_ptr<Font>& font, Clr color/* = CLR_BLACK*/,
+                         Flags<TextFormat> format/* = FORMAT_NONE*/,
+                         Flags<WndFlag> flags/* = NO_WND_FLAGS*/) :
     Control(x, y, w, h, flags),
     m_format(format),
     m_text_color(color),
@@ -86,20 +88,17 @@ TextControl::TextControl(const TextControl& that) :
     m_text_elements(that.m_text_elements),
     m_code_points(that.m_code_points),
     m_font(that.m_font),
-    m_render_cache(that.m_render_cache),
+    m_render_cache(nullptr),
     m_cached_minusable_size_width(that.m_cached_minusable_size_width),
     m_cached_minusable_size(that.m_cached_minusable_size)
 {
-    for (std::shared_ptr<Font::TextElement> elem : m_text_elements) {
+    for (auto& elem : m_text_elements) {
         elem->Bind(m_text);
     }
 }
 
 TextControl::~TextControl()
-{
-    delete m_render_cache;
-    m_render_cache = nullptr;
-}
+{}
 
 TextControl& TextControl::operator=(const TextControl& that)
 {
@@ -111,11 +110,11 @@ TextControl& TextControl::operator=(const TextControl& that)
     m_text_elements = that.m_text_elements;
     m_code_points = that.m_code_points;
     m_font = that.m_font;
-    m_render_cache = that.m_render_cache;
+    m_render_cache.reset();
     m_cached_minusable_size_width = that.m_cached_minusable_size_width;
     m_cached_minusable_size = that.m_cached_minusable_size;
 
-    for (std::shared_ptr<Font::TextElement> elem : m_text_elements) {
+    for (auto& elem : m_text_elements) {
         elem->Bind(m_text);
     }
 
@@ -137,7 +136,7 @@ Pt TextControl::MinUsableSize(X width) const
     // Calculate and cache the minimum usable size when m_cached_minusable_size is equal to width.
     // Create dummy line data with line breaks added so that lines are not wider than width.
     Flags<TextFormat> dummy_format(m_format);
-    std::vector<Font::LineData> dummy_line_data =
+    auto dummy_line_data =
         m_font->DetermineLines(m_text, dummy_format, width, m_text_elements);
     m_cached_minusable_size = m_font->TextExtent(dummy_line_data)
         + (ClientUpperLeft() - UpperLeft()) + (LowerRight() - ClientLowerRight());
@@ -157,14 +156,14 @@ std::string TextControl::Text(CPSize from, CPSize to) const
 
     //std::cout << "low: " << low << "  high: " << high << std::endl << std::flush;
 
-    std::pair<std::size_t, CPSize> low_pos = LinePositionOf(low, m_line_data);
-    std::pair<std::size_t, CPSize> high_pos = LinePositionOf(high, m_line_data);
+    auto low_pos = LinePositionOf(low, m_line_data);
+    auto high_pos = LinePositionOf(high, m_line_data);
 
     StrSize low_string_idx = StringIndexOf(low_pos.first, low_pos.second, m_line_data);
     StrSize high_string_idx = StringIndexOf(high_pos.first, high_pos.second, m_line_data);
 
-    std::string::const_iterator low_it = m_text.begin() + Value(low_string_idx);
-    std::string::const_iterator high_it = m_text.begin() + Value(high_string_idx);
+    auto low_it = m_text.begin() + Value(low_string_idx);
+    auto high_it = m_text.begin() + Value(high_string_idx);
 
     try {
         //std::cout << "dist begin to low: " << std::distance(m_text.begin(), low_it) << std::endl << std::flush;
@@ -226,18 +225,13 @@ void TextControl::Render()
 
 void TextControl::RefreshCache() {
     PurgeCache();
-    m_render_cache = new Font::RenderCache();
+    m_render_cache.reset(new Font::RenderCache());
     if (m_font)
         m_font->PreRenderText(Pt(X0, Y0), Size(), m_text, m_format, *m_render_cache, m_line_data);
 }
 
 void TextControl::PurgeCache()
-{
-    if (m_render_cache)
-        delete m_render_cache;
-
-    m_render_cache = nullptr;
-}
+{ m_render_cache.reset(); }
 
 void TextControl::SetText(const std::string& str)
 {
@@ -259,7 +253,7 @@ void TextControl::SetText(const std::string& str,
         return;
 
     std::size_t expected_length(0);
-    for (std::shared_ptr<Font::TextElement> elem : text_elements) {
+    for (auto& elem : text_elements) {
         expected_length += elem->text.size();
     }
 
@@ -269,7 +263,7 @@ void TextControl::SetText(const std::string& str,
     m_text = str;
 
     m_text_elements = text_elements;
-    for (std::shared_ptr<Font::TextElement> elem : m_text_elements) {
+    for (auto& elem : m_text_elements) {
         elem->Bind(m_text);
     }
 
@@ -427,8 +421,8 @@ void TextControl::Insert(std::size_t line, CPSize pos, const std::string& s)
 
 void TextControl::Erase(std::size_t line, CPSize pos, CPSize num/* = CP1*/)
 {
-    std::string::iterator it = m_text.begin() + Value(StringIndexOf(line, pos, m_line_data));
-    std::string::iterator end_it = m_text.begin() + Value(StringIndexOf(line, pos + num, m_line_data));
+    auto it = m_text.begin() + Value(StringIndexOf(line, pos, m_line_data));
+    auto end_it = m_text.begin() + Value(StringIndexOf(line, pos + num, m_line_data));
     if (it == end_it)
         return;
     m_text.erase(it, end_it);
@@ -444,8 +438,8 @@ void TextControl::Erase(std::size_t line1, CPSize pos1, std::size_t line2, CPSiz
     if (offset1 == offset2)
         return;
     //std::cout << "TextControl::Erase offsets: " << offset1 << " // " << offset2 << std::endl;
-    std::string::iterator it = m_text.begin() + std::min(offset1, offset2);
-    std::string::iterator end_it = m_text.begin() + std::max(offset1, offset2);
+    auto it = m_text.begin() + std::min(offset1, offset2);
+    auto end_it = m_text.begin() + std::max(offset1, offset2);
     m_text.erase(it, end_it);
     SetText(m_text);
 }

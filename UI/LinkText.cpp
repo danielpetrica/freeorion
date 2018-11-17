@@ -8,16 +8,92 @@
 #include "../util/Logger.h"
 #include "../util/VarText.h"
 #include "../util/i18n.h"
+#include "../util/Directories.h"
+#include "../universe/Enums.h"
 
 #include <GG/DrawUtil.h>
 #include <GG/WndEvent.h>
 #include <GG/GUI.h>
+#include <boost/xpressive/xpressive.hpp>
+#include <boost/algorithm/string.hpp>
+
+// TextLinker static(s)
+const std::string TextLinker::ENCYCLOPEDIA_TAG("encyclopedia");
+const std::string TextLinker::GRAPH_TAG("graph");
+const std::string TextLinker::URL_TAG("url");
+const std::string TextLinker::BROWSE_PATH_TAG("browsepath");
 
 namespace {
     static const bool RENDER_DEBUGGING_LINK_RECTS = false;
 
     // closing format tag
     static const std::string LINK_FORMAT_CLOSE = "</rgba>";
+
+    std::string AllParamsAsString(const std::vector<GG::Font::Substring>& params) {
+        std::string retval;
+        for (const auto& param : params) {
+            if (!retval.empty())
+                retval.append(" ");
+            retval.append(param);
+        }
+        return retval;
+    }
+
+    std::string ResolveNestedPathTypes(const std::string& text) {
+        if (text.empty())
+            return text;
+        std::string new_text = text;
+        for (const auto& path_type : PathTypeStrings()) {
+            std::string path_string = PathToString(GetPath(path_type));
+            boost::replace_all(new_text, path_type, path_string);
+        }
+        return new_text;
+    }
+
+    namespace xpr = boost::xpressive;
+    const xpr::sregex REGEX_NON_BRACKET = *~(xpr::set= '<', '>');
+    const std::string BROWSEPATH_TAG_OPEN_PRE("<" + TextLinker::BROWSE_PATH_TAG);
+    const std::string BROWSEPATH_TAG_CLOSE("</" + TextLinker::BROWSE_PATH_TAG + ">");
+    const xpr::sregex BROWSEPATH_SEARCH = BROWSEPATH_TAG_OPEN_PRE >> xpr::_s >> (xpr::s1 = REGEX_NON_BRACKET) >> ">" >>
+                                          (xpr::s2 = REGEX_NON_BRACKET) >> BROWSEPATH_TAG_CLOSE;
+
+    /** Parses TextLinker::BROWSE_PATH_TAG%s within @p text, replacing string representation of PathType%s with
+     *  current path for that PathType.  If link label is empty, inserts resolved link argument as label */
+    std::string BrowsePathLinkText(const std::string& text) {
+        if (!boost::contains(text, BROWSEPATH_TAG_CLOSE))
+            return text;
+
+        std::string retval(text);
+        auto text_it = retval.begin();
+        xpr::smatch match;
+        auto invalid_path_str = PathTypeToString(PATH_INVALID);
+
+        while (true) {
+            if (!xpr::regex_search(text_it, retval.end(), match, BROWSEPATH_SEARCH, xpr::regex_constants::match_default))
+                break;
+
+            auto link_arg = ResolveNestedPathTypes(match[1]);
+            std::string link_label(match[2]);
+            if (link_label.empty())
+                link_label = link_arg;
+            else
+                link_label = ResolveNestedPathTypes(link_label);
+
+            // Only support argument containing at least one valid PathType
+            if (link_arg == match[1].str() || boost::contains(link_arg, invalid_path_str)) {
+                link_arg = invalid_path_str;
+                link_label = UserString("ERROR") + ": " + link_label;
+            }
+
+            auto resolved_link = BROWSEPATH_TAG_OPEN_PRE + " " + link_arg + ">" + link_label + BROWSEPATH_TAG_CLOSE;
+
+            retval.replace(text_it + match.position(), text_it + match.position() + match.length(), resolved_link);
+
+            text_it = retval.end() - match.suffix().length();
+        }
+
+        return retval;
+    }
 }
 
 ///////////////////////////////////////
@@ -51,7 +127,6 @@ void LinkText::Render() {
 
 void LinkText::SetText(const std::string& str) {
     m_raw_text = str;
-    GG::TextControl::SetText(m_raw_text);   // so that line data is updated for use in FindLinks
     FindLinks();
     MarkLinks();
 }
@@ -78,31 +153,19 @@ void LinkText::LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys)
 { TextLinker::LClick_(pt, mod_keys); }
 
 void LinkText::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
+
+    auto rclick_action = [this, pt, mod_keys]() { TextLinker::RClick_(pt, mod_keys); };
+    auto copy_action = [this]() { GG::GUI::GetGUI()->CopyWndText(this); };
+
     // create popup menu
-    GG::MenuItem menu_contents;
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
     if (GetLinkUnderPt(pt) != -1) {
-        menu_contents.next_level.push_back(GG::MenuItem(UserString("OPEN"),     9, false, false));
-        menu_contents.next_level.push_back(GG::MenuItem(true)); // separator
+        popup->AddMenuItem(GG::MenuItem(UserString("OPEN"),     false, false, rclick_action));
+        popup->AddMenuItem(GG::MenuItem(true)); // separator
     }
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_COPY"),  2, false, false));
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_COPY"),  false, false, copy_action));
 
-    CUIPopupMenu popup(pt.x, pt.y, menu_contents);
-    if (popup.Run()) {
-        switch (popup.MenuID()) {
-        case 9: {
-            TextLinker::RClick_(pt, mod_keys);
-            break;
-        }
-
-        case 2: { // copy
-            GG::GUI::GetGUI()->CopyWndText(this);
-            break;
-        }
-
-        default:
-            break;
-        }
-    }
+    popup->Run();
 }
 
 void LinkText::MouseHere(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys)
@@ -147,12 +210,20 @@ std::string ColorByOwner::Decorate(const std::string& object_id_str, const std::
     const Empire* empire = nullptr;
     // get object indicated by object_id, and then get object's owner, if any
     int object_id = CastStringToInt(object_id_str);
-    std::shared_ptr<const UniverseObject> object = Objects().Object(object_id);
+    auto object = Objects().Object(object_id);
     if (object && !object->Unowned())
         empire = GetEmpire(object->Owner());
     if (empire)
         color = empire->Color();
     return GG::RgbaTag(color) + content + "</rgba>";
+}
+
+std::string PathTypeDecorator::Decorate(const std::string& path_type, const std::string& content) const {
+    return LinkDecorator::Decorate(path_type, BrowsePathLinkText(content));
+}
+
+std::string PathTypeDecorator::DecorateRollover(const std::string& path_type, const std::string& content) const {
+    return LinkDecorator::DecorateRollover(path_type, BrowsePathLinkText(content));
 }
 
 
@@ -171,11 +242,6 @@ struct TextLinker::Link {
 ///////////////////////////////////////
 // TextLinker
 ///////////////////////////////////////
-// static(s)
-const std::string TextLinker::ENCYCLOPEDIA_TAG("encyclopedia");
-const std::string TextLinker::GRAPH_TAG("graph");
-const std::string TextLinker::URL_TAG("url");
-
 TextLinker::TextLinker() :
     m_links(),
     m_rollover_link(-1)
@@ -194,7 +260,7 @@ void TextLinker::SetDecorator(const std::string& link_type, LinkDecorator* decor
 std::string TextLinker::LinkDefaultFormatTag(const Link& link, const std::string& content) const {
     const LinkDecorator* decorator = &DEFAULT_DECORATOR;
 
-    std::map<std::string, LinkDecoratorPtr>::const_iterator it = m_decorators.find(link.type);
+    auto it = m_decorators.find(link.type);
     if (it != m_decorators.end()){
         decorator = it->second.get();
     }
@@ -205,7 +271,7 @@ std::string TextLinker::LinkDefaultFormatTag(const Link& link, const std::string
 std::string TextLinker::LinkRolloverFormatTag(const Link& link, const std::string& content) const {
     const LinkDecorator* decorator = &DEFAULT_DECORATOR;
 
-    std::map<std::string, LinkDecoratorPtr>::const_iterator it = m_decorators.find(link.type);
+    auto it = m_decorators.find(link.type);
     if (it != m_decorators.end())
         decorator = it->second.get();
 
@@ -287,41 +353,19 @@ void TextLinker::MouseLeave_() {
     MarkLinks();
 }
 
-const std::vector<GG::Font::LineData>& TextLinker::GetLineData() const {
-    static std::vector<GG::Font::LineData> retval;
-    return retval;
-}
-
-const std::shared_ptr<GG::Font>& TextLinker::GetFont() const {
-    static std::shared_ptr<GG::Font> retval;
-    if (!retval)
-        retval = ClientUI::GetFont();
-    return retval;
-}
-
-GG::Pt TextLinker::TextUpperLeft() const
-{ return GG::Pt(); }
-
-GG::Pt TextLinker::TextLowerRight() const
-{ return GG::Pt(); }
-
-void TextLinker::SetLinkedText(const std::string& str)
-{}
-
-const std::string& TextLinker::RawText() const {
-    static std::string retval;
-    return retval;
-}
-
 void TextLinker::FindLinks() {
     m_links.clear();
 
     GG::Y y_posn(0); // y-coordinate of the top of the current line
     Link link;
 
-    for (const GG::Font::LineData& curr_line : GetLineData()) {
-        for (const GG::Font::LineData::CharData& curr_char : curr_line.char_data) {
-            for (const std::shared_ptr<GG::Font::FormattingTag>& tag : curr_char.tags) {
+    // control text needs to be updated so that the line data is calculated from
+    // the raw text and not the marked text set in MarkText().
+    SetLinkedText(RawText());
+
+    for (const auto& curr_line : GetLineData()) {
+        for (const auto& curr_char : curr_line.char_data) {
+            for (const auto& tag : curr_char.tags) {
                 if (tag->tag_name == VarText::PLANET_ID_TAG ||
                     tag->tag_name == VarText::SYSTEM_ID_TAG ||
                     tag->tag_name == VarText::SHIP_ID_TAG ||
@@ -342,7 +386,8 @@ void TextLinker::FindLinks() {
                     tag->tag_name == VarText::METER_TYPE_TAG ||
                     tag->tag_name == TextLinker::ENCYCLOPEDIA_TAG ||
                     tag->tag_name == TextLinker::GRAPH_TAG ||
-                    tag->tag_name == TextLinker::URL_TAG)
+                    tag->tag_name == TextLinker::URL_TAG ||
+                    tag->tag_name == TextLinker::BROWSE_PATH_TAG)
                 {
                     link.type = tag->tag_name;
                     if (tag->close_tag) {
@@ -350,12 +395,24 @@ void TextLinker::FindLinks() {
                         m_links.push_back(link);
                         link = Link();
                     } else {
-                        if (!tag->params.empty())
-                            link.data = tag->params[0];
-                        else
+                        if (!tag->params.empty()) {
+                            if (tag->tag_name == TextLinker::BROWSE_PATH_TAG) {
+                                auto all_param_str(AllParamsAsString(tag->params));
+                                link.data = ResolveNestedPathTypes(all_param_str);
+                                // BROWSE_PATH_TAG requires a PathType within param
+                                if (link.data == all_param_str) {
+                                    ErrorLogger() << "Invalid param \"" << link.data << "\" for tag "
+                                                  << TextLinker::BROWSE_PATH_TAG;
+                                    link.data = PathTypeToString(PATH_INVALID);
+                                }
+                            } else {
+                                link.data = tag->params[0];
+                            }
+                        } else {
                             link.data.clear();
+                        }
                         link.text_posn.first = Value(curr_char.string_index);
-                        for (std::shared_ptr<GG::Font::FormattingTag> itag : curr_char.tags) {
+                        for (auto& itag : curr_char.tags) {
                             link.text_posn.first -= Value(itag->StringSize());
                         }
                     }
@@ -370,22 +427,22 @@ void TextLinker::FindLinks() {
 }
 
 void TextLinker::LocateLinks() {
-    const std::shared_ptr<GG::Font>& font = GetFont();
-
     if (m_links.empty())
         return;
 
     GG::Y y_posn(0); // y-coordinate of the top of the current line
+    const auto& font = GetFont();
 
     // We assume that links are stored in m_links in the order they appear in the text.
     // We shall iterate through the text, updating the rectangles of a link whenever we know we are inside it
-    std::vector<Link>::iterator current_link = m_links.begin();
+    auto current_link = m_links.begin();
     bool inside_link = false;
 
-    for (const GG::Font::LineData& curr_line : GetLineData()) {
+    for (const auto& curr_line : GetLineData()) {
         // if the last line ended without the current tag ending
         if (inside_link)
-            current_link->rects.push_back(GG::Rect(GG::X0, y_posn, GG::X0, y_posn + font->Height()));
+            current_link->rects.push_back(GG::Rect(GG::X0, y_posn, GG::X0,
+                                                   y_posn + font->Height()));
 
         for (unsigned int i = 0; i < curr_line.char_data.size(); ++i) {
             // The link text_posn is at the beginning of the tag, whereas
@@ -450,7 +507,7 @@ void TextLinker::MarkLinks() {
     //std::cout << "raw text:" << raw_text << std::endl;
 
     int copy_start_index = 0;
-    std::string::const_iterator raw_text_start_it = raw_text.begin();
+    auto raw_text_start_it = raw_text.begin();
 
     std::string marked_text;
 
@@ -534,4 +591,5 @@ void RegisterLinkTags() {
     GG::Font::RegisterKnownTag(TextLinker::ENCYCLOPEDIA_TAG);
     GG::Font::RegisterKnownTag(TextLinker::GRAPH_TAG);
     GG::Font::RegisterKnownTag(TextLinker::URL_TAG);
+    GG::Font::RegisterKnownTag(TextLinker::BROWSE_PATH_TAG);
 }

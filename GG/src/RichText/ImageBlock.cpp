@@ -46,12 +46,17 @@ namespace GG {
         m_graphic(nullptr)
     {
         try {
-            std::shared_ptr<Texture> texture = GetTextureManager().GetTexture(path);
-            m_graphic = new StaticGraphic(texture, GRAPHIC_PROPSCALE | GRAPHIC_SHRINKFIT | GRAPHIC_CENTER);
-            AttachChild(m_graphic);
+            auto texture = GetTextureManager().GetTexture(path);
+            m_graphic = Wnd::Create<StaticGraphic>(texture, GRAPHIC_PROPSCALE | GRAPHIC_SHRINKFIT | GRAPHIC_CENTER);
         } catch (GG::Texture::BadFile&) {
             // No can do inside GiGi.
         }
+    }
+
+    void ImageBlock::CompleteConstruction()
+    {
+        if (m_graphic)
+            AttachChild(m_graphic);
     }
 
     Pt ImageBlock::SetMaxWidth(X width)
@@ -105,12 +110,12 @@ namespace GG {
         {}
 
         //! Create a Text block from a plain text tag.
-        BlockControl* CreateFromTag(const std::string& tag,
-                                    const RichText::TAG_PARAMS& params,
-                                    const std::string& content,
-                                    const std::shared_ptr<Font>& font,
-                                    const Clr& color,
-                                    Flags<TextFormat> format) override
+        std::shared_ptr<BlockControl> CreateFromTag(const std::string& tag,
+                                                    const RichText::TAG_PARAMS& params,
+                                                    const std::string& content,
+                                                    const std::shared_ptr<Font>& font,
+                                                    const Clr& color,
+                                                    Flags<TextFormat> format) override
         {
             // Get the path from the parameters.
             fs::path param_path = ExtractPath(params);
@@ -120,7 +125,7 @@ namespace GG {
                 return nullptr;
 
             // Create a new image block, basing the path on the root path.
-            return new ImageBlock(combined_path, X0, Y0, X1, Flags<WndFlag>());
+            return Wnd::Create<ImageBlock>(combined_path, X0, Y0, X1, Flags<WndFlag>());
         }
 
         // Sets the root of image search path.
@@ -134,7 +139,7 @@ namespace GG {
         static fs::path ExtractPath(const RichText::TAG_PARAMS& params)
         {
             // Find the src.
-            RichText::TAG_PARAMS::const_iterator src_param = params.find("src");
+            auto src_param = params.find("src");
 
             // If src not found, error out.
             if (src_param == params.end()) {
@@ -153,7 +158,7 @@ namespace GG {
     };
 
     // Register image block as the image tag handler.
-    static int dummy = RichText::RegisterDefaultBlock(ImageBlock::IMAGE_TAG, new ImageBlockFactory());
+    static int dummy = RichText::RegisterDefaultBlock(ImageBlock::IMAGE_TAG, std::make_shared<ImageBlockFactory>());
 
     //! Set the root path from which to look for images with the factory.
     bool ImageBlock::SetImagePath(RichText::IBlockControlFactory* factory, const fs::path& path)
@@ -174,9 +179,9 @@ namespace GG {
     bool ImageBlock::SetDefaultImagePath(const fs::path& path)
     {
         // Find the image block factory from the default map and give it the path.
-        RichText::BLOCK_FACTORY_MAP::const_iterator factory_it = RichText::DefaultBlockFactoryMap()->find(IMAGE_TAG);
+        auto factory_it = RichText::DefaultBlockFactoryMap()->find(IMAGE_TAG);
         if (factory_it != RichText::DefaultBlockFactoryMap()->end()) {
-            if (ImageBlockFactory* factory = dynamic_cast<ImageBlockFactory*>(factory_it->second)) {
+            if (auto factory = dynamic_cast<ImageBlockFactory*>(factory_it->second.get())) {
                 return SetImagePath(factory, path);
             }
         }

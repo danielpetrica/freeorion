@@ -1,9 +1,9 @@
-#include "ConditionParserImpl.h"
+#include "ConditionParser7.h"
 
-#include "ParseImpl.h"
 #include "ValueRefParser.h"
-#include "ValueRefParserImpl.h"
+
 #include "../universe/Condition.h"
+#include "../universe/ValueRef.h"
 
 #include <boost/spirit/include/phoenix.hpp>
 
@@ -18,124 +18,109 @@ namespace std {
 }
 #endif
 
-namespace {
-    struct condition_parser_rules_7 {
-        condition_parser_rules_7() {
-            const parse::lexer& tok = parse::lexer::instance();
+namespace parse { namespace detail {
+    condition_parser_rules_7::condition_parser_rules_7(
+        const parse::lexer& tok,
+        Labeller& label,
+        const condition_parser_grammar& condition_parser,
+        const value_ref_grammar<std::string>& string_grammar
+    ) :
+        condition_parser_rules_7::base_type(start, "condition_parser_rules_7"),
+        star_type_rules(tok, label, condition_parser),
+        one_or_more_star_types(star_type_rules.expr)
+    {
+        qi::_1_type _1;
+        qi::_2_type _2;
+        qi::_3_type _3;
+        qi::_val_type _val;
+        qi::_pass_type _pass;
+        qi::omit_type omit_;
+        const boost::phoenix::function<construct_movable> construct_movable_;
+        const boost::phoenix::function<deconstruct_movable> deconstruct_movable_;
+        const boost::phoenix::function<deconstruct_movable_vector> deconstruct_movable_vector_;
 
-            qi::_1_type _1;
-            qi::_a_type _a;
-            qi::_b_type _b;
-            qi::_c_type _c;
-            qi::_val_type _val;
-            using phoenix::new_;
-            using phoenix::push_back;
+        using phoenix::new_;
+        using phoenix::push_back;
+        using phoenix::construct;
 
-            ordered_bombarded_by
-                =    tok.OrderedBombardedBy_
-                >   -parse::detail::label(Condition_token) > parse::detail::condition_parser
-                     [ _val = new_<Condition::OrderedBombarded>(_1) ]
-                ;
+        ordered_bombarded_by
+            =    tok.OrderedBombardedBy_
+            >   -label(tok.Condition_) > condition_parser
+            [ _val = construct_movable_(new_<Condition::OrderedBombarded>(deconstruct_movable_(_1, _pass))) ]
+            ;
 
-            contains
-                =    tok.Contains_
-                >   -parse::detail::label(Condition_token) > parse::detail::condition_parser
-                [ _val = new_<Condition::Contains>(_1) ]
-                ;
+        contains
+            =    tok.Contains_
+            >   -label(tok.Condition_) > condition_parser
+            [ _val = construct_movable_(new_<Condition::Contains>(deconstruct_movable_(_1, _pass))) ]
+            ;
 
-            contained_by
-                =    tok.ContainedBy_
-                >   -parse::detail::label(Condition_token) > parse::detail::condition_parser
-                [ _val = new_<Condition::ContainedBy>(_1) ]
-                ;
+        contained_by
+            =    tok.ContainedBy_
+            >   -label(tok.Condition_) > condition_parser
+            [ _val = construct_movable_(new_<Condition::ContainedBy>(deconstruct_movable_(_1, _pass))) ]
+            ;
 
-            star_type
-                =    tok.Star_
-                >    parse::detail::label(Type_token)
-                >    (
-                            ('[' > +parse::detail::star_type_rules().expr [ push_back(_a, _1) ] > ']')
-                        |    parse::detail::star_type_rules().expr [ push_back(_a, _1) ]
+        star_type
+            =    tok.Star_
+            >    label(tok.Type_)
+            >    one_or_more_star_types
+            [ _val = construct_movable_(new_<Condition::StarType>(deconstruct_movable_vector_(_1, _pass))) ]
+            ;
+
+        building_type =
+            tok.Building_   [ _val = Condition::CONTENT_BUILDING ]
+            |   tok.Species_    [ _val = Condition::CONTENT_SPECIES ]
+            |   tok.Hull_       [ _val = Condition::CONTENT_SHIP_HULL ]
+            |   tok.Part_       [ _val = Condition::CONTENT_SHIP_PART ]
+            |   tok.Special_    [ _val = Condition::CONTENT_SPECIAL ]
+            |   tok.Focus_      [ _val = Condition::CONTENT_FOCUS ];
+
+
+        location
+            =   (omit_[tok.Location_]
+                 >    label(tok.Type_) > building_type
+                 >    label(tok.Name_)   > string_grammar
+                 >  -(label(tok.Name_)   > string_grammar))
+            [ _val = construct_movable_(new_<Condition::Location>(
+                    _1,
+                    deconstruct_movable_(_2, _pass),
+                    deconstruct_movable_(_3, _pass))) ]
+            ;
+
+        owner_has_shippart_available
+            =   (tok.OwnerHasShipPartAvailable_
+                 >>  (label(tok.Name_)
+                      > string_grammar [ _val = construct_movable_(new_<Condition::OwnerHasShipPartAvailable>(
+                              deconstruct_movable_(_1, _pass))) ]
                      )
-                [ _val = new_<Condition::StarType>(_a) ]
-                ;
+                )
+            ;
 
-            location
-                =   (tok.Location_
-                >    parse::detail::label(Type_token) >
-                    (
-                        tok.Building_   [ _a = Condition::CONTENT_BUILDING ]
-                    |   tok.Species_    [ _a = Condition::CONTENT_SPECIES ]
-                    |   tok.Hull_       [ _a = Condition::CONTENT_SHIP_HULL ]
-                    |   tok.Part_       [ _a = Condition::CONTENT_SHIP_PART ]
-                    |   tok.Special_    [ _a = Condition::CONTENT_SPECIAL ]
-                    |   tok.Focus_      [ _a = Condition::CONTENT_FOCUS ]
-                    )
-                >    parse::detail::label(Name_token)   > parse::string_value_ref() [ _b = _1 ]
-                >  -(parse::detail::label(Name_token)   > parse::string_value_ref() [ _c = _1 ]))
-                [ _val = new_<Condition::Location>(_a, _b, _c) ]
-                ;
+        start
+            %=   ordered_bombarded_by
+            |    contains
+            |    contained_by
+            |    star_type
+            |    location
+            |    owner_has_shippart_available
+            ;
 
-            owner_has_shippart_available
-                =   (tok.OwnerHasShipPartAvailable_
-                    >>  (parse::detail::label(Name_token)
-                         > parse::string_value_ref() [ _val = new_<Condition::OwnerHasShipPartAvailable>(_1) ]
-                        )
-                    )
-                ;
-
-            start
-                %=   ordered_bombarded_by
-                |    contains
-                |    contained_by
-                |    star_type
-                |    location
-                |    owner_has_shippart_available
-                ;
-
-            ordered_bombarded_by.name("OrderedBombardedBy");
-            contains.name("Contains");
-            contained_by.name("ContainedBy");
-            star_type.name("StarType");
-            location.name("Location");
-            owner_has_shippart_available.name("OwnerHasShipPartAvailable");
+        ordered_bombarded_by.name("OrderedBombardedBy");
+        contains.name("Contains");
+        contained_by.name("ContainedBy");
+        star_type.name("StarType");
+        location.name("Location");
+        owner_has_shippart_available.name("OwnerHasShipPartAvailable");
 
 #if DEBUG_CONDITION_PARSERS
-            debug(ordered_bombarded_by);
-            debug(contains);
-            debug(contained_by);
-            debug(star_type);
-            debug(location);
-            debug(owner_has_shippart_available);
+        debug(ordered_bombarded_by);
+        debug(contains);
+        debug(contained_by);
+        debug(star_type);
+        debug(location);
+        debug(owner_has_shippart_available);
 #endif
-        }
-
-        typedef parse::detail::rule<
-            Condition::ConditionBase* (),
-            qi::locals<std::vector<ValueRef::ValueRefBase<StarType>*>>
-        > star_type_vec_rule;
-
-        typedef parse::detail::rule<
-            Condition::ConditionBase* (),
-            qi::locals<
-                Condition::ContentType,
-                ValueRef::ValueRefBase<std::string>*,
-                ValueRef::ValueRefBase<std::string>*
-            >
-        > string_ref_rule;
-
-        parse::condition_parser_rule            ordered_bombarded_by;
-        parse::condition_parser_rule            contains;
-        parse::condition_parser_rule            contained_by;
-        star_type_vec_rule                      star_type;
-        string_ref_rule                         location;
-        parse::condition_parser_rule            owner_has_shippart_available;
-        parse::condition_parser_rule            start;
-    };
-}
-
-namespace parse { namespace detail {
-    const condition_parser_rule& condition_parser_7() {
-        static condition_parser_rules_7 retval;
-        return retval.start;
     }
+
 } }

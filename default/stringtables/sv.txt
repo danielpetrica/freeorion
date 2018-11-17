@@ -428,12 +428,6 @@ Snabbstäng fönster
 OPTIONS_MISC_UI
 Övriga användargränssnittsinställningar
 
-OPTIONS_SINGLEPLAYER
-Enspelarläge
-
-OPTIONS_MULTIPLAYER
-Flerspelarläge
-
 OPTIONS_AUTOSAVE_TURNS_BETWEEN
 Antal drag mellan automatisk sparning
 
@@ -1412,6 +1406,5 @@ Imperiepalats
 ## Name lists
 ##
 
-#include "../global_settings.txt"
 #include "../content_specific_parameters.txt"
 #include "../customizations/common_user_customizations.txt"

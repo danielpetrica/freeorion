@@ -11,13 +11,23 @@
 #include "../util/Logger.h"
 #include "../util/AppInterface.h"
 #include "../util/VarText.h"
-#include "../UI/LinkText.h"
+#include "../util/GameRules.h"
+
 #include "../Empire/Empire.h"
 
 #include <sstream>
 
-
 namespace {
+    // would be better in CombatSystem, but that is server-only, and rules need
+    // to exist on client and server.
+    void AddRules(GameRules& rules) {
+        // makes all buildings cost 1 PP and take 1 turn to produce
+        rules.Add<int>("RULE_NUM_COMBAT_ROUNDS", "RULE_NUM_COMBAT_ROUNDS_DESC",
+                       "", 3, true, RangedValidator<int>(1, 20));
+    }
+    bool temp_bool = RegisterGameRules(&AddRules);
+
+
     //TODO: Move this code into a common non UI linked location, so that
     //there is no duplicated code between server and clientUI.
     const std::string EMPTY_STRING("");
@@ -34,6 +44,7 @@ namespace {
         case OBJ_SYSTEM:
             return VarText::SYSTEM_ID_TAG;
         case OBJ_FIELD:
+        case OBJ_FIGHTER:
         default:
             return EMPTY_STRING;
         }
@@ -75,8 +86,7 @@ namespace {
     /// with the content being the public name from the point of view of empire_id.
     /// Returns UserString("ENC_COMBAT_UNKNOWN_OBJECT") if object_id is not found.
     std::string PublicNameLink(int empire_id, int object_id) {
-
-        std::shared_ptr<const UniverseObject> object = GetUniverseObject(object_id);
+        auto object = GetUniverseObject(object_id);
         if (object) {
             const std::string& name = object->PublicName(empire_id);
             const std::string& tag = LinkTag(object->ObjectType());
@@ -237,7 +247,7 @@ std::vector<ConstCombatEventPtr> SimultaneousEvents::SubEvents(int viewing_empir
     for (CombatEventPtr event : events) {
         boost::optional<int> maybe_faction = event->PrincipalFaction(viewing_empire_id);
         int faction = maybe_faction.get_value_or(ALL_EMPIRES);
-        empire_to_event.insert(std::make_pair(faction, event));
+        empire_to_event.insert({faction, event});
     }
 
     std::vector<ConstCombatEventPtr> ordered_events;
@@ -255,7 +265,7 @@ std::vector<ConstCombatEventPtr> SimultaneousEvents::SubEvents(int viewing_empir
         ordered_events.push_back(it->second);
     }
 
-    for (std::multimap<int, ConstCombatEventPtr>::value_type& entry : empire_to_event) {
+    for (auto& entry : empire_to_event) {
         if (entry.first != viewing_empire_id && entry.first != ALL_EMPIRES)
             ordered_events.push_back(entry.second);
     }
@@ -304,15 +314,15 @@ std::string InitialStealthEvent::DebugString() const {
     if (target_empire_id_to_invisble_obj_id.size() > 4) {
         ss << target_empire_id_to_invisble_obj_id.size() << " events.";
     } else {
-        for (const StealthInvisbleMap::value_type& attack_empire : target_empire_id_to_invisble_obj_id) {
+        for (const auto& attack_empire : target_empire_id_to_invisble_obj_id) {
             ss << " Attacking Empire: " << EmpireLink(attack_empire.first) << "\n";
-            for (const std::map<int, std::set<std::pair<int, Visibility>>>::value_type& target_empire : attack_empire.second) {
+            for (const auto& target_empire : attack_empire.second) {
                 ss << " Target Empire: " << EmpireLink(target_empire.first) << " Targets: ";
 
                 if (target_empire.second.size() > 4) {
                     ss << target_empire.second.size() << " attackers.";
                 } else {
-                    for (const std::pair<int, Visibility>& attacker : target_empire.second) {
+                    for (const auto& attacker : target_empire.second) {
                         ss << FighterOrPublicNameLink(ALL_EMPIRES, attacker.first, target_empire.first);
                     }
                 }
@@ -328,17 +338,16 @@ std::string InitialStealthEvent::CombatLogDescription(int viewing_empire_id) con
     std::string desc = "";
 
     //Viewing empire stealth first
-    for (const StealthInvisbleMap::value_type& attack_empire : target_empire_id_to_invisble_obj_id) {
+    for (const auto& attack_empire : target_empire_id_to_invisble_obj_id) {
         if (attack_empire.first == viewing_empire_id)
             continue;
 
-        std::map<int, std::set<std::pair<int, Visibility>>>::const_iterator target_empire
-            = attack_empire.second.find(viewing_empire_id);
-        if (target_empire != attack_empire.second.end()
-            && !target_empire->second.empty()) {
-
+        auto target_empire = attack_empire.second.find(viewing_empire_id);
+        if (target_empire != attack_empire.second.end() &&
+            !target_empire->second.empty())
+        {
             std::vector<std::string> cloaked_attackers;
-            for (const std::set<std::pair<int, Visibility>>::value_type& attacker : target_empire->second) {
+            for (auto& attacker : target_empire->second) {
                  std::string attacker_link = FighterOrPublicNameLink(viewing_empire_id, attacker.first, viewing_empire_id);
                 // It doesn't matter if targets of viewing empire have no_visibility or basic_visibility
                  cloaked_attackers.push_back(attacker_link);
@@ -347,36 +356,35 @@ std::string InitialStealthEvent::CombatLogDescription(int viewing_empire_id) con
             if (!cloaked_attackers.empty()) {
                 desc += "\n"; //< Add \n at start of the report and between each empire
                 std::vector<std::string> attacker_empire_link(1, EmpireLink(attack_empire.first));
-                desc += FlexibleFormatList(attacker_empire_link, cloaked_attackers
-                                           , UserString("ENC_COMBAT_INITIAL_STEALTH_LIST")).str();
+                desc += FlexibleFormatList(attacker_empire_link, cloaked_attackers,
+                                           UserString("ENC_COMBAT_INITIAL_STEALTH_LIST")).str();
             }
         }
     }
 
     //Viewing empire defending
-    StealthInvisbleMap::const_iterator attack_empire
-        = target_empire_id_to_invisble_obj_id.find(viewing_empire_id);
-    if (attack_empire != target_empire_id_to_invisble_obj_id.end()
-        && !attack_empire->second.empty()) {
-        for (const std::map<int, std::set<std::pair<int, Visibility>>>::value_type& target_empire : attack_empire->second) {
+    auto attack_empire = target_empire_id_to_invisble_obj_id.find(viewing_empire_id);
+    if (attack_empire != target_empire_id_to_invisble_obj_id.end() &&
+        !attack_empire->second.empty())
+    {
+        for (auto& target_empire : attack_empire->second) {
             if (target_empire.first == viewing_empire_id)
                 continue;
 
             std::vector<std::string> cloaked_attackers;
-            for (const std::pair<int, Visibility>& attacker : target_empire.second) {
-                 std::string attacker_link = FighterOrPublicNameLink(viewing_empire_id, attacker.first, viewing_empire_id);
+            for (const auto& attacker : target_empire.second) {
+                std::string attacker_link = FighterOrPublicNameLink(viewing_empire_id, attacker.first, viewing_empire_id);
                 // Don't even report on targets with no_visibility it is supposed to be a surprise
-                if (attacker.second >= VIS_BASIC_VISIBILITY ) {
+                if (attacker.second >= VIS_BASIC_VISIBILITY )
                     cloaked_attackers.push_back(attacker_link);
-                }
             }
 
             if (!cloaked_attackers.empty()) {
                 if (!desc.empty())
                     desc += "\n";
                 std::vector<std::string> attacker_empire_link(1, EmpireLink(attack_empire->first));
-                desc += FlexibleFormatList(attacker_empire_link, cloaked_attackers
-                                           , UserString("ENC_COMBAT_INITIAL_STEALTH_LIST")).str();
+                desc += FlexibleFormatList(attacker_empire_link, cloaked_attackers,
+                                           UserString("ENC_COMBAT_INITIAL_STEALTH_LIST")).str();
             }
         }
     }
@@ -472,13 +480,13 @@ std::string StealthChangeEvent::DebugString() const {
     if (events.size() > 4) {
         ss << events.size() << " empires.";
     } else {
-        for (const std::map<int, std::vector<StealthChangeEventDetailPtr>>::value_type& target : events) {
+        for (const auto& target : events) {
             ss << "Target Empire: " << EmpireLink(target.first) << "\n";
 
             if (target.second.size() > 4) {
                 ss << target.second.size() << " events.";
             } else {
-                for (const StealthChangeEventDetailPtr event : target.second) {
+                for (const auto& event : target.second) {
                     ss << event->DebugString();
                 }
             }
@@ -492,9 +500,9 @@ std::string StealthChangeEvent::CombatLogDescription(int viewing_empire_id) cons
         return "";
 
     std::string desc = "";
-    for (const std::map<int, std::vector<StealthChangeEventDetailPtr>>::value_type& target : events) {
+    for (const auto& target : events) {
         std::vector<std::string> uncloaked_attackers;
-        for (const StealthChangeEventDetailPtr event : target.second) {
+        for (const auto event : target.second) {
             uncloaked_attackers.push_back(FighterOrPublicNameLink(viewing_empire_id, event->attacker_id, event->attacker_empire_id));
         }
 
@@ -503,9 +511,9 @@ std::string StealthChangeEvent::CombatLogDescription(int viewing_empire_id) cons
                 desc += "\n";
             std::vector<std::string> target_empire_link(1, EmpireLink(target.first));
 
-            desc += FlexibleFormatList(target_empire_link, uncloaked_attackers
-                                       , UserString("ENC_COMBAT_STEALTH_DECLOAK_ATTACK_MANY_EVENTS")
-                                       , UserString("ENC_COMBAT_STEALTH_DECLOAK_ATTACK_1_EVENTS")).str();
+            desc += FlexibleFormatList(target_empire_link, uncloaked_attackers,
+                                       UserString("ENC_COMBAT_STEALTH_DECLOAK_ATTACK_MANY_EVENTS"),
+                                       UserString("ENC_COMBAT_STEALTH_DECLOAK_ATTACK_1_EVENTS")).str();
         }
     }
 
@@ -517,9 +525,9 @@ bool StealthChangeEvent::AreSubEventsEmpty(int viewing_empire_id) const {
 }
 std::vector<ConstCombatEventPtr> StealthChangeEvent::SubEvents(int viewing_empire_id) const {
     std::vector<ConstCombatEventPtr> all_events;
-    for (const std::map<int, std::vector<StealthChangeEventDetailPtr>>::value_type& target : events) {
+    for (const auto& target : events) {
 
-        for (const StealthChangeEventDetailPtr event : target.second){
+        for (const auto event : target.second){
             all_events.push_back(std::dynamic_pointer_cast<CombatEvent>(event));
         }
     }
@@ -705,7 +713,7 @@ std::string IncapacitationEvent::DebugString() const {
 
 
 std::string IncapacitationEvent::CombatLogDescription(int viewing_empire_id) const {
-    std::shared_ptr<const UniverseObject> object = GetUniverseObject(object_id);
+    auto object = GetUniverseObject(object_id);
     std::string template_str, object_str;
     int owner_id = object_owner_id;
 
@@ -1069,8 +1077,8 @@ std::string WeaponsPlatformEvent::DebugString() const {
     std::stringstream desc;
     desc << "WeaponsPlatformEvent bout = " << bout << " attacker_id = "
         << attacker_id << " attacker_owner = "<< attacker_owner_id;
-    for (const std::map<int, std::vector<WeaponFireEvent::WeaponFireEventPtr>>::value_type& target : events) {
-        for (const WeaponFireEvent::WeaponFireEventPtr attack : target.second) {
+    for (const auto& target : events) {
+        for (const auto attack : target.second) {
             desc << std::endl << attack->DebugString();
         }
     }
@@ -1084,16 +1092,17 @@ std::string WeaponsPlatformEvent::CombatLogDescription(int viewing_empire_id) co
     std::vector<std::string> damaged_target_links;
     std::vector<std::string> undamaged_target_links;
 
-    for (const std::map<int, std::vector<WeaponFireEvent::WeaponFireEventPtr>>::value_type& target : events) {
+    for (const auto& target : events) {
         if (target.second.empty())
             continue;
 
-        const WeaponFireEvent::WeaponFireEventPtr& fire_event(*target.second.begin());
+        const auto& fire_event(*target.second.begin());
         std::string target_public_name(
-            FighterOrPublicNameLink(viewing_empire_id, target.first, fire_event->target_owner_id));
+            FighterOrPublicNameLink(viewing_empire_id, target.first,
+                                    fire_event->target_owner_id));
 
         double damage = 0.0f;
-        for (WeaponFireEvent::WeaponFireEventPtr attack_it : target.second) {
+        for (auto attack_it : target.second) {
             damage += attack_it->damage;
         }
 
@@ -1134,8 +1143,8 @@ bool WeaponsPlatformEvent::AreSubEventsEmpty(int viewing_empire_id) const {
 
 std::vector<ConstCombatEventPtr> WeaponsPlatformEvent::SubEvents(int viewing_empire_id) const {
     std::vector<ConstCombatEventPtr> all_events;
-    for (const std::map<int, std::vector<WeaponFireEvent::WeaponFireEventPtr>>::value_type& target : events) {
-        for (WeaponFireEvent::WeaponFireEventPtr event : target.second) {
+    for (const auto& target : events) {
+        for (auto event : target.second) {
             all_events.push_back(std::dynamic_pointer_cast<CombatEvent>(event));
         }
     }

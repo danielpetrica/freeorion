@@ -7,6 +7,7 @@
 #include "../util/Serialize.h"
 
 #include <boost/optional/optional.hpp>
+#include <boost/serialization/nvp.hpp>
 
 #include <memory>
 
@@ -14,8 +15,8 @@
 // A snapshot of the state of a participant of the combat
 // at it's end
 struct FO_COMMON_API CombatParticipantState {
-    float current_health;
-    float max_health;
+    float current_health = 0.0f;
+    float max_health = 0.0f;
 
     CombatParticipantState();
     CombatParticipantState(const UniverseObject& object);
@@ -43,7 +44,7 @@ struct FO_COMMON_API CombatLog {
     void serialize(Archive& ar, const unsigned int version);
 };
 
-BOOST_CLASS_VERSION ( CombatLog, 1 );
+BOOST_CLASS_VERSION(CombatLog, 1);
 
 /** Stores and retreives combat logs. */
 class FO_COMMON_API CombatLogManager {
@@ -57,11 +58,11 @@ public:
     //@}
 
     /** \name Mutators */ //@{
-    int     AddNewLog(const CombatLog& log);   // adds log, returns unique log id
+    int  AddNewLog(const CombatLog& log);   // adds log, returns unique log id
     /** Replace incomplete log with \p id with \p log. An incomplete log is a
         partially downloaded log where only the log id is known.*/
-    void    CompleteLog(int id, const CombatLog& log);
-    void    Clear();
+    void CompleteLog(int id, const CombatLog& log);
+    void Clear();
 
     /** Serialize log headers so that the receiving LogManager can then request
         complete logs in the background.*/
@@ -96,7 +97,7 @@ FO_COMMON_API void CombatLogManager::serialize<freeorion_xml_oarchive>(freeorion
 
 
 /** returns the singleton combat log manager */
-FO_COMMON_API CombatLogManager&   GetCombatLogManager();
+FO_COMMON_API CombatLogManager& GetCombatLogManager();
 
 /** Returns the CombatLog with the indicated id, or an empty log if there
   * is no avaiable log with that id. */

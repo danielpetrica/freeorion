@@ -20,6 +20,7 @@ Species
     effectsgroups = [
         [[AVERAGE_INDUSTRY]]
         [[AVERAGE_RESEARCH]]
+        [[AVERAGE_STOCKPILE]]
 
         [[AVERAGE_POPULATION]]
         [[AVERAGE_HAPPINESS]]
@@ -41,7 +42,7 @@ Species
         [[STANDARD_SHIP_SHIELDS]]
     ]
 
-    [[DESERT_NARROW_EP]]
+    [[RADIATED_NARROW_EP]]
 
     graphic = "icons/species/trith.png"
 

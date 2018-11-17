@@ -1,10 +1,10 @@
 #include "AIClientApp.h"
 
-#include "../../parse/Parse.h"
 #include "../../util/OptionsDB.h"
 #include "../../util/Directories.h"
 #include "../../util/Logger.h"
-#include "../../util/XMLDoc.h"
+#include "../../util/Version.h"
+#include "../../util/i18n.h"
 
 #include <GG/utf8/checked.h>
 
@@ -44,32 +44,24 @@ int wmain(int argc, wchar_t* argv[], wchar_t* envp[]) {
     InitDirs((args.empty() ? "" : *args.begin()));
 #endif
 
-    try {
-        // TODO Code combining config, persistent_config and commandline args is copy-pasted
-        // slightly differently in chmain, dmain and camain.  Make it into a single function.
-        XMLDoc doc;
-        {
-            boost::filesystem::ifstream ifs(GetConfigPath());
-            if (ifs) {
-                doc.ReadDoc(ifs);
-                GetOptionsDB().SetFromXML(doc);
-            }
-            boost::filesystem::ifstream pifs(GetPersistentConfigPath());
-            if (pifs) {
-                doc.ReadDoc(pifs);
-                GetOptionsDB().SetFromXML(doc);
-            }
-        }
-        GetOptionsDB().SetFromCommandLine(args);
-    } catch (const std::exception&) {
-        std::cerr << "main() unable to read config file: " << std::endl;
+    GetOptionsDB().Add<std::string>('h', "help", UserStringNop("OPTIONS_DB_HELP"), "NOOP",
+                                    Validator<std::string>(), false);
+
+    // if config.xml and persistent_config.xml are present, read and set options entries
+    GetOptionsDB().SetFromFile(GetConfigPath(), FreeOrionVersionString());
+    GetOptionsDB().SetFromFile(GetPersistentConfigPath());
+    GetOptionsDB().SetFromCommandLine(args);
+
+    auto help_arg = GetOptionsDB().Get<std::string>("help");
+    if (help_arg != "NOOP") {
+        GetOptionsDB().GetUsage(std::cerr, help_arg);
+        ShutdownLoggingSystemFileSink();
+        return 0;
     }
 
 #ifndef FREEORION_CAMAIN_KEEP_STACKTRACE
     try {
 #endif
-        parse::init();
-
         AIClientApp g_app(args);
 
         g_app();
@@ -78,22 +70,27 @@ int wmain(int argc, wchar_t* argv[], wchar_t* envp[]) {
     } catch (const std::invalid_argument& e) {
         ErrorLogger() << "main() caught exception(std::invalid_arg): " << e.what();
         std::cerr << "main() caught exception(std::invalid_arg): " << e.what() << std::endl;
+        ShutdownLoggingSystemFileSink();
         return 1;
     } catch (const std::runtime_error& e) {
         ErrorLogger() << "main() caught exception(std::runtime_error): " << e.what();
         std::cerr << "main() caught exception(std::runtime_error): " << e.what() << std::endl;
+        ShutdownLoggingSystemFileSink();
         return 1;
     } catch (const std::exception& e) {
         ErrorLogger() << "main() caught exception(std::exception): " << e.what();
         std::cerr << "main() caught exception(std::exception): " << e.what() << std::endl;
+        ShutdownLoggingSystemFileSink();
         return 1;
     } catch (...) {
         ErrorLogger() << "main() caught unknown exception.";
         std::cerr << "main() caught unknown exception." << std::endl;
+        ShutdownLoggingSystemFileSink();
         return 1;
     }
 #endif
     DebugLogger() << "AI client main exited cleanly.";
+    ShutdownLoggingSystemFileSink();
     return 0;
 }
 

@@ -19,7 +19,7 @@ class Application::Impl {
         /// The given window will be made visible.
         /// Then the event pump is started.
         /// This method only returns once the application quits
-        void Run(GG::Wnd* wnd);
+        void Run(std::shared_ptr<GG::Wnd> wnd);
 
     private:
         class Application* const m_front;
@@ -35,14 +35,15 @@ class MinimalGGApp : public GG::SDLGUI {
 
         virtual ~MinimalGGApp();
 
-        virtual void Enter2DMode();
-        virtual void Exit2DMode();
+        void Enter2DMode() override;
+        void Exit2DMode() override;
         virtual void GLInit();
 
-        virtual void Initialize(){}
+        void Initialize() override
+        {}
 
     protected:
-        virtual void Render();
+        void Render() override;
 };
 
 MinimalGGApp::MinimalGGApp(int width, int height, bool calculate_FPS,
@@ -202,8 +203,8 @@ Application::Application(int argc, char** argv, unsigned width, unsigned height)
 
 }
 
-void Application::Run(GG::Wnd* wnd) {
-    self->Run(wnd);
+void Application::Run(std::shared_ptr<GG::Wnd> wnd) {
+    self->Run(std::forward<std::shared_ptr<GG::Wnd>>(wnd));
 }
 
 
@@ -236,10 +237,10 @@ Application::Impl::Impl(Application* q, int argc, char** argv, unsigned width,
 Application::Impl::~Impl()
 { delete m_app; }
 
-void Application::Impl::Run(GG::Wnd* window) {
+void Application::Impl::Run(std::shared_ptr<GG::Wnd> window) {
     try {
 
-        m_app->Register(window);
+        m_app->Register(std::forward<std::shared_ptr<GG::Wnd>>(window));
         (*m_app)();
 
     } catch (const std::invalid_argument& e) {

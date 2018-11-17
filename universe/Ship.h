@@ -6,6 +6,11 @@
 
 #include "../util/Export.h"
 
+FO_COMMON_API extern const int ALL_EMPIRES;
+FO_COMMON_API extern const int INVALID_DESIGN_ID;
+FO_COMMON_API extern const int INVALID_GAME_TURN;
+FO_COMMON_API extern const int BEFORE_FIRST_TURN;
+FO_COMMON_API extern const int INVALID_OBJECT_ID;
 class ShipDesign;
 
 /** a class representing a single FreeOrion ship */
@@ -14,35 +19,25 @@ public:
     typedef std::map<std::pair<MeterType, std::string>, Meter>          PartMeterMap;
 
     /** \name Accessors */ //@{
+    bool HostileToEmpire(int empire_id) const override;
     std::set<std::string> Tags() const override;
-
     bool HasTag(const std::string& name) const override;
-
     UniverseObjectType ObjectType() const override;
-
-    std::string Dump() const override;
+    std::string Dump(unsigned short ntabs = 0) const override;
 
     int ContainerObjectID() const override
     { return m_fleet_id; }
 
     bool ContainedBy(int object_id) const override;
-
-    float NextTurnCurrentMeterValue(MeterType type) const override;
-
     const std::string& PublicName(int empire_id) const override;
-
     std::shared_ptr<UniverseObject> Accept(const UniverseObjectVisitor& visitor) const override;
 
     /** Back propagates part meters (which UniverseObject equivalent doesn't). */
     void BackPropagateMeters() override;
 
     void ResetTargetMaxUnpairedMeters() override;
-
     void ResetPairedActiveMeters() override;
-
     void ClampMeters() override;
-
-    void PopGrowthProductionResearchPhase() override;
 
     /** Returns new copy of this Ship. */
     Ship* Clone(int empire_id = ALL_EMPIRES) const override;
@@ -56,6 +51,7 @@ public:
 
     int                         ProducedByEmpireID() const  { return m_produced_by_empire_id; } ///< returns the empire ID of the empire that produced this ship
     int                         ArrivedOnTurn() const       { return m_arrived_on_turn; }       ///< returns the turn on which this ship arrived in its current system
+    int                         LastResuppliedOnTurn() const{ return m_last_resupplied_on_turn;}///< returns the turn on which this ship was last resupplied / upgraded
 
     bool                        IsMonster() const;
     bool                        IsArmed() const;
@@ -119,12 +115,13 @@ protected:
     /** \name Structors */ //@{
     Ship();
 
+public:
     /** Create a ship from an @p empire_id, @p design_id, @p species_name and
         @p production_by_empire_id. */
     Ship(int empire_id, int design_id, const std::string& species_name,
          int produced_by_empire_id = ALL_EMPIRES);
 
-    template <typename T> friend void UniverseObjectDeleter(T*);
+protected:
     template <class T> friend void boost::python::detail::value_destroyer<false>::execute(T const volatile* p);
 
 public:
@@ -132,17 +129,18 @@ public:
     //@}
 
 private:
-    int             m_design_id;
-    int             m_fleet_id;
-    bool            m_ordered_scrapped;
-    int             m_ordered_colonize_planet_id;
-    int             m_ordered_invade_planet_id;
-    int             m_ordered_bombard_planet_id;
-    int             m_last_turn_active_in_combat;
+    int             m_design_id = INVALID_DESIGN_ID;
+    int             m_fleet_id = INVALID_OBJECT_ID;
+    bool            m_ordered_scrapped = false;
+    int             m_ordered_colonize_planet_id = INVALID_OBJECT_ID;
+    int             m_ordered_invade_planet_id = INVALID_OBJECT_ID;
+    int             m_ordered_bombard_planet_id = INVALID_OBJECT_ID;
+    int             m_last_turn_active_in_combat = INVALID_GAME_TURN;
     PartMeterMap    m_part_meters;
     std::string     m_species_name;
-    int             m_produced_by_empire_id;
-    int             m_arrived_on_turn;
+    int             m_produced_by_empire_id = ALL_EMPIRES;
+    int             m_arrived_on_turn = INVALID_GAME_TURN;
+    int             m_last_resupplied_on_turn = BEFORE_FIRST_TURN;
 
     friend class boost::serialization::access;
     template <class Archive>

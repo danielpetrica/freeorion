@@ -58,6 +58,9 @@ GroupBox::GroupBox(X x, Y y, X w, Y h, const std::string& label, const std::shar
     m_font(font),
     m_label(label.empty() ? nullptr : GUI::GetGUI()->GetStyleFactory()->NewTextControl(label, m_font, m_text_color, FORMAT_LEFT | FORMAT_TOP)),
     m_set_client_corners_equal_to_box_corners(false)
+{}
+
+void GroupBox::CompleteConstruction()
 {
     if (m_label) {
         m_label->MoveTo(Pt(X0, -m_font->Lineskip()));
@@ -96,7 +99,7 @@ void GroupBox::Render()
         Value(ul.x), Value(lr.y),
         Value(lr.x), Value(lr.y),
         Value(lr.x), Value(ul.y),
-        vertices[0], Value(ul.y)
+        Value(ul.x) + FRAME_THICK + PIXEL_MARGIN - GAP_FROM_TEXT, Value(ul.y)
     };
     if (m_label) {
         vertices[0] = Value(m_label->TextUpperLeft().x - GAP_FROM_TEXT);
@@ -161,8 +164,6 @@ void GroupBox::SetClientCornersEqualToBoxCorners(bool b)
 
 void GroupBox::SetText(const std::string& str)
 {
-    delete m_label;
-
     if (!str.empty()) {
         m_label = GUI::GetGUI()->GetStyleFactory()->NewTextControl(str, m_font, m_text_color);
         m_label->MoveTo(Pt(X(FRAME_THICK + PIXEL_MARGIN), Y0));

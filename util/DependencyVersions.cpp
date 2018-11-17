@@ -8,7 +8,7 @@
 #include <boost/version.hpp>
 
 #if defined(FREEORION_BUILD_SERVER) || defined(FREEORION_BUILD_AI)
-#   include <python2.7/patchlevel.h>
+#   include <patchlevel.h>
 #endif
 
 #if defined(FREEORION_BUILD_HUMAN)
@@ -79,7 +79,7 @@ std::map<std::string, std::string> DependencyVersions() {
 
 void LogDependencyVersions() {
     InfoLogger() << "Dependency versions from headers:";
-    for (const std::map<std::string, std::string>::value_type& version : DependencyVersions()) {
+    for (const auto& version : DependencyVersions()) {
         if (!version.second.empty())
             InfoLogger() << version.first << ": " << version.second;
     }

@@ -5,12 +5,15 @@
 #include "ValueRefFwd.h"
 
 #include <boost/serialization/nvp.hpp>
+#include <boost/optional/optional.hpp>
 
 #include "../util/Export.h"
+#include "../util/Pending.h"
 
 #include <memory>
 #include <string>
 #include <vector>
+#include <map>
 
 
 namespace Effect {
@@ -29,22 +32,12 @@ class FO_COMMON_API Special {
 public:
     /** \name Structors */ //@{
     Special(const std::string& name, const std::string& description,
-            ValueRef::ValueRefBase<double>* stealth,
-            const std::vector<std::shared_ptr<Effect::EffectsGroup>>& effects,
+            std::unique_ptr<ValueRef::ValueRefBase<double>>&& stealth,
+            std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects,
             double spawn_rate = 1.0, int spawn_limit = 99999,
-            ValueRef::ValueRefBase<double>* initial_capaicty = nullptr,
-            Condition::ConditionBase* location = nullptr,
-            const std::string& graphic = "") :
-        m_name(name),
-        m_description(description),
-        m_stealth(stealth),
-        m_effects(effects),
-        m_spawn_rate(spawn_rate),
-        m_spawn_limit(spawn_limit),
-        m_initial_capacity(initial_capaicty),
-        m_location(location),
-        m_graphic(graphic)
-    { Init(); }
+            std::unique_ptr<ValueRef::ValueRefBase<double>>&& initial_capaicty = nullptr,
+            std::unique_ptr<Condition::ConditionBase>&& location = nullptr,
+            const std::string& graphic = "");
 
     ~Special();
     //@}
@@ -52,36 +45,42 @@ public:
     /** \name Accessors */ //@{
     const std::string&                      Name() const        { return m_name; }          ///< returns the unique name for this type of special
     std::string                             Description() const;                            ///< returns a text description of this type of special
-    std::string                             Dump() const;                                   ///< returns a data file format representation of this object
-    const ValueRef::ValueRefBase<double>*   Stealth() const     { return m_stealth; }       ///< returns the stealth of the special, which determines how easily it is seen by empires
+    std::string                             Dump(unsigned short ntabs = 0) const;           ///< returns a data file format representation of this object
+    const ValueRef::ValueRefBase<double>*   Stealth() const     { return m_stealth.get(); } ///< returns the stealth of the special, which determines how easily it is seen by empires
 
     /** Returns the EffectsGroups that encapsulate the effects that specials of
         this type have. */
     const std::vector<std::shared_ptr<Effect::EffectsGroup>>& Effects() const
     { return m_effects; }
 
-    float                                   SpawnRate() const   { return m_spawn_rate; }
-    int                                     SpawnLimit() const  { return m_spawn_limit; }
-    const ValueRef::ValueRefBase<double>*   InitialCapacity() const                 { return m_initial_capacity; }  ///< returns the ValueRef to use to set the initial capacity of the special when placed
-    float                                   InitialCapacity(int object_id) const;           ///< evaluates initial apacity ValueRef using the object with specified \a object_id as the object on which the special will be placed
-    const Condition::ConditionBase*         Location() const    { return m_location; }      ///< returns the condition that determines whether an UniverseObject can have this special applied during universe creation
-    const std::string&                      Graphic() const     { return m_graphic; };      ///< returns the name of the grapic file for this special
+    float                                   SpawnRate() const       { return m_spawn_rate; }
+    int                                     SpawnLimit() const      { return m_spawn_limit; }
+    const ValueRef::ValueRefBase<double>*   InitialCapacity() const { return m_initial_capacity.get(); }///< returns the ValueRef to use to set the initial capacity of the special when placed
+    float                                   InitialCapacity(int object_id) const;                       ///< evaluates initial apacity ValueRef using the object with specified \a object_id as the object on which the special will be placed
+    const Condition::ConditionBase*         Location() const        { return m_location.get(); }        ///< returns the condition that determines whether an UniverseObject can have this special applied during universe creation
+    const std::string&                      Graphic() const         { return m_graphic; };              ///< returns the name of the grapic file for this special
+
+    /** Returns a number, calculated from the contained data, which should be
+      * different for different contained data, and must be the same for
+      * the same contained data, and must be the same on different platforms
+      * and executions of the program and the function. Useful to verify that
+      * the parsed content is consistent without sending it all between
+      * clients and server. */
+    unsigned int                            GetCheckSum() const;
     //@}
 
 private:
     void    Init();
 
-    std::string                     m_name;
-    std::string                     m_description;
-    ValueRef::ValueRefBase<double>* m_stealth;
-
-    std::vector<std::shared_ptr<Effect::EffectsGroup>> m_effects;
-
-    float                           m_spawn_rate;
-    int                             m_spawn_limit;
-    ValueRef::ValueRefBase<double>* m_initial_capacity;
-    Condition::ConditionBase*       m_location;
-    std::string                     m_graphic;
+    std::string                                         m_name = "";
+    std::string                                         m_description = "";
+    std::unique_ptr<ValueRef::ValueRefBase<double>>     m_stealth;
+    std::vector<std::shared_ptr<Effect::EffectsGroup>>  m_effects;
+    float                                               m_spawn_rate = 0.0f;
+    int                                                 m_spawn_limit = 99999;
+    std::unique_ptr<ValueRef::ValueRefBase<double>>     m_initial_capacity;
+    std::unique_ptr<Condition::ConditionBase>           m_location;
+    std::string                                         m_graphic ="";
 
     friend class boost::serialization::access;
     template <class Archive>
@@ -109,5 +108,37 @@ void Special::serialize(Archive& ar, const unsigned int version)
         & BOOST_SERIALIZATION_NVP(m_location)
         & BOOST_SERIALIZATION_NVP(m_graphic);
 }
+
+/** Look up table for specials.*/
+class FO_COMMON_API SpecialsManager {
+public:
+    using SpecialsTypeMap = std::map<std::string, std::unique_ptr<Special>>;
+
+    /** \name Structors */ //@{
+    SpecialsManager();
+    ~SpecialsManager();
+    //@}
+
+    /** \name Accessors */ //@{
+    std::vector<std::string> SpecialNames() const;
+    const Special* GetSpecial(const std::string& name) const;
+    unsigned int GetCheckSum() const;
+    //@}
+
+    /** Sets types to the value of \p future. */
+    void SetSpecialsTypes(Pending::Pending<SpecialsTypeMap>&& future);
+
+private:
+    /** Assigns any m_pending_types to m_specials. */
+    void CheckPendingSpecialsTypes() const;
+
+    /** Future types being parsed by parser.  mutable so that it can
+        be assigned to m_species_types when completed.*/
+    mutable boost::optional<Pending::Pending<SpecialsTypeMap>> m_pending_types = boost::none;
+
+    mutable SpecialsTypeMap m_specials;
+};
+
+FO_COMMON_API SpecialsManager& GetSpecialsManager();
 
 #endif // _Special_h_

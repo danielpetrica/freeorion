@@ -4,65 +4,86 @@
 #include "EnumParser.h"
 #include "ConditionParserImpl.h"
 #include "ValueRefParser.h"
-#include "CommonParams.h"
+#include "CommonParamsParser.h"
 
 #include "../universe/Building.h"
 #include "../universe/Enums.h"
+#include "../universe/ValueRef.h"
 
+//TODO: replace with std::make_unique when transitioning to C++14
+#include <boost/smart_ptr/make_unique.hpp>
 
 #define DEBUG_PARSERS 0
 
 #if DEBUG_PARSERS
 namespace std {
-    inline ostream& operator<<(ostream& os, const std::vector<std::shared_ptr<Effect::EffectsGroup>>&) { return os; }
-    inline ostream& operator<<(ostream& os, const std::map<std::string, BuildingType*>&) { return os; }
-    inline ostream& operator<<(ostream& os, const std::pair<const std::string, BuildingType*>&) { return os; }
+    inline ostream& operator<<(ostream& os, const parse::effects_group_payload&) { return os; }
+    inline ostream& operator<<(ostream& os, const std::map<std::string, std::unique_ptr<BuildingType>>&) { return os; }
+    inline ostream& operator<<(ostream& os, const std::pair<const std::string, std::unique_ptr<BuildingType>>&) { return os; }
 }
 #endif
 
 namespace {
-    struct insert_ {
-        typedef void result_type;
+    const boost::phoenix::function<parse::detail::is_unique> is_unique_;
 
-        void operator()(std::map<std::string, BuildingType*>& building_types, BuildingType* building_type) const {
-            if (!building_types.insert(std::make_pair(building_type->Name(), building_type)).second) {
-                std::string error_str = "ERROR: More than one building type in buildings.txt has the name " + building_type->Name();
-                throw std::runtime_error(error_str.c_str());
-            }
-        }
-    };
-    const boost::phoenix::function<insert_> insert;
+    void insert_building(std::map<std::string, std::unique_ptr<BuildingType>>& building_types,
+                         const std::string& name,
+                         const std::string& description,
+                         const parse::detail::MovableEnvelope<CommonParams>& common_params,
+                         CaptureResult& capture_result,
+                         const std::string& icon,
+                         bool& pass)
+    {
+        auto building_type = boost::make_unique<BuildingType>(
+            name, description, *common_params.OpenEnvelope(pass), capture_result, icon);
 
-    struct rules {
-        rules() {
+        building_types.insert(std::make_pair(building_type->Name(), std::move(building_type)));
+    }
+
+    BOOST_PHOENIX_ADAPT_FUNCTION(void, insert_building_, insert_building, 7)
+
+    using start_rule_payload = std::map<std::string, std::unique_ptr<BuildingType>>;
+    using start_rule_signature = void(start_rule_payload&);
+
+    struct grammar : public parse::detail::grammar<start_rule_signature> {
+        grammar(const parse::lexer& tok,
+                const std::string& filename,
+                const parse::text_iterator& first, const parse::text_iterator& last) :
+            grammar::base_type(start),
+            condition_parser(tok, label),
+            string_grammar(tok, label, condition_parser),
+            tags_parser(tok, label),
+            common_rules(tok, label, condition_parser, string_grammar, tags_parser),
+            capture_result_enum(tok)
+        {
             namespace phoenix = boost::phoenix;
             namespace qi = boost::spirit::qi;
-
-            using phoenix::new_;
 
             qi::_1_type _1;
             qi::_2_type _2;
             qi::_3_type _3;
             qi::_4_type _4;
-            qi::_a_type _a;
-            qi::_b_type _b;
-            qi::_c_type _c;
-            qi::_d_type _d;
+            qi::_5_type _5;
+            qi::_6_type _6;
+            qi::_pass_type _pass;
+            qi::_val_type _val;
             qi::_r1_type _r1;
             qi::eps_type eps;
 
-            const parse::lexer& tok = parse::lexer::instance();
+            capture %=
+                (label(tok.CaptureResult_) >> capture_result_enum)
+                | eps [ _val = CR_CAPTURE ]
+                ;
 
             building_type
-                =   tok.BuildingType_
-                >   parse::detail::label(Name_token)                > tok.string        [ _a = _1 ]
-                >   parse::detail::label(Description_token)         > tok.string        [ _b = _1 ]
-                >   (   parse::detail::label(CaptureResult_token)   >> parse::capture_result_enum() [ _d = _1 ]
-                    |   eps [ _d = CR_CAPTURE ]
-                    )
-                >   parse::detail::common_params_parser() [ _c = _1 ]
-                >   parse::detail::label(Icon_token)      > tok.string
-                [ insert(_r1, new_<BuildingType>(_a, _b, _c, _d, _1)) ]
+                = ( tok.BuildingType_
+                >   label(tok.Name_)        > tok.string
+                >   label(tok.Description_) > tok.string
+                >   capture
+                >   common_rules.common
+                >   label(tok.Icon_)        > tok.string)
+                [ _pass = is_unique_(_r1, _1, _2),
+                  insert_building_(_r1, _2, _3, _5, _4, _6, _pass) ]
                 ;
 
             start
@@ -75,36 +96,34 @@ namespace {
             debug(building_type);
 #endif
 
-            qi::on_error<qi::fail>(start, parse::report_error(_1, _2, _3, _4));
+            qi::on_error<qi::fail>(start, parse::report_error(filename, first, last, _1, _2, _3, _4));
         }
 
-        typedef parse::detail::rule<
-            void (std::map<std::string, BuildingType*>&),
-            boost::spirit::qi::locals<
-                std::string,
-                std::string,
-                CommonParams,
-                CaptureResult
-            >
-        > building_type_rule;
+        using building_type_rule = parse::detail::rule<
+            void (std::map<std::string, std::unique_ptr<BuildingType>>&)>;
 
-        typedef parse::detail::rule<
-            void (std::map<std::string, BuildingType*>&)
-        > start_rule;
+        using start_rule = parse::detail::rule<start_rule_signature>;
 
-        building_type_rule          building_type;
-        start_rule                  start;
+        parse::detail::Labeller                 label;
+        const parse::conditions_parser_grammar  condition_parser;
+        const parse::string_parser_grammar      string_grammar;
+        parse::detail::tags_grammar             tags_parser;
+        parse::detail::common_params_rules      common_rules;
+        parse::capture_result_enum_grammar      capture_result_enum;
+        parse::detail::rule<CaptureResult ()>   capture;
+        building_type_rule                      building_type;
+        start_rule                              start;
     };
 }
 
 namespace parse {
-    bool buildings(std::map<std::string, BuildingType*>& building_types) {
-        bool result = true;
-
-        for (const boost::filesystem::path& file : ListScripts("scripting/buildings")) {
-            result &= detail::parse_file<rules, std::map<std::string, BuildingType*>>(file, building_types);
+    start_rule_payload buildings(const boost::filesystem::path& path) {
+        const lexer lexer;
+        start_rule_payload building_types;
+        for (const boost::filesystem::path& file : ListScripts(path)) {
+            /*auto success =*/ detail::parse_file<grammar, start_rule_payload>(lexer, file, building_types);
         }
 
-        return result;
+        return building_types;
     }
 }

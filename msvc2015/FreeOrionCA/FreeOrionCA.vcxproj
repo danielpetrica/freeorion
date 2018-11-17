@@ -137,8 +137,11 @@
     <ClInclude Include="..\..\client\ClientApp.h" />
     <ClInclude Include="..\..\client\ClientFSMEvents.h" />
     <ClInclude Include="..\..\Empire\Empire.h" />
+    <ClInclude Include="..\..\Empire\ResearchQueue.h" />
+    <ClInclude Include="..\..\Empire\ProductionQueue.h" />
     <ClInclude Include="..\..\Empire\EmpireManager.h" />
     <ClInclude Include="..\..\Empire\ResourcePool.h" />
+    <ClInclude Include="..\..\Empire\PopulationPool.h" />
     <ClInclude Include="..\..\GG\GG\Clr.h" />
     <ClInclude Include="..\..\GG\GG\Exception.h" />
     <ClInclude Include="..\..\network\ClientNetworking.h" />
@@ -157,6 +160,7 @@
     <ClInclude Include="..\..\universe\Enums.h" />
     <ClInclude Include="..\..\universe\Fleet.h" />
     <ClInclude Include="..\..\util\blocking_combiner.h" />
+    <ClInclude Include="..\..\universe\IDAllocator.h" />
     <ClInclude Include="..\..\universe\Meter.h" />
     <ClInclude Include="..\..\universe\ObjectMap.h" />
     <ClInclude Include="..\..\universe\Planet.h" />
@@ -177,6 +181,7 @@
     <ClInclude Include="..\..\util\binreloc.h" />
     <ClInclude Include="..\..\util\Directories.h" />
     <ClInclude Include="..\..\util\MultiplayerCommon.h" />
+    <ClInclude Include="..\..\util\GameRules.h" />
     <ClInclude Include="..\..\util\i18n.h" />
     <ClInclude Include="..\..\util\Logger.h" />
     <ClInclude Include="..\..\util\OptionsDB.h" />
@@ -201,6 +206,7 @@
     <ClCompile Include="..\..\python\AI\AIFramework.cpp" />
     <ClCompile Include="..\..\python\AI\AIWrapper.cpp" />
     <ClCompile Include="..\..\python\CommonFramework.cpp" />
+    <ClCompile Include="..\..\python\ConfigWrapper.cpp" />
     <ClCompile Include="..\..\python\EmpireWrapper.cpp" />
     <ClCompile Include="..\..\python\EnumWrapper.cpp" />
     <ClCompile Include="..\..\python\LoggingWrapper.cpp" />

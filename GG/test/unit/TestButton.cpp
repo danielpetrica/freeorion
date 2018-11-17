@@ -4,6 +4,7 @@
 #include <GG/Button.h>
 #include <GG/GUI.h>
 
+
 class MockGUI : public GG::GUI
 {
 public:
@@ -20,7 +21,7 @@ public:
     GG::Y AppHeight() const override
     { return GG::Y(600); }
 
-    void Exit(int code) override
+    void ExitApp(int code = 0) override
     {}
 
     void Enter2DMode() override
@@ -103,7 +104,8 @@ BOOST_AUTO_TEST_SUITE(TestButton)
 BOOST_AUTO_TEST_CASE( constructor )
 {
     std::shared_ptr<GG::Font> font(new MockFont());
-    InspectButton button("Test", font, GG::CLR_WHITE, GG::CLR_GREEN);
+    auto buttonp = GG::Wnd::Create<InspectButton>("Test", font, GG::CLR_WHITE, GG::CLR_GREEN);
+    auto& button = *buttonp;
 
     BOOST_CHECK(button.Text() == "Test");
     BOOST_CHECK(button.State() == GG::Button::BN_UNPRESSED);
@@ -216,7 +218,8 @@ BOOST_AUTO_TEST_CASE( click )
 
     BOOST_CHECK(catcher.count == 0);
 
-    GG::Connect(button.LeftClickedSignal, &MouseClickCatcher::CountClick, &catcher);
+    button.LeftClickedSignal.connect(
+        boost::bind(&MouseClickCatcher::CountClick, &catcher));
     BOOST_CHECK(button.LeftClickedSignal.num_slots() == 1);
 
     button.HandleEventE(mouseenter_ev);

@@ -4,6 +4,7 @@
 #include "UniverseObject.h"
 
 #include "../util/Export.h"
+#include "../util/Pending.h"
 
 namespace Effect {
     class EffectsGroup;
@@ -19,7 +20,7 @@ public:
 
     UniverseObjectType ObjectType() const override;
 
-    std::string Dump() const override;
+    std::string Dump(unsigned short ntabs = 0) const override;
 
     int ContainerObjectID() const override;
 
@@ -49,9 +50,10 @@ protected:
     /** \name Structors */ //@{
     Field();
 
+public:
     Field(const std::string& field_type, double x, double y, double radius);
 
-    template <typename T> friend void UniverseObjectDeleter(T*);
+protected:
     template <class T> friend void boost::python::detail::value_destroyer<false>::execute(T const volatile* p);
 
 public:
@@ -77,7 +79,7 @@ public:
     /** \name Structors */ //@{
     FieldType(const std::string& name, const std::string& description,
               float stealth, const std::set<std::string>& tags,
-              const std::vector<std::shared_ptr<Effect::EffectsGroup>>& effects,
+              std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects,
               const std::string& graphic);
     ~FieldType();
     //@}
@@ -85,7 +87,7 @@ public:
     /** \name Accessors */ //@{
     const std::string&              Name() const            { return m_name; }          ///< returns the unique name for this type of field
     const std::string&              Description() const     { return m_description; }   ///< returns a text description of this type of building
-    std::string                     Dump() const;                                       ///< returns a data file format representation of this object
+    std::string                     Dump(unsigned short ntabs = 0) const;                                       ///< returns a data file format representation of this object
     float                           Stealth() const         { return m_stealth; }       ///< returns stealth of field type
     const std::set<std::string>&    Tags() const            { return m_tags; }
 
@@ -95,21 +97,30 @@ public:
     { return m_effects; }
 
     const std::string&              Graphic() const         { return m_graphic; }       ///< returns the name of the grapic file for this field type
+
+    /** Returns a number, calculated from the contained data, which should be
+      * different for different contained data, and must be the same for
+      * the same contained data, and must be the same on different platforms
+      * and executions of the program and the function. Useful to verify that
+      * the parsed content is consistent without sending it all between
+      * clients and server. */
+    unsigned int                    GetCheckSum() const;
     //@}
 
 private:
-    std::string                                             m_name;
-    std::string                                             m_description;
-    float                                                   m_stealth;
-    std::set<std::string>                                   m_tags;
-    std::vector<std::shared_ptr<Effect::EffectsGroup>> m_effects;
-    std::string                                             m_graphic;
+    std::string                                         m_name;
+    std::string                                         m_description;
+    float                                               m_stealth;
+    std::set<std::string>                               m_tags;
+    std::vector<std::shared_ptr<Effect::EffectsGroup>>  m_effects;
+    std::string                                         m_graphic;
 };
 
 
 class FieldTypeManager {
 public:
-    typedef std::map<std::string, FieldType*>::const_iterator iterator;
+    using FieldTypeMap = std::map<std::string, std::unique_ptr<FieldType>>;
+    using iterator = FieldTypeMap::const_iterator;
 
     /** \name Accessors */ //@{
     /** returns the field type with the name \a name; you should use the
@@ -117,19 +128,38 @@ public:
     const FieldType*            GetFieldType(const std::string& name) const;
 
     /** iterator to the first field type */
-    iterator                    begin() const   { return m_field_types.begin(); }
+    FO_COMMON_API iterator      begin() const;
 
     /** iterator to the last + 1th field type */
-    iterator                    end() const     { return m_field_types.end(); }
+    FO_COMMON_API iterator      end() const;
 
     /** returns the instance of this singleton class; you should use the free
       * function GetFieldTypeManager() instead */
     static FieldTypeManager&    GetFieldTypeManager();
+
+    /** Returns a number, calculated from the contained data, which should be
+      * different for different contained data, and must be the same for
+      * the same contained data, and must be the same on different platforms
+      * and executions of the program and the function. Useful to verify that
+      * the parsed content is consistent without sending it all between
+      * clients and server. */
+    unsigned int                GetCheckSum() const;
     //@}
+
+    /** Sets types to the value of \p future. */
+    FO_COMMON_API void SetFieldTypes(Pending::Pending<FieldTypeMap>&& future);
+
 private:
     FieldTypeManager();
-    ~FieldTypeManager();
-    std::map<std::string, FieldType*>   m_field_types;
+
+    /** Assigns any m_pending_types to m_field_types. */
+    void CheckPendingFieldTypes() const;
+
+    /** Future types being parsed by parser.  mutable so that it can
+        be assigned to m_field_types when completed.*/
+    mutable boost::optional<Pending::Pending<FieldTypeMap>> m_pending_types = boost::none;
+
+    mutable FieldTypeMap   m_field_types;
     static FieldTypeManager*            s_instance;
 };
 

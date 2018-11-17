@@ -3,17 +3,22 @@
 #include "ClientUI.h"
 #include "CUIControls.h"
 
-AccordionPanel::AccordionPanel(GG::X w, GG::Y h, bool is_button_on_left /*= false*/) :
+namespace {
+    const int EXPAND_BUTTON_SIZE = 20;
+}
+
+AccordionPanel::AccordionPanel(GG::X w, GG::Y h, bool is_button_on_left) :
     GG::Control(GG::X0, GG::Y0, w, h, GG::INTERACTIVE),
     m_expand_button(nullptr),
-    m_collapsed(true),
     m_is_left(is_button_on_left),
-    m_interior_color(ClientUI::WndColor()),
-    m_border_margin(0)
-{
+    m_interior_color(ClientUI::WndColor())
+{}
+
+void AccordionPanel::CompleteConstruction() {
+    GG::Control::CompleteConstruction();
     boost::filesystem::path button_texture_dir = ClientUI::ArtDir() / "icons" / "buttons";
 
-    m_expand_button = new CUIButton(
+    m_expand_button = Wnd::Create<CUIButton>(
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "downarrownormal.png")),
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "downarrowclicked.png")),
         GG::SubTexture(ClientUI::GetTexture(button_texture_dir / "downarrowmouseover.png")));
@@ -22,7 +27,8 @@ AccordionPanel::AccordionPanel(GG::X w, GG::Y h, bool is_button_on_left /*= fals
 
     AttachChild(m_expand_button);
 
-    DoLayout();
+    // Don't call the virtual function, derived classes may not be completed
+    AccordionPanel::DoLayout();
     InitBuffer();
 }
 
@@ -118,6 +124,6 @@ void AccordionPanel::DoLayout() {
     GG::Pt expand_button_ul(m_is_left ? GG::X(-(EXPAND_BUTTON_SIZE + m_border_margin))
                             : (Width() + GG::X(-(EXPAND_BUTTON_SIZE + m_border_margin))), GG::Y0);
     GG::Pt expand_button_lr = expand_button_ul + GG::Pt(GG::X(EXPAND_BUTTON_SIZE), GG::Y(EXPAND_BUTTON_SIZE));
-    Wnd::MoveChildUp(m_expand_button);
+    Wnd::MoveChildUp(m_expand_button.get());
     m_expand_button->SizeMove(expand_button_ul, expand_button_lr);
 }

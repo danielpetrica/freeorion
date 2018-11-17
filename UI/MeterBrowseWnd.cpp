@@ -4,6 +4,7 @@
 
 #include "../util/i18n.h"
 #include "../util/Logger.h"
+#include "../util/GameRules.h"
 #include "../universe/Building.h"
 #include "../universe/Effect.h"
 #include "../universe/Planet.h"
@@ -27,13 +28,13 @@ namespace {
 
     /** Returns text representation of number wrapped in GG RGBA tags for
       * colour depending on whether number is positive, negative or 0.0 */
-    std::string ColouredNumber(double number) {
+    std::string ColouredNumber(double number, unsigned int digits = 3) {
         GG::Clr clr = ClientUI::TextColor();
         if (number > 0.0)
             clr = ClientUI::StatIncrColor();
         else if (number < 0.0)
             clr = ClientUI::StatDecrColor();
-        return ColourWrappedtext(DoubleToString(number, 3, true), clr);
+        return ColourWrappedtext(DoubleToString(number, digits, true), clr);
     }
 
     /** Cast int to string, prepend sign if requested */
@@ -58,7 +59,7 @@ namespace {
         return ColourWrappedtext(IntToString(number, prepend), clr);
     }
 
-    const int       EDGE_PAD(3);
+    const int EDGE_PAD(3);
 
     GG::X MeterBrowseLabelWidth()
     { return GG::X(30*ClientUI::Pts()); }
@@ -83,21 +84,12 @@ MeterBrowseWnd::MeterBrowseWnd(int object_id, MeterType primary_meter_type) :
     MeterBrowseWnd(object_id, primary_meter_type, INVALID_METER_TYPE)
 {}
 
-MeterBrowseWnd::MeterBrowseWnd(int object_id, MeterType primary_meter_type, MeterType secondary_meter_type) :
+MeterBrowseWnd::MeterBrowseWnd(int object_id, MeterType primary_meter_type,
+                               MeterType secondary_meter_type) :
     GG::BrowseInfoWnd(GG::X0, GG::Y0, MeterBrowseLabelWidth() + MeterBrowseValueWidth(), GG::Y1),
     m_primary_meter_type(primary_meter_type),
     m_secondary_meter_type(secondary_meter_type),
-    m_object_id(object_id),
-    m_summary_title(nullptr),
-    m_current_label(nullptr),
-    m_current_value(nullptr),
-    m_next_turn_label(nullptr),
-    m_next_turn_value(nullptr),
-    m_change_label(nullptr),
-    m_change_value(nullptr),
-    m_meter_title(nullptr),
-    m_row_height(1),
-    m_initialized(false)
+    m_object_id(object_id)
 {}
 
 bool MeterBrowseWnd::WndHasBrowseInfo(const Wnd* wnd, std::size_t mode) const {
@@ -109,15 +101,22 @@ void MeterBrowseWnd::Render() {
     GG::Pt ul = UpperLeft();
     GG::Pt lr = LowerRight();
     // main background
-    GG::FlatRectangle(ul, lr, OpaqueColor(ClientUI::WndColor()), ClientUI::WndOuterBorderColor(), 1);
+    GG::FlatRectangle(ul, lr, OpaqueColor(ClientUI::WndColor()),
+                      ClientUI::WndOuterBorderColor(), 1);
 
     // top title filled background
     if (m_summary_title)
-        GG::FlatRectangle(m_summary_title->UpperLeft(), m_summary_title->LowerRight() + GG::Pt(GG::X(EDGE_PAD), GG::Y0), ClientUI::WndOuterBorderColor(), ClientUI::WndOuterBorderColor(), 0);
+        GG::FlatRectangle(m_summary_title->UpperLeft(),
+                          m_summary_title->LowerRight() + GG::Pt(GG::X(EDGE_PAD), GG::Y0),
+                          ClientUI::WndOuterBorderColor(),
+                          ClientUI::WndOuterBorderColor(), 0);
 
     // middle title filled background
     if (m_meter_title)
-        GG::FlatRectangle(m_meter_title->UpperLeft(), m_meter_title->LowerRight() + GG::Pt(GG::X(EDGE_PAD), GG::Y0), ClientUI::WndOuterBorderColor(), ClientUI::WndOuterBorderColor(), 0);
+        GG::FlatRectangle(m_meter_title->UpperLeft(),
+                          m_meter_title->LowerRight() + GG::Pt(GG::X(EDGE_PAD), GG::Y0),
+                          ClientUI::WndOuterBorderColor(),
+                          ClientUI::WndOuterBorderColor(), 0);
 }
 
 namespace {
@@ -131,7 +130,7 @@ void MeterBrowseWnd::Initialize() {
     const GG::X TOTAL_WIDTH = MeterBrowseLabelWidth() + MeterBrowseValueWidth();
 
     // get objects and meters to verify that they exist
-    std::shared_ptr<const UniverseObject> obj = GetUniverseObject(m_object_id);
+    auto obj = GetUniverseObject(m_object_id);
     if (!obj) {
         ErrorLogger() << "MeterBrowseWnd couldn't get object with id " << m_object_id;
         return;
@@ -150,7 +149,7 @@ void MeterBrowseWnd::Initialize() {
         std::string summary_title_text;
         if (m_primary_meter_type == METER_POPULATION) {
             std::string human_readable_species_name;
-            if (std::shared_ptr<const PopCenter> pop = std::dynamic_pointer_cast<const PopCenter>(obj)) {
+            if (auto pop = std::dynamic_pointer_cast<const PopCenter>(obj)) {
                 const std::string& species_name = pop->SpeciesName();
                 if (!species_name.empty())
                     human_readable_species_name = UserString(species_name);
@@ -160,41 +159,41 @@ void MeterBrowseWnd::Initialize() {
             summary_title_text = MeterToUserString(m_primary_meter_type);
         }
 
-        m_summary_title = new CUILabel(summary_title_text, GG::FORMAT_RIGHT);
+        m_summary_title = GG::Wnd::Create<CUILabel>(summary_title_text, GG::FORMAT_RIGHT);
         m_summary_title->MoveTo(GG::Pt(GG::X0, top));
         m_summary_title->Resize(GG::Pt(TOTAL_WIDTH - EDGE_PAD, m_row_height));
         m_summary_title->SetFont(ClientUI::GetBoldFont());
         AttachChild(m_summary_title);
         top += m_row_height;
 
-        m_current_label = new CUILabel(UserString("TT_THIS_TURN"), GG::FORMAT_RIGHT);
+        m_current_label = GG::Wnd::Create<CUILabel>(UserString("TT_THIS_TURN"), GG::FORMAT_RIGHT);
         m_current_label->MoveTo(GG::Pt(GG::X0, top));
         m_current_label->Resize(GG::Pt(MeterBrowseLabelWidth(), m_row_height));
         AttachChild(m_current_label);
 
-        m_current_value = new CUILabel("");
+        m_current_value = GG::Wnd::Create<CUILabel>("");
         m_current_value->MoveTo(GG::Pt(MeterBrowseLabelWidth(), top));
         m_current_value->Resize(GG::Pt(MeterBrowseValueWidth(), m_row_height));
         AttachChild(m_current_value);
         top += m_row_height;
 
-        m_next_turn_label = new CUILabel(UserString("TT_NEXT_TURN"), GG::FORMAT_RIGHT);
+        m_next_turn_label = GG::Wnd::Create<CUILabel>(UserString("TT_NEXT_TURN"), GG::FORMAT_RIGHT);
         m_next_turn_label->MoveTo(GG::Pt(GG::X0, top));
         m_next_turn_label->Resize(GG::Pt(MeterBrowseLabelWidth(), m_row_height));
         AttachChild(m_next_turn_label);
 
-        m_next_turn_value = new CUILabel("");
+        m_next_turn_value = GG::Wnd::Create<CUILabel>("");
         m_next_turn_value->MoveTo(GG::Pt(MeterBrowseLabelWidth(), top));
         m_next_turn_value->Resize(GG::Pt(MeterBrowseValueWidth(), m_row_height));
         AttachChild(m_next_turn_value);
         top += m_row_height;
 
-        m_change_label = new CUILabel(UserString("TT_CHANGE"), GG::FORMAT_RIGHT);
+        m_change_label = GG::Wnd::Create<CUILabel>(UserString("TT_CHANGE"), GG::FORMAT_RIGHT);
         m_change_label->MoveTo(GG::Pt(GG::X0, top));
         m_change_label->Resize(GG::Pt(MeterBrowseLabelWidth(), m_row_height));
         AttachChild(m_change_label);
 
-        m_change_value = new CUILabel("");
+        m_change_value = GG::Wnd::Create<CUILabel>("");
         m_change_value->MoveTo(GG::Pt(MeterBrowseLabelWidth(), top));
         m_change_value->Resize(GG::Pt(MeterBrowseValueWidth(), m_row_height));
         AttachChild(m_change_value);
@@ -205,7 +204,7 @@ void MeterBrowseWnd::Initialize() {
         // effect accounting meter breakdown total / summary.  Shows "Meter Name: Value"
         // above a list of effects.  Actual text is set in UpdateSummary() but
         // the control is created here.
-        m_meter_title = new CUILabel("", GG::FORMAT_RIGHT);
+        m_meter_title = GG::Wnd::Create<CUILabel>("", GG::FORMAT_RIGHT);
         m_meter_title->MoveTo(GG::Pt(GG::X0, top));
         m_meter_title->Resize(GG::Pt(TOTAL_WIDTH - EDGE_PAD, m_row_height));
         m_meter_title->SetFont(ClientUI::GetBoldFont());
@@ -223,21 +222,23 @@ void MeterBrowseWnd::Initialize() {
 }
 
 void MeterBrowseWnd::UpdateImpl(std::size_t mode, const Wnd* target) {
-    // because a MeterBrowseWnd's contents depends only on the meters of a single object, if that object doesn't
-    // change between showings of the meter browse wnd, it's not necessary to fully recreate the MeterBrowseWnd,
-    // and it can be just reshown.without being altered.  To refresh a MeterBrowseWnd, recreate it by assigning
-    // a new one as the moused-over object's BrowseWnd in this Wnd's place
+    // because a MeterBrowseWnd's contents depends only on the meters of a
+    // single object, if that object doesn't change between showings of the
+    // meter browse wnd, it's not necessary to fully recreate the
+    // MeterBrowseWnd, and it can be just reshown.without being altered. To
+    // refresh a MeterBrowseWnd, recreate it by assigning a new one as the
+    // moused-over object's BrowseWnd in this Wnd's place
     if (!m_initialized)
         Initialize();
 }
 
 namespace {
     /** Return the vector of accounting information from \p obj_id of \p meter_type.*/
-    boost::optional<const std::vector<Effect::AccountingInfo>& > GetAccountingInfo(
+    boost::optional<const std::vector<Effect::AccountingInfo>&> GetAccountingInfo(
         int obj_id, const MeterType& meter_type)
     {
         // get object and meter, aborting if not valid
-        std::shared_ptr<const UniverseObject> obj = GetUniverseObject(obj_id);
+        auto obj = GetUniverseObject(obj_id);
         if (!obj) {
             ErrorLogger() << "Couldn't get object with id " << obj_id;
             return boost::none;
@@ -245,85 +246,32 @@ namespace {
 
         // get effect accounting info for this MeterBrowseWnd's object, aborting if non available
         const Universe& universe = GetUniverse();
-        const Effect::AccountingMap& effect_accounting_map = universe.GetEffectAccountingMap();
-        Effect::AccountingMap::const_iterator map_it = effect_accounting_map.find(obj_id);
+        const auto& effect_accounting_map = universe.GetEffectAccountingMap();
+        auto map_it = effect_accounting_map.find(obj_id);
         if (map_it == effect_accounting_map.end())
             return boost::none;
-        const std::map<MeterType, std::vector<Effect::AccountingInfo>>& meter_map = map_it->second;
+        const auto& meter_map = map_it->second;
 
         // get accounting info for this MeterBrowseWnd's meter type, aborting if none available
-        std::map<MeterType, std::vector<Effect::AccountingInfo>>::const_iterator meter_it = meter_map.find(meter_type);
+        auto meter_it = meter_map.find(meter_type);
         if (meter_it == meter_map.end() || meter_it->second.empty())
             return boost::none;
 
-        const std::vector<Effect::AccountingInfo>& info_vec = meter_it->second;
-        return info_vec;
-    }
-}
-
-namespace DualMeter {
-
-    /** Return the triplet of {Current, Projected, Target} meter value for the pair of meters \p
-        actual_meter_type and \p target_meter_type associated with \p obj. */
-    std::tuple<float, float, float> CurrentProjectedTarget(
-        const UniverseObject& obj, const MeterType& actual_meter_type, const MeterType& target_meter_type)
-    {
-        const Meter* actual_meter = obj.GetMeter(actual_meter_type);
-
-        float current = Meter::INVALID_VALUE;
-        float projected = Meter::INVALID_VALUE;
-        if (actual_meter) {
-            current = actual_meter->Initial();
-            projected = obj.NextTurnCurrentMeterValue(actual_meter_type);
-
-            // If there is accounting info, correct the projected result by including the
-            // results of all known effects in addition to the default meter change.
-            if (boost::optional<const std::vector<Effect::AccountingInfo>&>
-                maybe_info_vec = GetAccountingInfo(obj.ID(), actual_meter_type))
-            {
-                projected -= current;
-                for (const Effect::AccountingInfo& info : *maybe_info_vec) {
-                    if ((info.cause_type == ECT_UNKNOWN_CAUSE)
-                        || (info.cause_type == INVALID_EFFECTS_GROUP_CAUSE_TYPE))
-                    {
-                        continue;
-                    }
-                    projected += info.meter_change;
-                }
-            }
-        }
-
-        const Meter* target_meter = obj.GetMeter(target_meter_type);
-        const float target = target_meter ? target_meter->Current() : Meter::INVALID_VALUE;
-
-        // Clamp projected value with the target value
-        if (actual_meter && target_meter
-            && ((current <= target && target < projected)
-                || (projected < target && target <= current)))
-        {
-            projected = target;
-        }
-
-        // Clamp when there is no target.
-        if (!target_meter)
-            projected = current;
-
-        return std::make_tuple(current, projected, target);
+        return meter_it->second;
     }
 }
 
 void MeterBrowseWnd::UpdateSummary() {
-    std::shared_ptr<const UniverseObject> obj = GetUniverseObject(m_object_id);
+    auto obj = GetUniverseObject(m_object_id);
     if (!obj)
         return;
 
     const Meter* primary_meter = obj->GetMeter(m_primary_meter_type);
-    const Meter* secondary_meter = obj->GetMeter(m_secondary_meter_type);
-
     if (!primary_meter) {
         ErrorLogger() << "MeterBrowseWnd::UpdateSummary can't get primary meter";
         return;
     }
+    const Meter* secondary_meter = obj->GetMeter(m_secondary_meter_type);
 
     float breakdown_total = 0.0f;
     std::string breakdown_meter_name;
@@ -334,23 +282,18 @@ void MeterBrowseWnd::UpdateSummary() {
             return;
         }
 
-        std::tuple<float, float, float> current_projected_target = DualMeter::CurrentProjectedTarget(
-            *obj, m_primary_meter_type, m_secondary_meter_type);
-
-        m_current_value->SetText(DoubleToString(std::get<0>(current_projected_target), 3, false));
-        m_next_turn_value->SetText(DoubleToString(std::get<1>(current_projected_target), 3, false));
-        float primary_change = std::get<1>(current_projected_target) - std::get<0>(current_projected_target);
-        m_change_value->SetText(ColouredNumber(primary_change));
+        m_current_value->SetText(DoubleToString(primary_meter->Initial(), 3, false));
+        m_next_turn_value->SetText(DoubleToString(primary_meter->Current(), 3, false));
+        float primary_change = primary_meter->Current() - primary_meter->Initial();
+        m_change_value->SetText(ColouredNumber(primary_change, 3));
 
         // target or max meter total for breakdown summary
-        breakdown_total = std::get<2>(current_projected_target);
+        breakdown_total = secondary_meter->Current();
         breakdown_meter_name = MeterToUserString(m_secondary_meter_type);
-    } else {
-        std::tuple<float, float, float> current_projected_target = DualMeter::CurrentProjectedTarget(
-            *obj, m_primary_meter_type, m_secondary_meter_type);
 
+    } else {    // no secondary meter
         // unpaired meter total for breakdown summary
-        breakdown_total = std::get<0>(current_projected_target);
+        breakdown_total = primary_meter->Current();
         breakdown_meter_name = MeterToUserString(m_primary_meter_type);
     }
 
@@ -363,9 +306,9 @@ void MeterBrowseWnd::UpdateSummary() {
 
 void MeterBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
     // clear existing labels
-    for (const std::pair<GG::Label*, GG::Label*>& effect_label : m_effect_labels_and_values) {
-        DeleteChild(effect_label.first);
-        DeleteChild(effect_label.second);
+    for (const auto& effect_label : m_effect_labels_and_values) {
+        DetachChild(effect_label.first);
+        DetachChild(effect_label.second);
     }
     m_effect_labels_and_values.clear();
 
@@ -382,28 +325,23 @@ void MeterBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
     if (accounting_displayed_for_meter == INVALID_METER_TYPE)
         return; // nothing to display
 
-    boost::optional<const std::vector<Effect::AccountingInfo>&>
-        maybe_info_vec = GetAccountingInfo(m_object_id, accounting_displayed_for_meter);
+    auto maybe_info_vec = GetAccountingInfo(m_object_id, accounting_displayed_for_meter);
     if (!maybe_info_vec)
         return;
 
     // add label-value pairs for each alteration recorded for this meter
-    for (const Effect::AccountingInfo& info : *maybe_info_vec) {
-        std::shared_ptr<const UniverseObject> source = GetUniverseObject(info.source_id);
+    for (const auto& info : *maybe_info_vec) {
+        auto source = GetUniverseObject(info.source_id);
 
-        const Empire*   empire = nullptr;
-        std::shared_ptr<const Building> building;
-        std::shared_ptr<const Planet> planet;
-        //std::shared_ptr<const Ship> ship;
-        std::string     text;
-        std::string     name;
+        std::string text;
+        std::string name;
         if (source)
             name = source->Name();
 
         switch (info.cause_type) {
         case ECT_TECH: {
             name.clear();
-            if ((empire = GetEmpire(source->Owner())))
+            if (const auto empire = GetEmpire(source->Owner()))
                 name = empire->Name();
             const std::string& label_template = (info.custom_label.empty()
                 ? UserString("TT_TECH")
@@ -415,8 +353,8 @@ void MeterBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
         }
         case ECT_BUILDING: {
             name.clear();
-            if (building = std::dynamic_pointer_cast<const Building>(source))
-                if (planet = GetPlanet(building->PlanetID()))
+            if (const auto& building = std::dynamic_pointer_cast<const Building>(source))
+                if (const auto& planet = GetPlanet(building->PlanetID()))
                     name = planet->Name();
             const std::string& label_template = (info.custom_label.empty()
                 ? UserString("TT_BUILDING")
@@ -484,12 +422,12 @@ void MeterBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
             text += label_template;
         }
 
-        GG::Label* label = new CUILabel(text, GG::FORMAT_RIGHT);
+        auto label = GG::Wnd::Create<CUILabel>(text, GG::FORMAT_RIGHT);
         label->MoveTo(GG::Pt(GG::X0, top));
         label->Resize(GG::Pt(MeterBrowseLabelWidth(), m_row_height));
         AttachChild(label);
 
-        GG::Label* value = new CUILabel(ColouredNumber(info.meter_change));
+        auto value = GG::Wnd::Create<CUILabel>(ColouredNumber(info.meter_change, 3));
         value->MoveTo(GG::Pt(MeterBrowseLabelWidth(), top));
         value->Resize(GG::Pt(MeterBrowseValueWidth(), m_row_height));
         AttachChild(value);
@@ -498,7 +436,6 @@ void MeterBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
         top += m_row_height;
     }
 }
-
 
 ShipDamageBrowseWnd::ShipDamageBrowseWnd(int object_id, MeterType primary_meter_type) :
     MeterBrowseWnd(object_id, primary_meter_type)
@@ -509,7 +446,7 @@ void ShipDamageBrowseWnd::Initialize() {
     const GG::X TOTAL_WIDTH = MeterBrowseLabelWidth() + MeterBrowseValueWidth();
 
     // get objects and meters to verify that they exist
-    std::shared_ptr<const UniverseObject> ship = GetShip(m_object_id);
+    auto ship = GetShip(m_object_id);
     if (!ship) {
         ErrorLogger() << "ShipDamageBrowseWnd couldn't get ship with id " << m_object_id;
         return;
@@ -521,7 +458,7 @@ void ShipDamageBrowseWnd::Initialize() {
     // effect accounting meter breakdown total / summary.  Shows "Meter Name: Value"
     // above a list of effects.  Actual text is set in UpdateSummary() but
     // the control is created here.
-    m_meter_title = new CUILabel("", GG::FORMAT_RIGHT);
+    m_meter_title = GG::Wnd::Create<CUILabel>("", GG::FORMAT_RIGHT);
     m_meter_title->MoveTo(GG::Pt(GG::X0, top));
     m_meter_title->Resize(GG::Pt(TOTAL_WIDTH - EDGE_PAD, m_row_height));
     m_meter_title->SetFont(ClientUI::GetBoldFont());
@@ -547,7 +484,7 @@ void ShipDamageBrowseWnd::UpdateImpl(std::size_t mode, const Wnd* target) {
 }
 
 void ShipDamageBrowseWnd::UpdateSummary() {
-    std::shared_ptr<const Ship> ship = GetShip(m_object_id);
+    auto ship = GetShip(m_object_id);
     if (!ship)
         return;
 
@@ -565,14 +502,14 @@ void ShipDamageBrowseWnd::UpdateSummary() {
 
 void ShipDamageBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
     // clear existing labels
-    for (const std::pair<GG::Label*, GG::Label*>& effect_label : m_effect_labels_and_values) {
-        DeleteChild(effect_label.first);
-        DeleteChild(effect_label.second);
+    for (const auto& effect_label : m_effect_labels_and_values) {
+        DetachChild(effect_label.first);
+        DetachChild(effect_label.second);
     }
     m_effect_labels_and_values.clear();
 
     // get object and meter, aborting if not valid
-    std::shared_ptr<const Ship> ship = GetShip(m_object_id);
+    auto ship = GetShip(m_object_id);
     if (!ship) {
         ErrorLogger() << "ShipDamageBrowseWnd::UpdateEffectLabelsAndValues couldn't get ship with id " << m_object_id;
         return;
@@ -599,12 +536,12 @@ void ShipDamageBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
                             ship->CurrentPartMeterValue(METER_SECONDARY_STAT, part_name);
         std::string text = boost::io::str(FlexibleFormat(label_template) % name % UserString(part_name));
 
-        GG::Label* label = new CUILabel(text, GG::FORMAT_RIGHT);
+        auto label = GG::Wnd::Create<CUILabel>(text, GG::FORMAT_RIGHT);
         label->MoveTo(GG::Pt(GG::X0, top));
         label->Resize(GG::Pt(MeterBrowseLabelWidth(), m_row_height));
         AttachChild(label);
 
-        GG::Label* value = new CUILabel(ColouredNumber(part_attack));
+        auto value = GG::Wnd::Create<CUILabel>(ColouredNumber(part_attack));
         value->MoveTo(GG::Pt(MeterBrowseLabelWidth(), top));
         value->Resize(GG::Pt(MeterBrowseValueWidth(), m_row_height));
         AttachChild(value);
@@ -627,19 +564,14 @@ namespace {
         ShipFightersBrowseRow(const std::string& label, int qty, double value, double base_value = 0.0f) :
             GG::ListBox::Row(FighterBrowseListWidth(), MeterBrowseRowHeight(), "")
         {
-            SetMargin(EDGE_PAD);
             const GG::Clr QTY_COLOR = GG::CLR_GRAY;
 
-            CUILabel* label_control = new CUILabel(label, GG::FORMAT_RIGHT);
-            push_back(label_control);
-            label_control->Resize(GG::Pt(FighterBrowseLabelWidth(), MeterBrowseRowHeight()));
+            m_label_control = GG::Wnd::Create<CUILabel>(label, GG::FORMAT_RIGHT);
 
             std::string qty_text;
             if (qty > 1)
                 qty_text = ColourWrappedtext("* " + IntToString(qty), QTY_COLOR);
-            CUILabel* qty_control = new CUILabel(qty_text);
-            push_back(qty_control);
-            qty_control->Resize(GG::Pt(MeterBrowseQtyWidth(), MeterBrowseRowHeight()));
+            m_qty_control = GG::Wnd::Create<CUILabel>(qty_text);
 
             std::string value_text;
             if (base_value > 0.0f) {
@@ -648,12 +580,30 @@ namespace {
             } else {
                 value_text = IntToString(value);
             }
-            CUILabel* value_control = new CUILabel(value_text, GG::FORMAT_RIGHT);
-            push_back(value_control);
-            value_control->Resize(GG::Pt(MeterBrowseValueWidth(), MeterBrowseRowHeight()));
+            m_value_control = GG::Wnd::Create<CUILabel>(value_text, GG::FORMAT_RIGHT);
+        }
+
+        void CompleteConstruction() override {
+            GG::ListBox::Row::CompleteConstruction();
+
+            SetMargin(EDGE_PAD);
+
+            push_back(m_label_control);
+            m_label_control->Resize(GG::Pt(FighterBrowseLabelWidth(), MeterBrowseRowHeight()));
+
+            push_back(m_qty_control);
+            m_qty_control->Resize(GG::Pt(MeterBrowseQtyWidth(), MeterBrowseRowHeight()));
+
+            push_back(m_value_control);
+            m_value_control->Resize(GG::Pt(MeterBrowseValueWidth(), MeterBrowseRowHeight()));
 
             // Resize(GG::Pt(FighterBrowseListWidth(), MeterBrowseRowHeight()));
         }
+
+    private:
+        std::shared_ptr<CUILabel> m_label_control;
+        std::shared_ptr<CUILabel> m_qty_control;
+        std::shared_ptr<CUILabel> m_value_control;
     };
 }
 
@@ -674,7 +624,7 @@ void ShipFightersBrowseWnd::Initialize() {
     const GG::Clr BG_COLOR = ClientUI::WndColor();
 
     // get objects and meters to verify that they exist
-    std::shared_ptr<const UniverseObject> ship = GetShip(m_object_id);
+    auto ship = GetShip(m_object_id);
     if (!ship) {
         ErrorLogger() << "Couldn't get ship with id " << m_object_id;
         return;
@@ -682,7 +632,7 @@ void ShipFightersBrowseWnd::Initialize() {
     GG::Y top = GG::Y0;
 
     // create controls and do layout
-    m_meter_title = new CUILabel("", GG::FORMAT_RIGHT);
+    m_meter_title = GG::Wnd::Create<CUILabel>("", GG::FORMAT_RIGHT);
     m_meter_title->MoveTo(GG::Pt(GG::X0, top));
     m_meter_title->Resize(GG::Pt(TOTAL_WIDTH + EDGE_PAD, m_row_height));
     m_meter_title->SetFont(ClientUI::GetBoldFont());
@@ -691,7 +641,7 @@ void ShipFightersBrowseWnd::Initialize() {
     top += m_row_height;
 
     // initialize formatting for list of bay part labels
-    m_bay_list = new CUIListBox();
+    m_bay_list = GG::Wnd::Create<CUIListBox>();
     m_bay_list->SetColor(BG_COLOR);  // border
     m_bay_list->SetInteriorColor(BG_COLOR);  // background
     m_bay_list->ManuallyManageColProps();
@@ -703,7 +653,7 @@ void ShipFightersBrowseWnd::Initialize() {
     AttachChild(m_bay_list);
 
     // initialize formatting for list of hangar part labels
-    m_hangar_list = new CUIListBox();
+    m_hangar_list = GG::Wnd::Create<CUIListBox>();
     m_hangar_list->SetColor(BG_COLOR);
     m_hangar_list->SetInteriorColor(BG_COLOR);
     m_hangar_list->ManuallyManageColProps();
@@ -729,7 +679,7 @@ void ShipFightersBrowseWnd::UpdateImpl(std::size_t mode, const Wnd* target) {
 }
 
 void ShipFightersBrowseWnd::UpdateSummary() {
-    std::shared_ptr<const Ship> ship = GetShip(m_object_id);
+    auto ship = GetShip(m_object_id);
     if (!ship)
         return;
 
@@ -763,7 +713,7 @@ namespace {
                                                        float fighter_damage, int limit_to_bout = -1)
     {
         std::map<int, FighterBoutInfo> retval;
-        const int NUM_BOUTS = GetUniverse().GetNumCombatRounds();
+        const int NUM_BOUTS = GetGameRules().Get<int>("RULE_NUM_COMBAT_ROUNDS");
         int target_bout = limit_to_bout < 1 ? NUM_BOUTS : limit_to_bout;
         for (int bout = 1; bout <= target_bout; ++bout) {
             // init current fighters
@@ -793,15 +743,15 @@ namespace {
 void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
     // clear existing labels
     for (unsigned int i = 0; i < m_effect_labels_and_values.size(); ++i) {
-        DeleteChild(m_effect_labels_and_values[i].first);
-        DeleteChild(m_effect_labels_and_values[i].second);
+        DetachChild(m_effect_labels_and_values[i].first);
+        DetachChild(m_effect_labels_and_values[i].second);
     }
     m_effect_labels_and_values.clear();
-    m_bay_list->DeleteChildren();
-    m_hangar_list->DeleteChildren();
+    m_bay_list->DetachChildren();
+    m_hangar_list->DetachChildren();
 
     // early return if no valid ship, ship design, or no parts in the design
-    std::shared_ptr<const Ship> ship = GetShip(m_object_id);
+    auto ship = GetShip(m_object_id);
     if (!ship) {
         ErrorLogger() << "Couldn't get ship with id " << m_object_id;
         return;
@@ -869,7 +819,7 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
     std::string bay_text = boost::io::str(FlexibleFormat(UserString("TT_BREAKDOWN_SUMMARY"))
                                           % UserString("SHIP_FIGHTER_BAY_SUMMARY")
                                           % ColouredInt(bay_total_capacity, false, BAY_COLOR));
-    GG::Label* bay_summary = new CUILabel(bay_text, GG::FORMAT_RIGHT);
+    auto bay_summary = GG::Wnd::Create<CUILabel>(bay_text, GG::FORMAT_RIGHT);
     bay_summary->SetFont(ClientUI::GetBoldFont());
     bay_summary->MoveTo(GG::Pt(GG::X(EDGE_PAD), top));
     bay_summary->Resize(GG::Pt(ROW_WIDTH, m_row_height));
@@ -881,7 +831,7 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
                                              % ColouredInt(hangar_total_capacity, false, HANGAR_COLOR));
     hangar_text = boost::io::str(FlexibleFormat(UserString("TT_BREAKDOWN_SUMMARY"))
                                  % UserString("SHIP_FIGHTER_HANGAR_SUMMARY") % hangar_text);
-    GG::Label* hangar_summary = new CUILabel(hangar_text, GG::FORMAT_RIGHT);
+    auto hangar_summary = GG::Wnd::Create<CUILabel>(hangar_text, GG::FORMAT_RIGHT);
     hangar_summary->SetFont(ClientUI::GetBoldFont());
     hangar_summary->MoveTo(GG::Pt(ROW_WIDTH + EDGE_PAD, top));
     hangar_summary->Resize(GG::Pt(ROW_WIDTH, m_row_height));
@@ -903,14 +853,14 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
         std::string damage_label_text = boost::io::str(FlexibleFormat(UserString("TT_FIGHTER_DAMAGE"))
                                                        % launch_text % fighter_damage_text);
         // damage formula label
-        GG::Label* damage_label = new CUILabel(damage_label_text, GG::FORMAT_RIGHT);
+        auto damage_label = GG::Wnd::Create<CUILabel>(damage_label_text, GG::FORMAT_RIGHT);
         damage_label->MoveTo(GG::Pt(GG::X(EDGE_PAD), top));
         damage_label->Resize(GG::Pt(LABEL_WIDTH + (QTY_WIDTH * 2) + (LABEL_WIDTH / 2) + (EDGE_PAD * 3), m_row_height));
         AttachChild(damage_label);
 
         std::string damage_value_text = DoubleToString(first_wave.damage, 3, false);
         // sum of damage formula label
-        GG::Label* damage_value = new CUILabel(ColourWrappedtext(damage_value_text, DAMAGE_COLOR), GG::FORMAT_RIGHT);
+        auto damage_value = GG::Wnd::Create<CUILabel>(ColourWrappedtext(damage_value_text, DAMAGE_COLOR), GG::FORMAT_RIGHT);
         damage_value->MoveTo(GG::Pt(LABEL_WIDTH + (QTY_WIDTH * 2) + (LABEL_WIDTH / 2) + (EDGE_PAD * 4), top));
         damage_value->Resize(GG::Pt(VALUE_WIDTH, m_row_height));
         damage_value->SetFont(ClientUI::GetBoldFont());
@@ -922,17 +872,17 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
         // Show each effect for part capacity summaries
 
         // add labels for bay parts
-        for (const std::map<std::string, std::pair<int, int>>::value_type& bay_part : bay_parts) {
+        for (const auto& bay_part : bay_parts) {
             const std::string& part_name = UserString(bay_part.first);
             int part_qty = bay_part.second.first;
             int fighter_total = bay_part.second.second * part_qty;
-            m_bay_list->Insert(new ShipFightersBrowseRow(part_name, part_qty, fighter_total));
+            m_bay_list->Insert(GG::Wnd::Create<ShipFightersBrowseRow>(part_name, part_qty, fighter_total));
         }
         // TODO Append other potential effects for bay capacities
 
         // add label for hangar part
-        m_hangar_list->Insert(new ShipFightersBrowseRow(UserString(hangar_part.first), hangar_part.second,
-                                                        hangar_current_fighters, hangar_total_capacity));
+        m_hangar_list->Insert(GG::Wnd::Create<ShipFightersBrowseRow>(UserString(hangar_part.first), hangar_part.second,
+                                                                     hangar_current_fighters, hangar_total_capacity));
         // TODO Append other potential effects for hangar capacities
 
         // calculate the required height to align both listboxes
@@ -960,14 +910,14 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
         std::string detail_value_text = ColourWrappedtext(DoubleToString(last_bout.total_damage, 3, false), DAMAGE_COLOR);
         detail_label_text = boost::io::str(FlexibleFormat(UserString("TT_BREAKDOWN_SUMMARY"))
                                            % detail_label_text % detail_value_text);
-        GG::Label* detail_summary_damage = new CUILabel(detail_label_text, GG::FORMAT_RIGHT);
+        auto detail_summary_damage = GG::Wnd::Create<CUILabel>(detail_label_text, GG::FORMAT_RIGHT);
         detail_summary_damage->MoveTo(GG::Pt(GG::X(EDGE_PAD), top));
         detail_summary_damage->Resize(GG::Pt(ROW_WIDTH + QTY_WIDTH + (LABEL_WIDTH / 2) + EDGE_PAD, m_row_height));
         detail_summary_damage->SetFont(ClientUI::GetBoldFont());
         AttachChild(detail_summary_damage);
 
         // empty space
-        GG::Label* detail_summary_launch = new CUILabel("", GG::FORMAT_RIGHT);
+        auto detail_summary_launch = GG::Wnd::Create<CUILabel>("", GG::FORMAT_RIGHT);
         detail_summary_launch->MoveTo(GG::Pt(ROW_WIDTH + QTY_WIDTH + (LABEL_WIDTH / 2) + (EDGE_PAD * 2), top));
         detail_summary_launch->Resize(GG::Pt(VALUE_WIDTH + EDGE_PAD + (LABEL_WIDTH / 2), m_row_height));
         detail_summary_launch->SetFont(ClientUI::GetBoldFont());
@@ -979,12 +929,12 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
         // Damage labels for each combat round
         GG::X left = GG::X0;
         int previous_docked = hangar_current_fighters;
-        for (std::map<int, FighterBoutInfo>::value_type& current_bout : bout_info) {
+        for (auto& current_bout : bout_info) {
             const FighterBoutInfo& bout = current_bout.second;
             // combat round label
             std::string bout_text = boost::io::str(FlexibleFormat(UserString("TT_COMBAT_ROUND"))
                                                    % IntToString(current_bout.first));
-            GG::Label* bout_label = new CUILabel(bout_text, GG::FORMAT_RIGHT);
+            auto bout_label = GG::Wnd::Create<CUILabel>(bout_text, GG::FORMAT_RIGHT);
             bout_label->MoveTo(GG::Pt(left, top));
             bout_label->Resize(GG::Pt((QTY_WIDTH * 2) + (EDGE_PAD * 3), m_row_height));
             AttachChild(bout_label);
@@ -994,7 +944,7 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
             std::string formula_label_text = boost::io::str(FlexibleFormat(UserString("TT_FIGHTER_DAMAGE"))
                                                             % IntToString(bout.qty.attacking)
                                                             % fighter_damage_text);
-            GG::Label* formula_label = new CUILabel(formula_label_text, GG::FORMAT_RIGHT);
+            auto formula_label = GG::Wnd::Create<CUILabel>(formula_label_text, GG::FORMAT_RIGHT);
             formula_label->MoveTo(GG::Pt(left, top));
             formula_label->Resize(GG::Pt(LABEL_WIDTH + (LABEL_WIDTH / 2), m_row_height));
             AttachChild(formula_label);
@@ -1002,7 +952,7 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
 
             // sum of damage formula label
             std::string formula_value_text = DoubleToString(bout.damage, 3, false);
-            GG::Label* formula_value = new CUILabel(ColourWrappedtext(formula_value_text, DAMAGE_COLOR), GG::FORMAT_RIGHT);
+            auto formula_value = GG::Wnd::Create<CUILabel>(ColourWrappedtext(formula_value_text, DAMAGE_COLOR), GG::FORMAT_RIGHT);
             formula_value->MoveTo(GG::Pt(left, top));
             formula_value->Resize(GG::Pt(VALUE_WIDTH, m_row_height));
             AttachChild(formula_value);
@@ -1010,7 +960,7 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
             left += VALUE_WIDTH + EDGE_PAD;
 
             // launched fighters label
-            GG::Label* launch_label = new CUILabel(UserString("TT_FIGHTER_LAUNCH"), GG::FORMAT_RIGHT);
+            auto launch_label = GG::Wnd::Create<CUILabel>(UserString("TT_FIGHTER_LAUNCH"), GG::FORMAT_RIGHT);
             launch_label->MoveTo(GG::Pt(left, top));
             launch_label->Resize(GG::Pt((LABEL_WIDTH / 2) + EDGE_PAD, m_row_height));
             AttachChild(launch_label);
@@ -1020,7 +970,7 @@ void ShipFightersBrowseWnd::UpdateEffectLabelsAndValues(GG::Y& top) {
             std::string launch_text = boost::io::str(FlexibleFormat(UserString("TT_N_OF_N"))
                                                      % ColouredInt(bout.qty.launched, false, launch_clr)
                                                      % ColouredInt(previous_docked, false, HANGAR_COLOR));
-            GG::Label* launch_value = new CUILabel(launch_text, GG::FORMAT_RIGHT);
+            auto launch_value = GG::Wnd::Create<CUILabel>(launch_text, GG::FORMAT_RIGHT);
             launch_value->MoveTo(GG::Pt(left, top));
             launch_value->Resize(GG::Pt(VALUE_WIDTH, m_row_height));
             AttachChild(launch_value);

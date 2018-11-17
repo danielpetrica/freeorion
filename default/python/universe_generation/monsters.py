@@ -1,9 +1,11 @@
 import random
+
 import freeorion as fo
-from util import MapGenerationError, report_error
-import statistics
+
+import universe_statistics
 import universe_tables
 from galaxy import DisjointSets
+from util import MapGenerationError, report_error
 
 
 class StarlaneAlteringMonsters(object):
@@ -122,7 +124,8 @@ def generate_monsters(monster_freq, systems):
     universe = fo.get_universe()
 
     # Fleet plans that include ships capable of altering starlanes.
-    # @content_tag{CAN_ALTER_STARLANES} universe_generator special handling for fleets containing a hull design with this tag.
+    # @content_tag{CAN_ALTER_STARLANES} universe_generator special handling
+    # for fleets containing a hull design with this tag.
     fleet_can_alter_starlanes = {fp for fp in fleet_plans
                                  if any([universe.getGenericShipDesign(design).hull_type.hasTag("CAN_ALTER_STARLANES")
                                          for design in fp.ship_designs()])}
@@ -138,7 +141,7 @@ def generate_monsters(monster_freq, systems):
         print ("/ can be spawned at", len(fp_location_cache[fleet_plan]),
                "of", len(systems), "systems")
         if fleet_plan.name() in nest_name_map.values():
-            statistics.tracked_monsters_chance[fleet_plan.name()] = basic_chance * fleet_plan.spawn_rate()
+            universe_statistics.tracked_monsters_chance[fleet_plan.name()] = basic_chance * fleet_plan.spawn_rate()
 
     # initialize a manager for monsters that can alter the map
     # required to prevent their placement from disjoining the map
@@ -162,7 +165,7 @@ def generate_monsters(monster_freq, systems):
         # filter out all monster fleets whose location condition allows this system and whose counter hasn't reached 0.
         suitable_fleet_plans = [fp for fp in fleet_plans
                                 if system in fp_location_cache[fp]
-                                and spawn_limits[fp]
+                                and spawn_limits.get(fp, 0)
                                 and (fp not in fleet_can_alter_starlanes
                                      or starlane_altering_monsters.can_place_at(system, fp))]
         # if there are no suitable monster fleets for this system, continue with the next
@@ -201,10 +204,12 @@ def generate_monsters(monster_freq, systems):
 
     print "Actual # monster fleets placed: %d; Total Placement Expectation: %.1f" % (actual_tally, expectation_tally)
     # finally, compile some statistics to be dumped to the log later
-    statistics.monsters_summary = [(fp.name(), fp.spawn_limit() - counter) for fp, counter in spawn_limits.iteritems()]
-    statistics.tracked_monsters_tries.update(tracked_plan_tries)
-    statistics.tracked_monsters_summary.update(tracked_plan_counts)
-    statistics.tracked_monsters_location_summary.update([(fp.name(), count)
-                                                         for fp, count in tracked_plan_valid_locations.iteritems()])
-    statistics.tracked_nest_location_summary.update([(nest_name_map[nest], count)
-                                                     for nest, count in tracked_nest_valid_locations.items()])
+    universe_statistics.monsters_summary = [
+        (fp.name(), fp.spawn_limit() - counter) for fp, counter in spawn_limits.iteritems()
+    ]
+    universe_statistics.tracked_monsters_tries.update(tracked_plan_tries)
+    universe_statistics.tracked_monsters_summary.update(tracked_plan_counts)
+    universe_statistics.tracked_monsters_location_summary.update(
+        (fp.name(), count) for fp, count in tracked_plan_valid_locations.iteritems())
+    universe_statistics.tracked_nest_location_summary.update(
+        (nest_name_map[nest], count) for nest, count in tracked_nest_valid_locations.items())

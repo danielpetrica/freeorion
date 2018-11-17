@@ -4,14 +4,13 @@
 #include "Condition.h"
 #include "Universe.h"
 
-#include "../util/MultiplayerCommon.h"
-
 
 struct PlayerSetupData;
 
 /** A combination of names of ShipDesign that can be put together to make a
- * fleet of ships, and a name for such a fleet, loaded from starting_fleets.txt
- * ShipDesign names refer to designs listed in premade_ship_designs.txt.
+ * fleet of ships, and a name for such a fleet, loaded from
+ * default/scripting/starting_unlocks/fleets.inf
+ * ShipDesign names refer to designs listed in default/scripting/ship_designs.
  * Useful for saving or specifying prearranged combinations of prearranged
  * ShipDesigns to automatically put together, such as during universe creation.*/
 class FleetPlan {
@@ -30,6 +29,7 @@ public:
     virtual ~FleetPlan() {};
     const std::string&              Name() const;
     const std::vector<std::string>& ShipDesigns() const { return m_ship_designs; }
+
 protected:
     std::string                     m_name;
     std::vector<std::string>        m_ship_designs;
@@ -41,28 +41,27 @@ protected:
 class FO_COMMON_API MonsterFleetPlan : public FleetPlan {
 public:
     MonsterFleetPlan(const std::string& fleet_name, const std::vector<std::string>& ship_design_names,
-                     double spawn_rate = 1.0, int spawn_limit = 9999, const Condition::ConditionBase* location = nullptr,
+                     double spawn_rate = 1.0, int spawn_limit = 9999,
+                     std::unique_ptr<Condition::ConditionBase>&& location = nullptr,
                      bool lookup_name_userstring = false) :
         FleetPlan(fleet_name, ship_design_names, lookup_name_userstring),
         m_spawn_rate(spawn_rate),
         m_spawn_limit(spawn_limit),
-        m_location(location)
+        m_location(std::move(location))
     {}
     MonsterFleetPlan() :
-        FleetPlan(),
-        m_spawn_rate(1.0),
-        m_spawn_limit(9999),
-        m_location(nullptr)
+        FleetPlan()
     {}
     virtual ~MonsterFleetPlan()
-    { delete m_location; }
+    {}
     double                          SpawnRate() const   { return m_spawn_rate; }
     int                             SpawnLimit() const  { return m_spawn_limit; }
-    const Condition::ConditionBase* Location() const    { return m_location; }
+    const Condition::ConditionBase* Location() const    { return m_location.get(); }
 protected:
-    double                          m_spawn_rate;
-    int                             m_spawn_limit;
-    const Condition::ConditionBase* m_location;
+    double                          m_spawn_rate = 1.0;
+    int                             m_spawn_limit = 9999;
+    // Use shared_ptr insead of unique_ptr because boost::python requires a deleter
+    const std::shared_ptr<Condition::ConditionBase> m_location = nullptr;
 };
 
 /** Set active meter current values equal to target/max meter current

@@ -10,7 +10,6 @@
 #include "Fleet.h"
 #include "Ship.h"
 #include "ObjectMap.h"
-#include "ShipDesign.h"
 #include "Planet.h"
 #include "System.h"
 #include "Species.h"
@@ -27,9 +26,12 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/st_connected.hpp>
 
+//TODO: replace with std::make_unique when transitioning to C++14
+#include <boost/smart_ptr/make_unique.hpp>
+
 using boost::io::str;
 
-extern int g_indent;
+FO_COMMON_API extern const int INVALID_DESIGN_ID;
 
 bool UserStringExists(const std::string& str);
 
@@ -106,9 +108,9 @@ namespace {
     void EvalImpl(Condition::ObjectSet& matches, Condition::ObjectSet& non_matches,
                   Condition::SearchDomain search_domain, const Pred& pred)
     {
-        Condition::ObjectSet& from_set = search_domain == Condition::MATCHES ? matches : non_matches;
-        Condition::ObjectSet& to_set = search_domain == Condition::MATCHES ? non_matches : matches;
-        for (Condition::ObjectSet::iterator it = from_set.begin(); it != from_set.end(); ) {
+        auto& from_set = search_domain == Condition::MATCHES ? matches : non_matches;
+        auto& to_set = search_domain == Condition::MATCHES ? non_matches : matches;
+        for (auto it = from_set.begin(); it != from_set.end(); ) {
             bool match = pred(*it);
             if ((search_domain == Condition::MATCHES && !match) ||
                 (search_domain == Condition::NON_MATCHES && match))
@@ -174,7 +176,7 @@ std::string ConditionFailedDescription(const std::vector<ConditionBase*>& condit
     std::string retval;
 
     // test candidate against all input conditions, and store descriptions of each
-    for (std::map<std::string, bool>::value_type& result : ConditionDescriptionAndTest(conditions, parent_context, candidate_object)) {
+    for (const auto& result : ConditionDescriptionAndTest(conditions, parent_context, candidate_object)) {
             if (!result.second)
                  retval += UserString("FAILED") + " <rgba 255 0 0 255>" + result.first +"</rgba>\n";
     }
@@ -194,10 +196,10 @@ std::string ConditionDescription(const std::vector<ConditionBase*>& conditions,
 
     ScriptingContext parent_context(source_object);
     // test candidate against all input conditions, and store descriptions of each
-    std::map<std::string, bool> condition_description_and_test_results =
+    auto condition_description_and_test_results =
         ConditionDescriptionAndTest(conditions, parent_context, candidate_object);
     bool all_conditions_match_candidate = true, at_least_one_condition_matches_candidate = false;
-    for (std::map<std::string, bool>::value_type& result : condition_description_and_test_results) {
+    for (const auto& result : condition_description_and_test_results) {
         all_conditions_match_candidate = all_conditions_match_candidate && result.second;
         at_least_one_condition_matches_candidate = at_least_one_condition_matches_candidate || result.second;
     }
@@ -213,13 +215,12 @@ std::string ConditionDescription(const std::vector<ConditionBase*>& conditions,
     }
     // else just output single condition description and PASS/FAIL text
 
-    for (std::map<std::string, bool>::value_type& result : condition_description_and_test_results) {
+    for (const auto& result : condition_description_and_test_results) {
         retval += (result.second ? UserString("PASSED") : UserString("FAILED"));
         retval += " " + result.first + "\n";
     }
     return retval;
 }
-
 
 #define CHECK_COND_VREF_MEMBER(m_ptr) { if (m_ptr == rhs_.m_ptr) {              \
                                             /* check next member */             \
@@ -243,11 +244,10 @@ struct ConditionBase::MatchHelper {
     { return m_this->Match(ScriptingContext(m_parent_context, candidate)); }
 
     const ConditionBase* m_this;
-    const ScriptingContext&         m_parent_context;
+    const ScriptingContext& m_parent_context;
 };
 
-ConditionBase::~ConditionBase()
-{}
+ConditionBase::~ConditionBase() = default;
 
 bool ConditionBase::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -299,14 +299,12 @@ bool ConditionBase::Eval(std::shared_ptr<const UniverseObject> candidate) const 
 
 void ConditionBase::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_context,
                                                       ObjectSet& condition_non_targets) const
-{
-    AddAllObjectsSet(condition_non_targets);
-}
+{ AddAllObjectsSet(condition_non_targets); }
 
 std::string ConditionBase::Description(bool negated/* = false*/) const
 { return ""; }
 
-std::string ConditionBase::Dump() const
+std::string ConditionBase::Dump(unsigned short ntabs) const
 { return ""; }
 
 bool ConditionBase::Match(const ScriptingContext& local_context) const
@@ -315,12 +313,13 @@ bool ConditionBase::Match(const ScriptingContext& local_context) const
 ///////////////////////////////////////////////////////////
 // Number                                                //
 ///////////////////////////////////////////////////////////
-Number::~Number()
-{
-    delete m_low;
-    delete m_high;
-    delete m_condition;
-}
+Number::Number(std::unique_ptr<ValueRef::ValueRefBase<int>>&& low,
+               std::unique_ptr<ValueRef::ValueRefBase<int>>&& high,
+               std::unique_ptr<ConditionBase>&& condition) :
+    m_low(std::move(low)),
+    m_high(std::move(high)),
+    m_condition(std::move(condition))
+{}
 
 bool Number::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -356,16 +355,14 @@ std::string Number::Description(bool negated/* = false*/) const {
                % m_condition->Description());
 }
 
-std::string Number::Dump() const {
-    std::string retval = DumpIndent() + "Number";
+std::string Number::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Number";
     if (m_low)
-        retval += " low = " + m_low->Dump();
+        retval += " low = " + m_low->Dump(ntabs);
     if (m_high)
-        retval += " high = " + m_high->Dump();
+        retval += " high = " + m_high->Dump(ntabs);
     retval += " condition =\n";
-    ++g_indent;
-        retval += m_condition->Dump();
-    --g_indent;
+    retval += m_condition->Dump(ntabs+1);
     return retval;
 }
 
@@ -469,15 +466,30 @@ void Number::SetTopLevelContent(const std::string& content_name) {
         m_low->SetTopLevelContent(content_name);
     if (m_high)
         m_high->SetTopLevelContent(content_name);
+    if (m_condition)
+        m_condition->SetTopLevelContent(content_name);
+}
+
+unsigned int Number::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Number");
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+    CheckSums::CheckSumCombine(retval, m_condition);
+
+    TraceLogger() << "GetCheckSum(Number): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
 // Turn                                                  //
 ///////////////////////////////////////////////////////////
-Turn::~Turn() {
-    delete m_low;
-    delete m_high;
-}
+Turn::Turn(std::unique_ptr<ValueRef::ValueRefBase<int>>&& low,
+           std::unique_ptr<ValueRef::ValueRefBase<int>>&& high) :
+    m_low(std::move(low)),
+    m_high(std::move(high))
+{}
 
 bool Turn::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -555,45 +567,42 @@ std::string Turn::Description(bool negated/* = false*/) const {
                     std::to_string(m_high->Eval()) :
                     m_high->Description());
     std::string description_str;
-    if (m_low && m_high)
-    {
+
+    if (m_low && m_high) {
         description_str = (!negated)
             ? UserString("DESC_TURN")
             : UserString("DESC_TURN_NOT");
         return str(FlexibleFormat(description_str)
                    % low_str
                    % high_str);
-    }
-    else if (m_low)
-    {
+
+    } else if (m_low) {
         description_str = (!negated)
             ? UserString("DESC_TURN_MIN_ONLY")
             : UserString("DESC_TURN_MIN_ONLY_NOT");
         return str(FlexibleFormat(description_str)
                    % low_str);
-    }
-    else if (m_high)
-    {
+
+    } else if (m_high) {
         description_str = (!negated)
             ? UserString("DESC_TURN_MAX_ONLY")
             : UserString("DESC_TURN_MAX_ONLY_NOT");
         return str(FlexibleFormat(description_str)
                    % high_str);
-    }
-    else
-    {
+
+    } else {
         return (!negated)
             ? UserString("DESC_TURN_ANY")
             : UserString("DESC_TURN_ANY_NOT");
     }
 }
 
-std::string Turn::Dump() const {
-    std::string retval = DumpIndent() + "Turn";
+std::string Turn::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Turn";
     if (m_low)
-        retval += " low = " + m_low->Dump();
+        retval += " low = " + m_low->Dump(ntabs);
     if (m_high)
-        retval += " high = " + m_high->Dump();
+        retval += " high = " + m_high->Dump(ntabs);
     retval += "\n";
     return retval;
 }
@@ -612,14 +621,37 @@ void Turn::SetTopLevelContent(const std::string& content_name) {
         m_high->SetTopLevelContent(content_name);
 }
 
+unsigned int Turn::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Turn");
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+
+    TraceLogger() << "GetCheckSum(Turn): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // SortedNumberOf                                        //
 ///////////////////////////////////////////////////////////
-SortedNumberOf::~SortedNumberOf() {
-    delete m_number;
-    delete m_sort_key;
-    delete m_condition;
-}
+SortedNumberOf::SortedNumberOf(std::unique_ptr<ValueRef::ValueRefBase<int>>&& number,
+                               std::unique_ptr<ConditionBase>&& condition) :
+    m_number(std::move(number)),
+    m_sort_key(nullptr),
+    m_sorting_method(SORT_RANDOM),
+    m_condition(std::move(condition))
+{}
+
+SortedNumberOf::SortedNumberOf(std::unique_ptr<ValueRef::ValueRefBase<int>>&& number,
+                               std::unique_ptr<ValueRef::ValueRefBase<double>>&& sort_key_ref,
+                               SortingMethod sorting_method,
+                               std::unique_ptr<ConditionBase>&& condition) :
+    m_number(std::move(number)),
+    m_sort_key(std::move(sort_key_ref)),
+    m_sorting_method(sorting_method),
+    m_condition(std::move(condition))
+{}
 
 bool SortedNumberOf::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -665,7 +697,7 @@ namespace {
 
         // transfer objects that have been flagged
         int i = 0;
-        for (ObjectSet::iterator it = from_set.begin(); it != from_set.end(); ++i) {
+        for (auto it = from_set.begin(); it != from_set.end(); ++i) {
             if (transfer_flags[i]) {
                 to_set.push_back(*it);
                 *it = from_set.back();
@@ -699,9 +731,9 @@ namespace {
 
         // get sort key values for all objects in from_set, and sort by inserting into map
         std::multimap<float, std::shared_ptr<const UniverseObject>> sort_key_objects;
-        for (std::shared_ptr<const UniverseObject> from : from_set) {
+        for (auto& from : from_set) {
             float sort_value = sort_key->Eval(ScriptingContext(context, from));
-            sort_key_objects.insert(std::make_pair(sort_value, from));
+            sort_key_objects.insert({sort_value, from});
         }
 
         // how many objects to select?
@@ -714,9 +746,9 @@ namespace {
         if (sorting_method == SORT_MIN) {
             // move (number) objects with smallest sort key (at start of map)
             // from the from_set into the to_set.
-            for (std::multimap<float, std::shared_ptr<const UniverseObject>>::value_type& entry : sort_key_objects) {
-                std::shared_ptr<const UniverseObject> object_to_transfer = entry.second;
-                ObjectSet::iterator from_it = std::find(from_set.begin(), from_set.end(), object_to_transfer);
+            for (const auto& entry : sort_key_objects) {
+                auto object_to_transfer = entry.second;
+                auto from_it = std::find(from_set.begin(), from_set.end(), object_to_transfer);
                 if (from_it != from_set.end()) {
                     *from_it = from_set.back();
                     from_set.pop_back();
@@ -729,11 +761,11 @@ namespace {
         } else if (sorting_method == SORT_MAX) {
             // move (number) objects with largest sort key (at end of map)
             // from the from_set into the to_set.
-            for (std::multimap<float, std::shared_ptr<const UniverseObject>>::reverse_iterator sorted_it = sort_key_objects.rbegin();  // would use const_reverse_iterator but this causes a compile error in some compilers
+            for (auto sorted_it = sort_key_objects.rbegin();  // would use const_reverse_iterator but this causes a compile error in some compilers
                  sorted_it != sort_key_objects.rend(); ++sorted_it)
             {
-                std::shared_ptr<const UniverseObject> object_to_transfer = sorted_it->second;
-                ObjectSet::iterator from_it = std::find(from_set.begin(), from_set.end(), object_to_transfer);
+                auto object_to_transfer = sorted_it->second;
+                auto from_it = std::find(from_set.begin(), from_set.end(), object_to_transfer);
                 if (from_it != from_set.end()) {
                     *from_it = from_set.back();
                     from_set.pop_back();
@@ -746,33 +778,31 @@ namespace {
         } else if (sorting_method == SORT_MODE) {
             // compile histogram of of number of times each sort key occurs
             std::map<float, unsigned int> histogram;
-            for (std::multimap<float, std::shared_ptr<const UniverseObject>>::value_type& entry : sort_key_objects) {
+            for (const auto& entry : sort_key_objects) {
                 histogram[entry.first]++;
             }
             // invert histogram to index by number of occurances
             std::multimap<unsigned int, float> inv_histogram;
-            for (std::map<float, unsigned int>::value_type& entry : histogram) {
-                inv_histogram.insert(std::make_pair(entry.second, entry.first));
+            for (const auto& entry : histogram) {
+                inv_histogram.insert({entry.second, entry.first});
             }
             // reverse-loop through inverted histogram to find which sort keys
             // occurred most frequently, and transfer objects with those sort
             // keys from from_set to to_set.
-            for (std::multimap<unsigned int, float>::reverse_iterator inv_hist_it = inv_histogram.rbegin();  // would use const_reverse_iterator but this causes a compile error in some compilers
+            for (auto inv_hist_it = inv_histogram.rbegin();  // would use const_reverse_iterator but this causes a compile error in some compilers
                  inv_hist_it != inv_histogram.rend(); ++inv_hist_it)
             {
                 float cur_sort_key = inv_hist_it->second;
 
                 // get range of objects with the current sort key
-                std::pair<std::multimap<float, std::shared_ptr<const UniverseObject>>::const_iterator,
-                          std::multimap<float, std::shared_ptr<const UniverseObject>>::const_iterator> key_range =
-                    sort_key_objects.equal_range(cur_sort_key);
+                auto key_range = sort_key_objects.equal_range(cur_sort_key);
 
                 // loop over range, selecting objects to transfer from from_set to to_set
-                for (std::multimap<float, std::shared_ptr<const UniverseObject>>::const_iterator sorted_it = key_range.first;
+                for (auto sorted_it = key_range.first;
                      sorted_it != key_range.second; ++sorted_it)
                 {
-                    std::shared_ptr<const UniverseObject> object_to_transfer = sorted_it->second;
-                    ObjectSet::iterator from_it = std::find(from_set.begin(), from_set.end(), object_to_transfer);
+                    auto object_to_transfer = sorted_it->second;
+                    auto from_it = std::find(from_set.begin(), from_set.end(), object_to_transfer);
                     if (from_it != from_set.end()) {
                         *from_it = from_set.back();
                         from_set.pop_back();
@@ -846,15 +876,16 @@ void SortedNumberOf::Eval(const ScriptingContext& parent_context,
     // matches, or those left in matches while the rest are moved into non_matches
     ObjectSet matched_objects;
     matched_objects.reserve(number);
-    TransferSortedObjects(number, m_sort_key, local_context, m_sorting_method, all_subcondition_matches, matched_objects);
+    TransferSortedObjects(number, m_sort_key.get(), local_context, m_sorting_method, all_subcondition_matches, matched_objects);
 
     // put objects back into matches and non_target sets as output...
 
     if (search_domain == NON_MATCHES) {
         // put matched objects that are in subcondition_matching_non_matches into matches
-        for (std::shared_ptr<const UniverseObject> matched_object : matched_objects) {
+        for (auto& matched_object : matched_objects) {
             // is this matched object in subcondition_matching_non_matches?
-            ObjectSet::iterator smnt_it = std::find(subcondition_matching_non_matches.begin(), subcondition_matching_non_matches.end(), matched_object);
+            auto smnt_it = std::find(subcondition_matching_non_matches.begin(),
+                                     subcondition_matching_non_matches.end(), matched_object);
             if (smnt_it != subcondition_matching_non_matches.end()) {
                 // yes; move object to matches
                 *smnt_it = subcondition_matching_non_matches.back();
@@ -875,9 +906,10 @@ void SortedNumberOf::Eval(const ScriptingContext& parent_context,
 
     } else { /*(search_domain == MATCHES)*/
         // put matched objecs that are in subcondition_matching_matches back into matches
-        for (std::shared_ptr<const UniverseObject> matched_object : matched_objects) {
+        for (auto& matched_object : matched_objects) {
             // is this matched object in subcondition_matching_matches?
-            ObjectSet::iterator smt_it = std::find(subcondition_matching_matches.begin(), subcondition_matching_matches.end(), matched_object);
+            auto smt_it = std::find(subcondition_matching_matches.begin(),
+                                    subcondition_matching_matches.end(), matched_object);
             if (smt_it != subcondition_matching_matches.end()) {
                 // yes; move back into matches
                 *smt_it = subcondition_matching_matches.back();
@@ -956,8 +988,8 @@ std::string SortedNumberOf::Description(bool negated/* = false*/) const {
     }
 }
 
-std::string SortedNumberOf::Dump() const {
-    std::string retval = DumpIndent();
+std::string SortedNumberOf::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs);
     switch (m_sorting_method) {
     case SORT_RANDOM:
         retval += "NumberOf";   break;
@@ -971,15 +1003,13 @@ std::string SortedNumberOf::Dump() const {
         retval += "??NumberOf??"; break;
     }
 
-    retval += " number = " + m_number->Dump();
+    retval += " number = " + m_number->Dump(ntabs);
 
     if (m_sort_key)
-         retval += " sortby = " + m_sort_key->Dump();
+         retval += " sortby = " + m_sort_key->Dump(ntabs);
 
     retval += " condition =\n";
-    ++g_indent;
-        retval += m_condition->Dump();
-    --g_indent;
+    retval += m_condition->Dump(ntabs+1);
 
     return retval;
 }
@@ -1003,6 +1033,18 @@ void SortedNumberOf::SetTopLevelContent(const std::string& content_name) {
         m_condition->SetTopLevelContent(content_name);
 }
 
+unsigned int SortedNumberOf::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::SortedNumberOf");
+    CheckSums::CheckSumCombine(retval, m_number);
+    CheckSums::CheckSumCombine(retval, m_sort_key);
+    CheckSums::CheckSumCombine(retval, m_sorting_method);
+    CheckSums::CheckSumCombine(retval, m_condition);
+
+    TraceLogger() << "GetCheckSum(SortedNumberOf): retval: " << retval;
+    return retval;
+}
 
 ///////////////////////////////////////////////////////////
 // All                                                   //
@@ -1029,8 +1071,17 @@ std::string All::Description(bool negated/* = false*/) const {
         : UserString("DESC_ALL_NOT");
 }
 
-std::string All::Dump() const
-{ return DumpIndent() + "All\n"; }
+std::string All::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "All\n"; }
+
+unsigned int All::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::All");
+
+    TraceLogger() << "GetCheckSum(All): retval: " << retval;
+    return retval;
+}
 
 ///////////////////////////////////////////////////////////
 // None                                                   //
@@ -1056,21 +1107,36 @@ std::string None::Description(bool negated/* = false*/) const {
         : UserString("DESC_NONE_NOT");
 }
 
-std::string None::Dump() const
-{ return DumpIndent() + "None\n"; }
+std::string None::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "None\n"; }
+
+unsigned int None::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::None");
+
+    TraceLogger() << "GetCheckSum(None): retval: " << retval;
+    return retval;
+}
 
 ///////////////////////////////////////////////////////////
 // EmpireAffiliation                                     //
 ///////////////////////////////////////////////////////////
-EmpireAffiliation::EmpireAffiliation(ValueRef::ValueRefBase<int>* empire_id) :
-    m_empire_id(empire_id),
+EmpireAffiliation::EmpireAffiliation(std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id,
+                                     EmpireAffiliationType affiliation) :
+    m_empire_id(std::move(empire_id)),
+    m_affiliation(affiliation)
+{}
+
+EmpireAffiliation::EmpireAffiliation(std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id) :
+    m_empire_id(std::move(empire_id)),
     m_affiliation(AFFIL_SELF)
 {}
 
-EmpireAffiliation::~EmpireAffiliation() {
-    if (m_empire_id)
-        delete m_empire_id;
-}
+EmpireAffiliation::EmpireAffiliation(EmpireAffiliationType affiliation) :
+    m_empire_id(nullptr),
+    m_affiliation(affiliation)
+{}
 
 bool EmpireAffiliation::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -1218,12 +1284,12 @@ std::string EmpireAffiliation::Description(bool negated/* = false*/) const {
     }
 }
 
-std::string EmpireAffiliation::Dump() const {
-    std::string retval = DumpIndent();
+std::string EmpireAffiliation::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs);
     if (m_affiliation == AFFIL_SELF) {
         retval += "OwnedBy";
         if (m_empire_id)
-            retval += " empire = " + m_empire_id->Dump();
+            retval += " empire = " + m_empire_id->Dump(ntabs);
 
     } else if (m_affiliation == AFFIL_ANY) {
         retval += "OwnedBy affiliation = AnyEmpire";
@@ -1234,12 +1300,12 @@ std::string EmpireAffiliation::Dump() const {
     } else if (m_affiliation == AFFIL_ENEMY) {
         retval += "OwnedBy affilition = EnemyOf";
         if (m_empire_id)
-            retval += " empire = " + m_empire_id->Dump();
+            retval += " empire = " + m_empire_id->Dump(ntabs);
 
     } else if (m_affiliation == AFFIL_ALLY) {
         retval += "OwnedBy affiliation = AllyOf";
         if (m_empire_id)
-            retval += " empire = " + m_empire_id->Dump();
+            retval += " empire = " + m_empire_id->Dump(ntabs);
 
     } else if (m_affiliation == AFFIL_CAN_SEE) {
         retval += "OwnedBy affiliation = CanSee";
@@ -1256,7 +1322,7 @@ std::string EmpireAffiliation::Dump() const {
 }
 
 bool EmpireAffiliation::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "EmpireAffiliation::Match passed no candidate object";
         return false;
@@ -1272,6 +1338,17 @@ void EmpireAffiliation::SetTopLevelContent(const std::string& content_name) {
         m_empire_id->SetTopLevelContent(content_name);
 }
 
+unsigned int EmpireAffiliation::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::EmpireAffiliation");
+    CheckSums::CheckSumCombine(retval, m_empire_id);
+    CheckSums::CheckSumCombine(retval, m_affiliation);
+
+    TraceLogger() << "GetCheckSum(EmpireAffiliation): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // Source                                                //
 ///////////////////////////////////////////////////////////
@@ -1284,8 +1361,8 @@ std::string Source::Description(bool negated/* = false*/) const {
         : UserString("DESC_SOURCE_NOT");
 }
 
-std::string Source::Dump() const
-{ return DumpIndent() + "Source\n"; }
+std::string Source::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "Source\n"; }
 
 bool Source::Match(const ScriptingContext& local_context) const {
     if (!local_context.source)
@@ -1298,7 +1375,15 @@ void Source::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_co
 {
     if (parent_context.source)
         condition_non_targets.push_back(parent_context.source);
-    //DebugLogger() << "ConditionBase::Eval will check at most one source object rather than " << Objects().NumObjects() << " total objects";
+}
+
+unsigned int Source::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Source");
+
+    TraceLogger() << "GetCheckSum(Source): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
@@ -1313,13 +1398,30 @@ std::string RootCandidate::Description(bool negated/* = false*/) const {
         : UserString("DESC_ROOT_CANDIDATE_NOT");
 }
 
-std::string RootCandidate::Dump() const
-{ return DumpIndent() + "RootCandidate\n"; }
+std::string RootCandidate::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "RootCandidate\n"; }
 
 bool RootCandidate::Match(const ScriptingContext& local_context) const {
     if (!local_context.condition_root_candidate)
         return false;
     return local_context.condition_root_candidate == local_context.condition_local_candidate;
+}
+
+void RootCandidate::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_context,
+                                                      ObjectSet& condition_non_targets) const
+{
+    if (parent_context.condition_root_candidate)
+        condition_non_targets.push_back(parent_context.condition_root_candidate);
+}
+
+
+unsigned int RootCandidate::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::RootCandidate");
+
+    TraceLogger() << "GetCheckSum(RootCandidate): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
@@ -1334,8 +1436,8 @@ std::string Target::Description(bool negated/* = false*/) const {
         : UserString("DESC_TARGET_NOT");
 }
 
-std::string Target::Dump() const
-{ return DumpIndent() + "Target\n"; }
+std::string Target::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "Target\n"; }
 
 bool Target::Match(const ScriptingContext& local_context) const {
     if (!local_context.effect_target)
@@ -1350,13 +1452,27 @@ void Target::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_co
         condition_non_targets.push_back(parent_context.effect_target);
 }
 
+unsigned int Target::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Target");
+
+    TraceLogger() << "GetCheckSum(Target): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // Homeworld                                             //
 ///////////////////////////////////////////////////////////
-Homeworld::~Homeworld() {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names)
-        delete name;
-}
+Homeworld::Homeworld() :
+    ConditionBase(),
+    m_names()
+{}
+
+Homeworld::Homeworld(std::vector<std::unique_ptr<ValueRef::ValueRefBase<std::string>>>&& names) :
+    ConditionBase(),
+    m_names(std::move(names))
+{}
 
 bool Homeworld::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -1386,7 +1502,7 @@ namespace {
                 return false;
 
             // is it a planet or a building on a planet?
-            std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+            auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
             std::shared_ptr<const ::Building> building;
             if (!planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
                 planet = GetPlanet(building->PlanetID());
@@ -1399,10 +1515,10 @@ namespace {
 
             if (m_names.empty()) {
                 // match homeworlds for any species
-                for (SpeciesManager::iterator species_it = manager.begin(); species_it != manager.end(); ++species_it) {
-                    if (const ::Species* species = species_it->second) {
-                        const std::set<int>& homeworld_ids = species->Homeworlds();
-                        if (homeworld_ids.find(planet_id) != homeworld_ids.end())
+                for (auto species_it = manager.begin(); species_it != manager.end(); ++species_it) {
+                    if (const auto& species = species_it->second) {
+                        const auto& homeworld_ids = species->Homeworlds();
+                        if (homeworld_ids.count(planet_id))
                             return true;
                     }
                 }
@@ -1410,9 +1526,9 @@ namespace {
             } else {
                 // match any of the species specified
                 for (const std::string& name : m_names) {
-                    if (const ::Species* species = GetSpecies(name)) {
-                        const std::set<int>& homeworld_ids = species->Homeworlds();
-                        if (homeworld_ids.find(planet_id) != homeworld_ids.end())
+                    if (auto species = GetSpecies(name)) {
+                        const auto& homeworld_ids = species->Homeworlds();
+                        if (homeworld_ids.count(planet_id))
                             return true;
                     }
                 }
@@ -1432,7 +1548,7 @@ void Homeworld::Eval(const ScriptingContext& parent_context,
     bool simple_eval_safe = parent_context.condition_root_candidate || RootCandidateInvariant();
     if (simple_eval_safe) {
         // check each valueref for invariance to local candidate
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             if (!name->LocalCandidateInvariant()) {
                 simple_eval_safe = false;
                 break;
@@ -1443,7 +1559,7 @@ void Homeworld::Eval(const ScriptingContext& parent_context,
         // evaluate names once, and use to check all candidate objects
         std::vector<std::string> names;
         // get all names from valuerefs
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             names.push_back(name->Eval(parent_context));
         }
         EvalImpl(matches, non_matches, search_domain, HomeworldSimpleMatch(names));
@@ -1454,7 +1570,7 @@ void Homeworld::Eval(const ScriptingContext& parent_context,
 }
 
 bool Homeworld::RootCandidateInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->RootCandidateInvariant())
             return false;
     }
@@ -1462,7 +1578,7 @@ bool Homeworld::RootCandidateInvariant() const {
 }
 
 bool Homeworld::TargetInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->TargetInvariant())
             return false;
     }
@@ -1470,7 +1586,7 @@ bool Homeworld::TargetInvariant() const {
 }
 
 bool Homeworld::SourceInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->SourceInvariant())
             return false;
     }
@@ -1497,14 +1613,14 @@ std::string Homeworld::Description(bool negated/* = false*/) const {
         % values_str);
 }
 
-std::string Homeworld::Dump() const {
-    std::string retval = DumpIndent() + "HomeWorld";
+std::string Homeworld::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "HomeWorld";
     if (m_names.size() == 1) {
-        retval += " name = " + m_names[0]->Dump();
+        retval += " name = " + m_names[0]->Dump(ntabs);
     } else if (!m_names.empty()) {
         retval += " name = [ ";
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
-            retval += name->Dump() + " ";
+        for (auto& name : m_names) {
+            retval += name->Dump(ntabs) + " ";
         }
         retval += "]";
     }
@@ -1512,14 +1628,14 @@ std::string Homeworld::Dump() const {
 }
 
 bool Homeworld::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Homeworld::Match passed no candidate object";
         return false;
     }
 
     // is it a planet or a building on a planet?
-    std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+    auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
     std::shared_ptr<const ::Building> building;
     if (!planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
         planet = GetPlanet(building->PlanetID());
@@ -1532,21 +1648,21 @@ bool Homeworld::Match(const ScriptingContext& local_context) const {
 
     if (m_names.empty()) {
         // match homeworlds for any species
-        for (const std::map<std::string, ::Species*>::value_type& entry : manager) {
-            if (const ::Species* species = entry.second) {
-                const std::set<int>& homeworld_ids = species->Homeworlds();
-                if (homeworld_ids.find(planet_id) != homeworld_ids.end())   // is this planet the homeworld for this species?
+        for (const auto& entry : manager) {
+            if (const auto& species = entry.second) {
+                const auto& homeworld_ids = species->Homeworlds();
+                if (homeworld_ids.count(planet_id))
                     return true;
             }
         }
 
     } else {
         // match any of the species specified
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
-            const std::string& species_name = name->Eval(local_context);
-            if (const ::Species* species = manager.GetSpecies(species_name)) {
-                const std::set<int>& homeworld_ids = species->Homeworlds();
-                if (homeworld_ids.find(planet_id) != homeworld_ids.end())   // is this planet the homeworld for this species?
+        for (auto& name : m_names) {
+            const auto& species_name = name->Eval(local_context);
+            if (const auto species = manager.GetSpecies(species_name)) {
+                const auto& homeworld_ids = species->Homeworlds();
+                if (homeworld_ids.count(planet_id))
                     return true;
             }
         }
@@ -1560,10 +1676,20 @@ void Homeworld::GetDefaultInitialCandidateObjects(const ScriptingContext& parent
 { AddPlanetSet(condition_non_targets); }
 
 void Homeworld::SetTopLevelContent(const std::string& content_name) {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (name)
             name->SetTopLevelContent(content_name);
     }
+}
+
+unsigned int Homeworld::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Homeworld");
+    CheckSums::CheckSumCombine(retval, m_names);
+
+    TraceLogger() << "GetCheckSum(Homeworld): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
@@ -1578,11 +1704,11 @@ std::string Capital::Description(bool negated/* = false*/) const {
         : UserString("DESC_CAPITAL_NOT");
 }
 
-std::string Capital::Dump() const
-{ return DumpIndent() + "Capital\n"; }
+std::string Capital::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "Capital\n"; }
 
 bool Capital::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Capital::Match passed no candidate object";
         return false;
@@ -1591,7 +1717,7 @@ bool Capital::Match(const ScriptingContext& local_context) const {
 
     // check if any empire's capital's ID is that candidate object's id.
     // if it is, the candidate object is a capital.
-    for (const std::map<int, Empire*>::value_type& entry : Empires())
+    for (const auto& entry : Empires())
         if (entry.second->CapitalID() == candidate_id)
             return true;
     return false;
@@ -1600,6 +1726,15 @@ bool Capital::Match(const ScriptingContext& local_context) const {
 void Capital::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_context,
                                                 ObjectSet& condition_non_targets) const
 { AddPlanetSet(condition_non_targets); }
+
+unsigned int Capital::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Capital");
+
+    TraceLogger() << "GetCheckSum(Capital): retval: " << retval;
+    return retval;
+}
 
 ///////////////////////////////////////////////////////////
 // Monster                                               //
@@ -1613,17 +1748,17 @@ std::string Monster::Description(bool negated/* = false*/) const {
         : UserString("DESC_MONSTER_NOT");
 }
 
-std::string Monster::Dump() const
-{ return DumpIndent() + "Monster\n"; }
+std::string Monster::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "Monster\n"; }
 
 bool Monster::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Monster::Match passed no candidate object";
         return false;
     }
 
-    if (std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate))
+    if (auto ship = std::dynamic_pointer_cast<const Ship>(candidate))
         if (ship->IsMonster())
             return true;
 
@@ -1633,6 +1768,15 @@ bool Monster::Match(const ScriptingContext& local_context) const {
 void Monster::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_context,
                                                 ObjectSet& condition_non_targets) const
 { AddShipSet(condition_non_targets); }
+
+unsigned int Monster::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Monster");
+
+    TraceLogger() << "GetCheckSum(Monster): retval: " << retval;
+    return retval;
+}
 
 ///////////////////////////////////////////////////////////
 // Armed                                                 //
@@ -1646,28 +1790,44 @@ std::string Armed::Description(bool negated/* = false*/) const {
         : UserString("DESC_ARMED_NOT");
 }
 
-std::string Armed::Dump() const
-{ return DumpIndent() + "Armed\n"; }
+std::string Armed::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "Armed\n"; }
 
 bool Armed::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Armed::Match passed no candidate object";
         return false;
     }
 
-    if (std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate))
+    if (auto ship = std::dynamic_pointer_cast<const Ship>(candidate))
         if (ship->IsArmed() || ship->HasFighters())
             return true;
 
     return false;
 }
 
+unsigned int Armed::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Armed");
+
+    TraceLogger() << "GetCheckSum(Armed): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // Type                                                  //
 ///////////////////////////////////////////////////////////
-Type::~Type()
-{ delete m_type; }
+Type::Type(std::unique_ptr<ValueRef::ValueRefBase<UniverseObjectType>>&& type) :
+    ConditionBase(),
+    m_type(std::move(type))
+{}
+
+Type::Type(UniverseObjectType type) :
+    ConditionBase(),
+    m_type(boost::make_unique<ValueRef::Constant<UniverseObjectType>>(type))
+{}
 
 bool Type::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -1699,6 +1859,7 @@ namespace {
             case OBJ_PLANET:
             case OBJ_SYSTEM:
             case OBJ_FIELD:
+            case OBJ_FIGHTER:
                 return candidate->ObjectType() == m_type;
                 break;
             case OBJ_POP_CENTER:
@@ -1752,9 +1913,9 @@ std::string Type::Description(bool negated/* = false*/) const {
            % value_str);
 }
 
-std::string Type::Dump() const {
-    std::string retval = DumpIndent();
-    if (dynamic_cast<ValueRef::Constant<UniverseObjectType>*>(m_type)) {
+std::string Type::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs);
+    if (dynamic_cast<ValueRef::Constant<UniverseObjectType>*>(m_type.get())) {
         switch (m_type->Eval()) {
         case OBJ_BUILDING:    retval += "Building\n"; break;
         case OBJ_SHIP:        retval += "Ship\n"; break;
@@ -1764,16 +1925,17 @@ std::string Type::Dump() const {
         case OBJ_PROD_CENTER: retval += "ProductionCenter\n"; break;
         case OBJ_SYSTEM:      retval += "System\n"; break;
         case OBJ_FIELD:       retval += "Field\n"; break;
+        case OBJ_FIGHTER:     retval += "Fighter\n"; break;
         default: retval += "?\n"; break;
         }
     } else {
-        retval += "ObjectType type = " + m_type->Dump() + "\n";
+        retval += "ObjectType type = " + m_type->Dump(ntabs) + "\n";
     }
     return retval;
 }
 
 bool Type::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Type::Match passed no candidate object";
         return false;
@@ -1815,6 +1977,7 @@ void Type::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_cont
             case OBJ_SYSTEM:
                 AddSystemSet(condition_non_targets);
                 break;
+            case OBJ_FIGHTER:   // shouldn't exist outside of combat as a separate object
             default: 
                 found_type = false;
                 break;
@@ -1836,14 +1999,23 @@ void Type::SetTopLevelContent(const std::string& content_name) {
         m_type->SetTopLevelContent(content_name);
 }
 
+unsigned int Type::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Type");
+    CheckSums::CheckSumCombine(retval, m_type);
+
+    TraceLogger() << "GetCheckSum(Type): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // Building                                              //
 ///////////////////////////////////////////////////////////
-Building::~Building() {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
-        delete name;
-    }
-}
+Building::Building(std::vector<std::unique_ptr<ValueRef::ValueRefBase<std::string>>>&& names) :
+    ConditionBase(),
+    m_names(std::move(names))
+{}
 
 bool Building::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -1873,7 +2045,7 @@ namespace {
                 return false;
 
             // is it a building?
-            std::shared_ptr<const ::Building> building = std::dynamic_pointer_cast<const ::Building>(candidate);
+            auto building = std::dynamic_pointer_cast<const ::Building>(candidate);
             if (!building)
                 return false;
 
@@ -1882,7 +2054,7 @@ namespace {
                 return true;
 
             // is it one of the specified building types?
-            return std::find(m_names.begin(), m_names.end(), building->BuildingTypeName()) != m_names.end();
+            return std::count(m_names.begin(), m_names.end(), building->BuildingTypeName());
         }
 
         const std::vector<std::string>& m_names;
@@ -1896,7 +2068,7 @@ void Building::Eval(const ScriptingContext& parent_context,
     bool simple_eval_safe = parent_context.condition_root_candidate || RootCandidateInvariant();
     if (simple_eval_safe) {
         // check each valueref for invariance to local candidate
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             if (!name->LocalCandidateInvariant()) {
                 simple_eval_safe = false;
                 break;
@@ -1907,7 +2079,7 @@ void Building::Eval(const ScriptingContext& parent_context,
         // evaluate names once, and use to check all candidate objects
         std::vector<std::string> names;
         // get all names from valuerefs
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             names.push_back(name->Eval(parent_context));
         }
         EvalImpl(matches, non_matches, search_domain, BuildingSimpleMatch(names));
@@ -1918,7 +2090,7 @@ void Building::Eval(const ScriptingContext& parent_context,
 }
 
 bool Building::RootCandidateInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->RootCandidateInvariant())
             return false;
     }
@@ -1926,7 +2098,7 @@ bool Building::RootCandidateInvariant() const {
 }
 
 bool Building::TargetInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->TargetInvariant())
             return false;
     }
@@ -1934,7 +2106,7 @@ bool Building::TargetInvariant() const {
 }
 
 bool Building::SourceInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->SourceInvariant())
             return false;
     }
@@ -1961,14 +2133,14 @@ std::string Building::Description(bool negated/* = false*/) const {
            % values_str);
 }
 
-std::string Building::Dump() const {
-    std::string retval = DumpIndent() + "Building name = ";
+std::string Building::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Building name = ";
     if (m_names.size() == 1) {
-        retval += m_names[0]->Dump() + "\n";
+        retval += m_names[0]->Dump(ntabs) + "\n";
     } else {
         retval += "[ ";
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
-            retval += name->Dump() + " ";
+        for (auto& name : m_names) {
+            retval += name->Dump(ntabs) + " ";
         }
         retval += "]\n";
     }
@@ -1980,21 +2152,21 @@ void Building::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_
 { AddBuildingSet(condition_non_targets); }
 
 bool Building::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Building::Match passed no candidate object";
         return false;
     }
 
     // is it a building?
-    std::shared_ptr<const ::Building> building = std::dynamic_pointer_cast<const ::Building>(candidate);
+    auto building = std::dynamic_pointer_cast<const ::Building>(candidate);
     if (building) {
         // match any building type?
         if (m_names.empty())
             return true;
 
         // match one of the specified building types
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             if (name->Eval(local_context) == building->BuildingTypeName())
                 return true;
         }
@@ -2004,31 +2176,74 @@ bool Building::Match(const ScriptingContext& local_context) const {
 }
 
 void Building::SetTopLevelContent(const std::string& content_name) {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (name)
             name->SetTopLevelContent(content_name);
     }
 }
 
+unsigned int Building::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Building");
+    CheckSums::CheckSumCombine(retval, m_names);
+
+    TraceLogger() << "GetCheckSum(Building): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // HasSpecial                                            //
 ///////////////////////////////////////////////////////////
+HasSpecial::HasSpecial() :
+    ConditionBase(),
+    m_name(nullptr),
+    m_capacity_low(nullptr),
+    m_capacity_high(nullptr),
+    m_since_turn_low(),
+    m_since_turn_high()
+{}
+
+HasSpecial::HasSpecial(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name) :
+    ConditionBase(),
+    m_name(std::move(name)),
+    m_capacity_low(nullptr),
+    m_capacity_high(nullptr),
+    m_since_turn_low(),
+    m_since_turn_high()
+{}
+
+HasSpecial::HasSpecial(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name,
+                       std::unique_ptr<ValueRef::ValueRefBase<int>>&& since_turn_low,
+                       std::unique_ptr<ValueRef::ValueRefBase<int>>&& since_turn_high) :
+    ConditionBase(),
+    m_name(std::move(name)),
+    m_capacity_low(nullptr),
+    m_capacity_high(nullptr),
+    m_since_turn_low(std::move(since_turn_low)),
+    m_since_turn_high(std::move(since_turn_high))
+{}
+
+HasSpecial::HasSpecial(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name,
+                       std::unique_ptr<ValueRef::ValueRefBase<double>>&& capacity_low,
+                       std::unique_ptr<ValueRef::ValueRefBase<double>>&& capacity_high) :
+    ConditionBase(),
+    m_name(std::move(name)),
+    m_capacity_low(std::move(capacity_low)),
+    m_capacity_high(std::move(capacity_high)),
+    m_since_turn_low(nullptr),
+    m_since_turn_high(nullptr)
+{}
+
 HasSpecial::HasSpecial(const std::string& name) :
     ConditionBase(),
+    // TODO: Use std::make_unique when adopting C++14
     m_name(new ValueRef::Constant<std::string>(name)),
     m_capacity_low(nullptr),
     m_capacity_high(nullptr),
     m_since_turn_low(nullptr),
     m_since_turn_high(nullptr)
 {}
-
-HasSpecial::~HasSpecial() {
-    delete m_name;
-    delete m_capacity_low;
-    delete m_capacity_high;
-    delete m_since_turn_low;
-    delete m_since_turn_high;
-}
 
 bool HasSpecial::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -2064,7 +2279,7 @@ namespace {
             if (m_name.empty())
                 return !candidate->Specials().empty();
 
-            std::map<std::string, std::pair<int, float>>::const_iterator it = candidate->Specials().find(m_name);
+            auto it = candidate->Specials().find(m_name);
             if (it == candidate->Specials().end())
                 return false;
 
@@ -2181,26 +2396,26 @@ std::string HasSpecial::Description(bool negated/* = false*/) const {
                 % name_str);
 }
 
-std::string HasSpecial::Dump() const {
-    std::string name_str = (m_name ? m_name->Dump() : "");
+std::string HasSpecial::Dump(unsigned short ntabs) const {
+    std::string name_str = (m_name ? m_name->Dump(ntabs) : "");
 
     if (m_since_turn_low || m_since_turn_high) {
-        std::string low_dump = (m_since_turn_low ? m_since_turn_low->Dump() : std::to_string(BEFORE_FIRST_TURN));
-        std::string high_dump = (m_since_turn_high ? m_since_turn_high->Dump() : std::to_string(IMPOSSIBLY_LARGE_TURN));
-        return DumpIndent() + "HasSpecialSinceTurn name = \"" + name_str + "\" low = " + low_dump + " high = " + high_dump;
+        std::string low_dump = (m_since_turn_low ? m_since_turn_low->Dump(ntabs) : std::to_string(BEFORE_FIRST_TURN));
+        std::string high_dump = (m_since_turn_high ? m_since_turn_high->Dump(ntabs) : std::to_string(IMPOSSIBLY_LARGE_TURN));
+        return DumpIndent(ntabs) + "HasSpecialSinceTurn name = \"" + name_str + "\" low = " + low_dump + " high = " + high_dump;
     }
 
     if (m_capacity_low || m_capacity_high) {
-        std::string low_dump = (m_capacity_low ? m_capacity_low->Dump() : std::to_string(-FLT_MAX));
-        std::string high_dump = (m_capacity_high ? m_capacity_high->Dump() : std::to_string(FLT_MAX));
-        return DumpIndent() + "HasSpecialCapacity name = \"" + name_str + "\" low = " + low_dump + " high = " + high_dump;
+        std::string low_dump = (m_capacity_low ? m_capacity_low->Dump(ntabs) : std::to_string(-FLT_MAX));
+        std::string high_dump = (m_capacity_high ? m_capacity_high->Dump(ntabs) : std::to_string(FLT_MAX));
+        return DumpIndent(ntabs) + "HasSpecialCapacity name = \"" + name_str + "\" low = " + low_dump + " high = " + high_dump;
     }
 
-    return DumpIndent() + "HasSpecial name = \"" + name_str + "\"\n";
+    return DumpIndent(ntabs) + "HasSpecial name = \"" + name_str + "\"\n";
 }
 
 bool HasSpecial::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "HasSpecial::Match passed no candidate object";
         return false;
@@ -2227,16 +2442,38 @@ void HasSpecial::SetTopLevelContent(const std::string& content_name) {
         m_since_turn_high->SetTopLevelContent(content_name);
 }
 
+unsigned int HasSpecial::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::HasSpecial");
+    CheckSums::CheckSumCombine(retval, m_name);
+    CheckSums::CheckSumCombine(retval, m_capacity_low);
+    CheckSums::CheckSumCombine(retval, m_capacity_high);
+    CheckSums::CheckSumCombine(retval, m_since_turn_low);
+    CheckSums::CheckSumCombine(retval, m_since_turn_high);
+
+    TraceLogger() << "GetCheckSum(HasSpecial): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // HasTag                                                //
 ///////////////////////////////////////////////////////////
+HasTag::HasTag() :
+    ConditionBase(),
+    m_name()
+{}
+
 HasTag::HasTag(const std::string& name) :
     ConditionBase(),
+    // TODO: Use std::make_unique when adopting C++14
     m_name(new ValueRef::Constant<std::string>(name))
 {}
 
-HasTag::~HasTag()
-{ delete m_name; }
+HasTag::HasTag(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name) :
+    ConditionBase(),
+    m_name(std::move(name))
+{}
 
 bool HasTag::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -2322,16 +2559,16 @@ std::string HasTag::Description(bool negated/* = false*/) const {
         % name_str);
 }
 
-std::string HasTag::Dump() const {
-    std::string retval = DumpIndent() + "HasTag";
+std::string HasTag::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "HasTag";
     if (m_name)
-        retval += " name = " + m_name->Dump();
+        retval += " name = " + m_name->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool HasTag::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "HasTag::Match passed no candidate object";
         return false;
@@ -2349,14 +2586,25 @@ void HasTag::SetTopLevelContent(const std::string& content_name) {
         m_name->SetTopLevelContent(content_name);
 }
 
+unsigned int HasTag::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::HasTag");
+    CheckSums::CheckSumCombine(retval, m_name);
+
+    TraceLogger() << "GetCheckSum(HasTag): retval: " << retval;
+    return retval;
+}
 
 ///////////////////////////////////////////////////////////
 // CreatedOnTurn                                         //
 ///////////////////////////////////////////////////////////
-CreatedOnTurn::~CreatedOnTurn() {
-    delete m_low;
-    delete m_high;
-}
+CreatedOnTurn::CreatedOnTurn(std::unique_ptr<ValueRef::ValueRefBase<int>>&& low,
+                             std::unique_ptr<ValueRef::ValueRefBase<int>>&& high) :
+    ConditionBase(),
+    m_low(std::move(low)),
+    m_high(std::move(high))
+{}
 
 bool CreatedOnTurn::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -2435,18 +2683,18 @@ std::string CreatedOnTurn::Description(bool negated/* = false*/) const {
                % high_str);
 }
 
-std::string CreatedOnTurn::Dump() const {
-    std::string retval = DumpIndent() + "CreatedOnTurn";
+std::string CreatedOnTurn::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "CreatedOnTurn";
     if (m_low)
-        retval += " low = " + m_low->Dump();
+        retval += " low = " + m_low->Dump(ntabs);
     if (m_high)
-        retval += " high = " + m_high->Dump();
+        retval += " high = " + m_high->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool CreatedOnTurn::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "CreatedOnTurn::Match passed no candidate object";
         return false;
@@ -2463,12 +2711,20 @@ void CreatedOnTurn::SetTopLevelContent(const std::string& content_name) {
         m_high->SetTopLevelContent(content_name);
 }
 
+unsigned int CreatedOnTurn::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::CreatedOnTurn");
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+
+    TraceLogger() << "GetCheckSum(CreatedOnTurn): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // Contains                                              //
 ///////////////////////////////////////////////////////////
-Contains::~Contains()
-{ delete m_condition; }
-
 bool Contains::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
         return true;
@@ -2497,7 +2753,7 @@ namespace {
             // for each candidate.
             m_subcondition_matches_ids.reserve(subcondition_matches.size());
             // gather the ids
-            for (std::shared_ptr<const UniverseObject> obj : subcondition_matches) {
+            for (auto& obj : subcondition_matches) {
                 if (obj)
                     m_subcondition_matches_ids.push_back(obj->ID());
             }
@@ -2510,7 +2766,7 @@ namespace {
                 return false;
 
             bool match = false;
-            const std::set<int>& candidate_elements = candidate->ContainedObjectIDs(); // guaranteed O(1)
+            const auto& candidate_elements = candidate->ContainedObjectIDs(); // guaranteed O(1)
 
             // We need to test whether candidate_elements and m_subcondition_matches_ids have a common element.
             // We choose the strategy that is more efficient by comparing the sizes of both sets.
@@ -2518,8 +2774,8 @@ namespace {
                 // candidate_elements is smaller, so we iterate it and look up each candidate element in m_subcondition_matches_ids
                 for (int id : candidate_elements) {
                     // std::lower_bound requires m_subcondition_matches_ids to be sorted
-                    std::vector<int>::const_iterator matching_it = std::lower_bound(m_subcondition_matches_ids.begin(), m_subcondition_matches_ids.end(), id);
-                    
+                    auto matching_it = std::lower_bound(m_subcondition_matches_ids.begin(), m_subcondition_matches_ids.end(), id);
+
                     if (matching_it != m_subcondition_matches_ids.end() && *matching_it == id) {
                         match = true;
                         break;
@@ -2617,11 +2873,9 @@ std::string Contains::Description(bool negated/* = false*/) const {
         % m_condition->Description());
 }
 
-std::string Contains::Dump() const {
-    std::string retval = DumpIndent() + "Contains condition =\n";
-    ++g_indent;
-    retval += m_condition->Dump();
-    --g_indent;
+std::string Contains::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Contains condition =\n";
+    retval += m_condition->Dump(ntabs+1);
     return retval;
 }
 
@@ -2635,7 +2889,7 @@ void Contains::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_
 }
 
 bool Contains::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Contains::Match passed no candidate object";
         return false;
@@ -2646,7 +2900,7 @@ bool Contains::Match(const ScriptingContext& local_context) const {
     m_condition->Eval(local_context, subcondition_matches);
 
     // does candidate object contain any subcondition matches?
-    for (std::shared_ptr<const UniverseObject> obj : subcondition_matches)
+    for (auto& obj : subcondition_matches)
         if (candidate->Contains(obj->ID()))
             return true;
 
@@ -2658,12 +2912,19 @@ void Contains::SetTopLevelContent(const std::string& content_name) {
         m_condition->SetTopLevelContent(content_name);
 }
 
+unsigned int Contains::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Contains");
+    CheckSums::CheckSumCombine(retval, m_condition);
+
+    TraceLogger() << "GetCheckSum(Contains): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // ContainedBy                                           //
 ///////////////////////////////////////////////////////////
-ContainedBy::~ContainedBy()
-{ delete m_condition; }
-
 bool ContainedBy::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
         return true;
@@ -2692,7 +2953,7 @@ namespace {
             // executed for each candidate.
             m_subcondition_matches_ids.reserve(subcondition_matches.size());
             // gather the ids
-            for (std::shared_ptr<const UniverseObject> obj : subcondition_matches) {
+            for (auto& obj : subcondition_matches) {
                 if (obj)
                 { m_subcondition_matches_ids.push_back(obj->ID()); }
             }
@@ -2720,8 +2981,8 @@ namespace {
                 // candidate_containers is smaller, so we iterate it and look up each candidate container in m_subcondition_matches_ids
                 for (int id : candidate_containers) {
                     // std::lower_bound requires m_subcondition_matches_ids to be sorted
-                    std::vector<int>::const_iterator matching_it = std::lower_bound(m_subcondition_matches_ids.begin(), m_subcondition_matches_ids.end(), id);
-                    
+                    auto matching_it = std::lower_bound(m_subcondition_matches_ids.begin(), m_subcondition_matches_ids.end(), id);
+
                     if (matching_it != m_subcondition_matches_ids.end() && *matching_it == id) {
                         match = true;
                         break;
@@ -2826,11 +3087,9 @@ std::string ContainedBy::Description(bool negated/* = false*/) const {
         % m_condition->Description());
 }
 
-std::string ContainedBy::Dump() const {
-    std::string retval = DumpIndent() + "ContainedBy condition =\n";
-    ++g_indent;
-        retval += m_condition->Dump();
-    --g_indent;
+std::string ContainedBy::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "ContainedBy condition =\n";
+    retval += m_condition->Dump(ntabs+1);
     return retval;
 }
 
@@ -2845,7 +3104,7 @@ void ContainedBy::GetDefaultInitialCandidateObjects(const ScriptingContext& pare
 }
 
 bool ContainedBy::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "ContainedBy::Match passed no candidate object";
         return false;
@@ -2872,11 +3131,23 @@ void ContainedBy::SetTopLevelContent(const std::string& content_name) {
         m_condition->SetTopLevelContent(content_name);
 }
 
+unsigned int ContainedBy::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::ContainedBy");
+    CheckSums::CheckSumCombine(retval, m_condition);
+
+    TraceLogger() << "GetCheckSum(ContainedBy): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // InSystem                                              //
 ///////////////////////////////////////////////////////////
-InSystem::~InSystem()
-{ delete m_system_id; }
+InSystem::InSystem(std::unique_ptr<ValueRef::ValueRefBase<int>>&& system_id) :
+    ConditionBase(),
+    m_system_id(std::move(system_id))
+{}
 
 bool InSystem::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -2942,7 +3213,7 @@ std::string InSystem::Description(bool negated/* = false*/) const {
     int system_id = INVALID_OBJECT_ID;
     if (m_system_id && m_system_id->ConstantExpr())
         system_id = m_system_id->Eval();
-    if (std::shared_ptr<const System> system = GetSystem(system_id))
+    if (auto system = GetSystem(system_id))
         system_str = system->Name();
     else if (m_system_id)
         system_str = m_system_id->Description();
@@ -2960,10 +3231,10 @@ std::string InSystem::Description(bool negated/* = false*/) const {
     return str(FlexibleFormat(description_str) % system_str);
 }
 
-std::string InSystem::Dump() const {
-    std::string retval = DumpIndent() + "InSystem";
+std::string InSystem::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "InSystem";
     if (m_system_id)
-        retval += " id = " + m_system_id->Dump();
+        retval += " id = " + m_system_id->Dump(ntabs);
     retval += "\n";
     return retval;
 }
@@ -2989,13 +3260,13 @@ void InSystem::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_
 
     // simple case of a single specified system id; can add just objects in that system
     int system_id = m_system_id->Eval(parent_context);
-    std::shared_ptr<const System> system = GetSystem(system_id);
+    auto system = GetSystem(system_id);
     if (!system)
         return;
 
     const ObjectMap& obj_map = Objects();
     const std::set<int>& system_object_ids = system->ObjectIDs();
-    std::vector<std::shared_ptr<const UniverseObject>> sys_objs = obj_map.FindObjects(system_object_ids);
+    auto sys_objs = obj_map.FindObjects(system_object_ids);
 
     // insert all objects that have the specified system id
     condition_non_targets.reserve(sys_objs.size() + 1);
@@ -3005,7 +3276,7 @@ void InSystem::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_
 }
 
 bool InSystem::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "InSystem::Match passed no candidate object";
         return false;
@@ -3019,11 +3290,23 @@ void InSystem::SetTopLevelContent(const std::string& content_name) {
         m_system_id->SetTopLevelContent(content_name);
 }
 
+unsigned int InSystem::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::InSystem");
+    CheckSums::CheckSumCombine(retval, m_system_id);
+
+    TraceLogger() << "GetCheckSum(InSystem): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // ObjectID                                              //
 ///////////////////////////////////////////////////////////
-ObjectID::~ObjectID()
-{ delete m_object_id; }
+ObjectID::ObjectID(std::unique_ptr<ValueRef::ValueRefBase<int>>&& object_id) :
+    ConditionBase(),
+    m_object_id(std::move(object_id))
+{}
 
 bool ObjectID::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -3086,7 +3369,7 @@ std::string ObjectID::Description(bool negated/* = false*/) const {
     int object_id = INVALID_OBJECT_ID;
     if (m_object_id && m_object_id->ConstantExpr())
         object_id = m_object_id->Eval();
-    if (std::shared_ptr<const System> system = GetSystem(object_id))
+    if (auto system = GetSystem(object_id))
         object_str = system->Name();
     else if (m_object_id)
         object_str = m_object_id->Description();
@@ -3099,8 +3382,8 @@ std::string ObjectID::Description(bool negated/* = false*/) const {
                % object_str);
 }
 
-std::string ObjectID::Dump() const
-{ return DumpIndent() + "Object id = " + m_object_id->Dump() + "\n"; }
+std::string ObjectID::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "Object id = " + m_object_id->Dump(ntabs) + "\n"; }
 
 void ObjectID::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_context,
                                                  ObjectSet& condition_non_targets) const
@@ -3123,13 +3406,13 @@ void ObjectID::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_
     if (object_id == INVALID_OBJECT_ID)
         return;
 
-    std::shared_ptr<UniverseObject> obj = Objects().ExistingObject(object_id);
+    auto obj = Objects().ExistingObject(object_id);
     if (obj)
         condition_non_targets.push_back(obj);
 }
 
 bool ObjectID::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "ObjectID::Match passed no candidate object";
         return false;
@@ -3143,14 +3426,23 @@ void ObjectID::SetTopLevelContent(const std::string& content_name) {
         m_object_id->SetTopLevelContent(content_name);
 }
 
+unsigned int ObjectID::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::ObjectID");
+    CheckSums::CheckSumCombine(retval, m_object_id);
+
+    TraceLogger() << "GetCheckSum(ObjectID): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // PlanetType                                            //
 ///////////////////////////////////////////////////////////
-PlanetType::~PlanetType() {
-    for (ValueRef::ValueRefBase<::PlanetType>* type : m_types) {
-        delete type;
-    }
-}
+PlanetType::PlanetType(std::vector<std::unique_ptr<ValueRef::ValueRefBase< ::PlanetType>>>&& types) :
+    ConditionBase(),
+    m_types(std::move(types))
+{}
 
 bool PlanetType::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -3180,14 +3472,14 @@ namespace {
                 return false;
 
             // is it a planet or on a planet?
-            std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+            auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
             std::shared_ptr<const ::Building> building;
             if (!planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
                 planet = GetPlanet(building->PlanetID());
             }
             if (planet) {
                 // is it one of the specified building types?
-                return std::find(m_types.begin(), m_types.end(), planet->Type()) != m_types.end();
+                return std::count(m_types.begin(), m_types.end(), planet->Type());
             }
 
             return false;
@@ -3204,7 +3496,7 @@ void PlanetType::Eval(const ScriptingContext& parent_context,
     bool simple_eval_safe = parent_context.condition_root_candidate || RootCandidateInvariant();
     if (simple_eval_safe) {
         // check each valueref for invariance to local candidate
-        for (ValueRef::ValueRefBase<::PlanetType>* type : m_types) {
+        for (auto& type : m_types) {
             if (!type->LocalCandidateInvariant()) {
                 simple_eval_safe = false;
                 break;
@@ -3215,7 +3507,7 @@ void PlanetType::Eval(const ScriptingContext& parent_context,
         // evaluate types once, and use to check all candidate objects
         std::vector< ::PlanetType> types;
         // get all types from valuerefs
-        for (ValueRef::ValueRefBase<::PlanetType>* type : m_types) {
+        for (auto& type : m_types) {
             types.push_back(type->Eval(parent_context));
         }
         EvalImpl(matches, non_matches, search_domain, PlanetTypeSimpleMatch(types));
@@ -3226,7 +3518,7 @@ void PlanetType::Eval(const ScriptingContext& parent_context,
 }
 
 bool PlanetType::RootCandidateInvariant() const {
-    for (ValueRef::ValueRefBase<::PlanetType>* type : m_types) {
+    for (auto& type : m_types) {
         if (!type->RootCandidateInvariant())
             return false;
     }
@@ -3234,7 +3526,7 @@ bool PlanetType::RootCandidateInvariant() const {
 }
 
 bool PlanetType::TargetInvariant() const {
-    for (ValueRef::ValueRefBase<::PlanetType>* type : m_types) {
+    for (auto& type : m_types) {
         if (!type->TargetInvariant())
             return false;
     }
@@ -3242,7 +3534,7 @@ bool PlanetType::TargetInvariant() const {
 }
 
 bool PlanetType::SourceInvariant() const {
-    for (ValueRef::ValueRefBase<::PlanetType>* type : m_types) {
+    for (auto& type : m_types) {
         if (!type->SourceInvariant())
             return false;
     }
@@ -3269,14 +3561,14 @@ std::string PlanetType::Description(bool negated/* = false*/) const {
         % values_str);
 }
 
-std::string PlanetType::Dump() const {
-    std::string retval = DumpIndent() + "Planet type = ";
+std::string PlanetType::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Planet type = ";
     if (m_types.size() == 1) {
-        retval += m_types[0]->Dump() + "\n";
+        retval += m_types[0]->Dump(ntabs) + "\n";
     } else {
         retval += "[ ";
-        for (ValueRef::ValueRefBase<::PlanetType>* type : m_types) {
-            retval += type->Dump() + " ";
+        for (auto& type : m_types) {
+            retval += type->Dump(ntabs) + " ";
         }
         retval += "]\n";
     }
@@ -3291,19 +3583,19 @@ void PlanetType::GetDefaultInitialCandidateObjects(const ScriptingContext& paren
 }
 
 bool PlanetType::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "PlanetType::Match passed no candidate object";
         return false;
     }
 
-    std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+    auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
     std::shared_ptr<const ::Building> building;
     if (!planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
         planet = GetPlanet(building->PlanetID());
     }
     if (planet) {
-        for (ValueRef::ValueRefBase<::PlanetType>* type : m_types) {
+        for (auto& type : m_types) {
             if (type->Eval(ScriptingContext(local_context)) == planet->Type())
                 return true;
         }
@@ -3312,20 +3604,29 @@ bool PlanetType::Match(const ScriptingContext& local_context) const {
 }
 
 void PlanetType::SetTopLevelContent(const std::string& content_name) {
-    for (ValueRef::ValueRefBase<::PlanetType>* type : m_types) {
+    for (auto& type : m_types) {
         if (type)
             type->SetTopLevelContent(content_name);
     }
 }
 
+unsigned int PlanetType::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::PlanetType");
+    CheckSums::CheckSumCombine(retval, m_types);
+
+    TraceLogger() << "GetCheckSum(PlanetType): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // PlanetSize                                            //
 ///////////////////////////////////////////////////////////
-PlanetSize::~PlanetSize() {
-    for (ValueRef::ValueRefBase<::PlanetSize>* size : m_sizes) {
-        delete size;
-    }
-}
+PlanetSize::PlanetSize(std::vector<std::unique_ptr<ValueRef::ValueRefBase< ::PlanetSize>>>&& sizes) :
+    ConditionBase(),
+    m_sizes(std::move(sizes))
+{}
 
 bool PlanetSize::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -3355,14 +3656,14 @@ namespace {
                 return false;
 
             // is it a planet or on a planet? TODO: This concept should be generalized and factored out.
-            std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+            auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
             std::shared_ptr<const ::Building> building;
             if (!planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
                 planet = GetPlanet(building->PlanetID());
             }
             if (planet) {
                 // is it one of the specified building types?
-                for (::PlanetSize size : m_sizes) {
+                for (auto size : m_sizes) {
                     if (planet->Size() == size)
                         return true;
                 }
@@ -3382,7 +3683,7 @@ void PlanetSize::Eval(const ScriptingContext& parent_context,
     bool simple_eval_safe = parent_context.condition_root_candidate || RootCandidateInvariant();
     if (simple_eval_safe) {
         // check each valueref for invariance to local candidate
-        for (ValueRef::ValueRefBase<::PlanetSize>* size : m_sizes) {
+        for (auto& size : m_sizes) {
             if (!size->LocalCandidateInvariant()) {
                 simple_eval_safe = false;
                 break;
@@ -3393,7 +3694,7 @@ void PlanetSize::Eval(const ScriptingContext& parent_context,
         // evaluate types once, and use to check all candidate objects
         std::vector< ::PlanetSize> sizes;
         // get all types from valuerefs
-        for (ValueRef::ValueRefBase<::PlanetSize>* size : m_sizes) {
+        for (auto& size : m_sizes) {
             sizes.push_back(size->Eval(parent_context));
         }
         EvalImpl(matches, non_matches, search_domain, PlanetSizeSimpleMatch(sizes));
@@ -3404,7 +3705,7 @@ void PlanetSize::Eval(const ScriptingContext& parent_context,
 }
 
 bool PlanetSize::RootCandidateInvariant() const {
-    for (ValueRef::ValueRefBase<::PlanetSize>* size : m_sizes) {
+    for (auto& size : m_sizes) {
         if (!size->RootCandidateInvariant())
             return false;
     }
@@ -3412,7 +3713,7 @@ bool PlanetSize::RootCandidateInvariant() const {
 }
 
 bool PlanetSize::TargetInvariant() const {
-    for (ValueRef::ValueRefBase<::PlanetSize>* size : m_sizes) {
+    for (auto& size : m_sizes) {
         if (!size->TargetInvariant())
             return false;
     }
@@ -3420,7 +3721,7 @@ bool PlanetSize::TargetInvariant() const {
 }
 
 bool PlanetSize::SourceInvariant() const {
-    for (ValueRef::ValueRefBase<::PlanetSize>* size : m_sizes) {
+    for (auto& size : m_sizes) {
         if (!size->SourceInvariant())
             return false;
     }
@@ -3447,14 +3748,14 @@ std::string PlanetSize::Description(bool negated/* = false*/) const {
         % values_str);
 }
 
-std::string PlanetSize::Dump() const {
-    std::string retval = DumpIndent() + "Planet size = ";
+std::string PlanetSize::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Planet size = ";
     if (m_sizes.size() == 1) {
-        retval += m_sizes[0]->Dump() + "\n";
+        retval += m_sizes[0]->Dump(ntabs) + "\n";
     } else {
         retval += "[ ";
-        for (ValueRef::ValueRefBase<::PlanetSize>* size : m_sizes) {
-            retval += size->Dump() + " ";
+        for (auto& size : m_sizes) {
+            retval += size->Dump(ntabs) + " ";
         }
         retval += "]\n";
     }
@@ -3469,19 +3770,19 @@ void PlanetSize::GetDefaultInitialCandidateObjects(const ScriptingContext& paren
 }
 
 bool PlanetSize::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "PlanetSize::Match passed no candidate object";
         return false;
     }
 
-    std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+    auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
     std::shared_ptr<const ::Building> building;
     if (!planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
         planet = GetPlanet(building->PlanetID());
     }
     if (planet) {
-        for (ValueRef::ValueRefBase<::PlanetSize>* size : m_sizes) {
+        for (auto& size : m_sizes) {
             if (size->Eval(local_context) == planet->Size())
                 return true;
         }
@@ -3490,21 +3791,31 @@ bool PlanetSize::Match(const ScriptingContext& local_context) const {
 }
 
 void PlanetSize::SetTopLevelContent(const std::string& content_name) {
-    for (ValueRef::ValueRefBase<::PlanetSize>* size : m_sizes) {
+    for (auto& size : m_sizes) {
         if (size)
             size->SetTopLevelContent(content_name);
     }
 }
 
+unsigned int PlanetSize::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::PlanetSize");
+    CheckSums::CheckSumCombine(retval, m_sizes);
+
+    TraceLogger() << "GetCheckSum(PlanetSize): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // PlanetEnvironment                                     //
 ///////////////////////////////////////////////////////////
-PlanetEnvironment::~PlanetEnvironment() {
-    for (ValueRef::ValueRefBase<::PlanetEnvironment>* environment : m_environments) {
-        delete environment;
-    }
-    delete m_species_name;
-}
+PlanetEnvironment::PlanetEnvironment(std::vector<std::unique_ptr<ValueRef::ValueRefBase< ::PlanetEnvironment>>>&& environments,
+                                     std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& species_name_ref) :
+    ConditionBase(),
+    m_environments(std::move(environments)),
+    m_species_name(std::move(species_name_ref))
+{}
 
 bool PlanetEnvironment::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -3538,14 +3849,14 @@ namespace {
                 return false;
 
             // is it a planet or on a planet? TODO: factor out
-            std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+            auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
             std::shared_ptr<const ::Building> building;
             if (!planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
                 planet = GetPlanet(building->PlanetID());
             }
             if (planet) {
                 // is it one of the specified building types?
-                for (::PlanetEnvironment environment : m_environments) {
+                for (auto environment : m_environments) {
                     if (planet->EnvironmentForSpecies(m_species) == environment)
                         return true;
                 }
@@ -3560,14 +3871,14 @@ namespace {
 }
 
 void PlanetEnvironment::Eval(const ScriptingContext& parent_context,
-                                        ObjectSet& matches, ObjectSet& non_matches,
-                                        SearchDomain search_domain/* = NON_MATCHES*/) const
+                             ObjectSet& matches, ObjectSet& non_matches,
+                             SearchDomain search_domain/* = NON_MATCHES*/) const
 {
     bool simple_eval_safe = ((!m_species_name || m_species_name->LocalCandidateInvariant()) &&
                              (parent_context.condition_root_candidate || RootCandidateInvariant()));
     if (simple_eval_safe) {
         // check each valueref for invariance to local candidate
-        for (ValueRef::ValueRefBase<::PlanetEnvironment>* environment : m_environments) {
+        for (auto& environment : m_environments) {
             if (!environment->LocalCandidateInvariant()) {
                 simple_eval_safe = false;
                 break;
@@ -3578,7 +3889,7 @@ void PlanetEnvironment::Eval(const ScriptingContext& parent_context,
         // evaluate types once, and use to check all candidate objects
         std::vector< ::PlanetEnvironment> environments;
         // get all types from valuerefs
-        for (ValueRef::ValueRefBase<::PlanetEnvironment>* environment : m_environments) {
+        for (auto& environment : m_environments) {
             environments.push_back(environment->Eval(parent_context));
         }
         std::string species_name;
@@ -3594,7 +3905,7 @@ void PlanetEnvironment::Eval(const ScriptingContext& parent_context,
 bool PlanetEnvironment::RootCandidateInvariant() const {
     if (m_species_name && !m_species_name->RootCandidateInvariant())
         return false;
-    for (ValueRef::ValueRefBase<::PlanetEnvironment>* environment : m_environments) {
+    for (auto& environment : m_environments) {
         if (!environment->RootCandidateInvariant())
             return false;
     }
@@ -3604,7 +3915,7 @@ bool PlanetEnvironment::RootCandidateInvariant() const {
 bool PlanetEnvironment::TargetInvariant() const {
     if (m_species_name && !m_species_name->TargetInvariant())
         return false;
-    for (ValueRef::ValueRefBase<::PlanetEnvironment>* environment : m_environments) {
+    for (auto& environment : m_environments) {
         if (!environment->TargetInvariant())
             return false;
     }
@@ -3614,7 +3925,7 @@ bool PlanetEnvironment::TargetInvariant() const {
 bool PlanetEnvironment::SourceInvariant() const {
     if (m_species_name && !m_species_name->SourceInvariant())
         return false;
-    for (ValueRef::ValueRefBase<::PlanetEnvironment>* environment : m_environments) {
+    for (auto& environment : m_environments) {
         if (!environment->SourceInvariant())
             return false;
     }
@@ -3650,19 +3961,19 @@ std::string PlanetEnvironment::Description(bool negated/* = false*/) const {
         % species_str);
 }
 
-std::string PlanetEnvironment::Dump() const {
-    std::string retval = DumpIndent() + "Planet environment = ";
+std::string PlanetEnvironment::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Planet environment = ";
     if (m_environments.size() == 1) {
-        retval += m_environments[0]->Dump();
+        retval += m_environments[0]->Dump(ntabs);
     } else {
         retval += "[ ";
-        for (ValueRef::ValueRefBase<::PlanetEnvironment>* environment : m_environments) {
-            retval += environment->Dump() + " ";
+        for (auto& environment : m_environments) {
+            retval += environment->Dump(ntabs) + " ";
         }
         retval += "]";
     }
     if (m_species_name)
-        retval += " species = " + m_species_name->Dump();
+        retval += " species = " + m_species_name->Dump(ntabs);
     retval += "\n";
     return retval;
 }
@@ -3675,14 +3986,14 @@ void PlanetEnvironment::GetDefaultInitialCandidateObjects(const ScriptingContext
 }
 
 bool PlanetEnvironment::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "PlanetEnvironment::Match passed no candidate object";
         return false;
     }
 
     // is it a planet or on a planet? TODO: factor out
-    std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+    auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
     std::shared_ptr<const ::Building> building;
     if (!planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
         planet = GetPlanet(building->PlanetID());
@@ -3694,8 +4005,8 @@ bool PlanetEnvironment::Match(const ScriptingContext& local_context) const {
     if (m_species_name)
         species_name = m_species_name->Eval(local_context);
 
-    ::PlanetEnvironment env_for_planets_species = planet->EnvironmentForSpecies(species_name);
-    for (ValueRef::ValueRefBase<::PlanetEnvironment>* environment : m_environments) {
+    auto env_for_planets_species = planet->EnvironmentForSpecies(species_name);
+    for (auto& environment : m_environments) {
         if (environment->Eval(local_context) == env_for_planets_species)
             return true;
     }
@@ -3705,19 +4016,35 @@ bool PlanetEnvironment::Match(const ScriptingContext& local_context) const {
 void PlanetEnvironment::SetTopLevelContent(const std::string& content_name) {
     if (m_species_name)
         m_species_name->SetTopLevelContent(content_name);
-    for (ValueRef::ValueRefBase<::PlanetEnvironment>* environment : m_environments) {
+    for (auto& environment : m_environments) {
         if (environment)
             environment->SetTopLevelContent(content_name);
     }
 }
 
+unsigned int PlanetEnvironment::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::PlanetEnvironment");
+    CheckSums::CheckSumCombine(retval, m_environments);
+    CheckSums::CheckSumCombine(retval, m_species_name);
+
+    TraceLogger() << "GetCheckSum(PlanetEnvironment): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // Species                                              //
 ///////////////////////////////////////////////////////////
-Species::~Species() {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names)
-        delete name;
-}
+Species::Species(std::vector<std::unique_ptr<ValueRef::ValueRefBase<std::string>>>&& names) :
+    ConditionBase(),
+    m_names(std::move(names))
+{}
+
+Species::Species() :
+    ConditionBase(),
+    m_names()
+{}
 
 bool Species::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -3747,23 +4074,23 @@ namespace {
                 return false;
 
             // is it a population centre?
-            if (std::shared_ptr<const ::PopCenter> pop = std::dynamic_pointer_cast<const ::PopCenter>(candidate)) {
+            if (auto pop = std::dynamic_pointer_cast<const ::PopCenter>(candidate)) {
                 const std::string& species_name = pop->SpeciesName();
                 // if the popcenter has a species and that species is one of those specified...
-                return !species_name.empty() && (m_names.empty() || (std::find(m_names.begin(), m_names.end(), species_name) != m_names.end()));
+                return !species_name.empty() && (m_names.empty() || std::count(m_names.begin(), m_names.end(), species_name));
             }
             // is it a ship?
-            if (std::shared_ptr<const ::Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate)) {
+            if (auto ship = std::dynamic_pointer_cast<const Ship>(candidate)) {
                 // if the ship has a species and that species is one of those specified...
                 const std::string& species_name = ship->SpeciesName();
-                return !species_name.empty() && (m_names.empty() || (std::find(m_names.begin(), m_names.end(), species_name) != m_names.end()));
+                return !species_name.empty() && (m_names.empty() || std::count(m_names.begin(), m_names.end(), species_name));
             }
             // is it a building on a planet?
-            if (std::shared_ptr<const ::Building> building = std::dynamic_pointer_cast<const ::Building>(candidate)) {
-                std::shared_ptr<const ::Planet> planet = GetPlanet(building->PlanetID());
+            if (auto building = std::dynamic_pointer_cast<const ::Building>(candidate)) {
+                auto planet = GetPlanet(building->PlanetID());
                 const std::string& species_name = planet->SpeciesName();
                 // if the planet (which IS a popcenter) has a species and that species is one of those specified...
-                return !species_name.empty() && (m_names.empty() || (std::find(m_names.begin(), m_names.end(), species_name) != m_names.end()));
+                return !species_name.empty() && (m_names.empty() || std::count(m_names.begin(), m_names.end(), species_name));
             }
 
             return false;
@@ -3780,7 +4107,7 @@ void Species::Eval(const ScriptingContext& parent_context,
     bool simple_eval_safe = parent_context.condition_root_candidate || RootCandidateInvariant();
     if (simple_eval_safe) {
         // check each valueref for invariance to local candidate
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             if (!name->LocalCandidateInvariant()) {
                 simple_eval_safe = false;
                 break;
@@ -3791,7 +4118,7 @@ void Species::Eval(const ScriptingContext& parent_context,
         // evaluate names once, and use to check all candidate objects
         std::vector<std::string> names;
         // get all names from valuerefs
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             names.push_back(name->Eval(parent_context));
         }
         EvalImpl(matches, non_matches, search_domain, SpeciesSimpleMatch(names));
@@ -3802,7 +4129,7 @@ void Species::Eval(const ScriptingContext& parent_context,
 }
 
 bool Species::RootCandidateInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->RootCandidateInvariant())
             return false;
     }
@@ -3810,7 +4137,7 @@ bool Species::RootCandidateInvariant() const {
 }
 
 bool Species::TargetInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->TargetInvariant())
             return false;
     }
@@ -3818,7 +4145,7 @@ bool Species::TargetInvariant() const {
 }
 
 bool Species::SourceInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->SourceInvariant())
             return false;
     }
@@ -3847,16 +4174,16 @@ std::string Species::Description(bool negated/* = false*/) const {
         % values_str);
 }
 
-std::string Species::Dump() const {
-    std::string retval = DumpIndent() + "Species";
+std::string Species::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Species";
     if (m_names.empty()) {
         // do nothing else
     } else if (m_names.size() == 1) {
-        retval += " name = " + m_names[0]->Dump() + "\n";
+        retval += " name = " + m_names[0]->Dump(ntabs) + "\n";
     } else {
         retval += " name = [ ";
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
-            retval += name->Dump() + " ";
+        for (auto& name : m_names) {
+            retval += name->Dump(ntabs) + " ";
         }
         retval += "]\n";
     }
@@ -3872,14 +4199,14 @@ void Species::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_c
 }
 
 bool Species::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Species::Match passed no candidate object";
         return false;
     }
 
     // is it a planet or a building on a planet? TODO: factor out
-    std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+    auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
     std::shared_ptr<const ::Building> building;
     if (!planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
         planet = GetPlanet(building->PlanetID());
@@ -3889,20 +4216,20 @@ bool Species::Match(const ScriptingContext& local_context) const {
             return !planet->SpeciesName().empty();  // match any species name
         } else {
             // match only specified species names
-            for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+            for (auto& name : m_names) {
                 if (name->Eval(local_context) == planet->SpeciesName())
                     return true;
             }
         }
     }
     // is it a ship?
-    std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate);
+    auto ship = std::dynamic_pointer_cast<const Ship>(candidate);
     if (ship) {
         if (m_names.empty()) {
             return !ship->SpeciesName().empty();    // match any species name
         } else {
             // match only specified species names
-            for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+            for (auto& name : m_names) {
                 if (name->Eval(local_context) == ship->SpeciesName())
                     return true;
             }
@@ -3912,42 +4239,61 @@ bool Species::Match(const ScriptingContext& local_context) const {
 }
 
 void Species::SetTopLevelContent(const std::string& content_name) {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (name)
             name->SetTopLevelContent(content_name);
     }
 }
 
+unsigned int Species::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Species");
+    CheckSums::CheckSumCombine(retval, m_names);
+
+    TraceLogger() << "GetCheckSum(Species): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // Enqueued                                              //
 ///////////////////////////////////////////////////////////
-Enqueued::Enqueued(ValueRef::ValueRefBase<int>* design_id, ValueRef::ValueRefBase<int>* empire_id,
-                   ValueRef::ValueRefBase<int>* low, ValueRef::ValueRefBase<int>* high) :
+Enqueued::Enqueued(std::unique_ptr<ValueRef::ValueRefBase<int>>&& design_id,
+                   std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id,
+                   std::unique_ptr<ValueRef::ValueRefBase<int>>&& low,
+                   std::unique_ptr<ValueRef::ValueRefBase<int>>&& high) :
     ConditionBase(),
     m_build_type(BT_SHIP),
     m_name(),
-    m_design_id(design_id),
-    m_empire_id(empire_id),
-    m_low(low),
-    m_high(high)
+    m_design_id(std::move(design_id)),
+    m_empire_id(std::move(empire_id)),
+    m_low(std::move(low)),
+    m_high(std::move(high))
 {}
 
 Enqueued::Enqueued() :
     ConditionBase(),
     m_build_type(BT_NOT_BUILDING),
     m_name(),
-    m_design_id(0),
-    m_empire_id(0),
-    m_low(0),
-    m_high(0)
+    m_design_id(nullptr),
+    m_empire_id(nullptr),
+    m_low(nullptr),
+    m_high(nullptr)
 {}
 
-Enqueued::~Enqueued() {
-    delete m_name;
-    delete m_design_id;
-    delete m_low;
-    delete m_high;
-}
+Enqueued::Enqueued(BuildType build_type,
+                   std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name,
+                   std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id,
+                   std::unique_ptr<ValueRef::ValueRefBase<int>>&& low,
+                   std::unique_ptr<ValueRef::ValueRefBase<int>>&& high) :
+    ConditionBase(),
+    m_build_type(build_type),
+    m_name(std::move(name)),
+    m_design_id(nullptr),
+    m_empire_id(std::move(empire_id)),
+    m_low(std::move(low)),
+    m_high(std::move(high))
+{}
 
 bool Enqueued::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -3971,10 +4317,10 @@ bool Enqueued::operator==(const ConditionBase& rhs) const {
 
 namespace {
     int NumberOnQueue(const ProductionQueue& queue, BuildType build_type, const int location_id,
-                      const std::string& name = "", int design_id = ShipDesign::INVALID_DESIGN_ID)
+                      const std::string& name = "", int design_id = INVALID_DESIGN_ID)
     {
         int retval = 0;
-        for (const ProductionQueue::Element& element : queue) {
+        for (const auto& element : queue) {
             if (!(build_type == INVALID_BUILD_TYPE || build_type == element.item.build_type))
                 continue;
             if (location_id != element.location)
@@ -3985,7 +4331,7 @@ namespace {
                 if (!name.empty() && element.item.name != name)
                     continue;
             } else if (build_type == BT_SHIP) {
-                if (design_id != ShipDesign::INVALID_DESIGN_ID) {
+                if (design_id != INVALID_DESIGN_ID) {
                     // if looking for ships, accept design by id number...
                     if (design_id != element.item.design_id)
                         continue;
@@ -4019,7 +4365,7 @@ namespace {
             int count = 0;
 
             if (m_empire_id == ALL_EMPIRES) {
-                for (std::map<int, Empire*>::value_type& item : Empires()) {
+                for (auto& item : Empires()) {
                     const Empire* empire = item.second;
                     count += NumberOnQueue(empire->GetProductionQueue(), m_build_type,
                                            candidate->ID(), m_name, m_design_id);
@@ -4061,7 +4407,7 @@ void Enqueued::Eval(const ScriptingContext& parent_context,
     if (simple_eval_safe) {
         // evaluate valuerefs once, and use to check all candidate objects
         std::string name =  (m_name ?       m_name->Eval(parent_context) :      "");
-        int design_id =     (m_design_id ?  m_design_id->Eval(parent_context) : ShipDesign::INVALID_DESIGN_ID);
+        int design_id =     (m_design_id ?  m_design_id->Eval(parent_context) : INVALID_DESIGN_ID);
         int empire_id =     (m_empire_id ?  m_empire_id->Eval(parent_context) : ALL_EMPIRES);
         int low =           (m_low ?        m_low->Eval(parent_context) :       0);
         int high =          (m_high ?       m_high->Eval(parent_context) :      INT_MAX);
@@ -4167,39 +4513,39 @@ std::string Enqueued::Description(bool negated/* = false*/) const {
                % what_str);
 }
 
-std::string Enqueued::Dump() const {
-    std::string retval = DumpIndent() + "Enqueued";
+std::string Enqueued::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Enqueued";
 
     if (m_build_type == BT_BUILDING) {
         retval += " type = Building";
         if (m_name)
-            retval += " name = " + m_name->Dump();
+            retval += " name = " + m_name->Dump(ntabs);
     } else if (m_build_type == BT_SHIP) {
         retval += " type = Ship";
         if (m_name)
-            retval += " design = " + m_name->Dump();
+            retval += " design = " + m_name->Dump(ntabs);
         else if (m_design_id)
-            retval += " design = " + m_design_id->Dump();
+            retval += " design = " + m_design_id->Dump(ntabs);
     }
     if (m_empire_id)
-        retval += " empire = " + m_empire_id->Dump();
+        retval += " empire = " + m_empire_id->Dump(ntabs);
     if (m_low)
-        retval += " low = " + m_low->Dump();
+        retval += " low = " + m_low->Dump(ntabs);
     if (m_high)
-        retval += " high = " + m_high->Dump();
+        retval += " high = " + m_high->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool Enqueued::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Enqueued::Match passed no candidate object";
         return false;
     }
     std::string name =  (m_name ?       m_name->Eval(local_context) :       "");
     int empire_id =     (m_empire_id ?  m_empire_id->Eval(local_context) :  ALL_EMPIRES);
-    int design_id =     (m_design_id ?  m_design_id->Eval(local_context) :  ShipDesign::INVALID_DESIGN_ID);
+    int design_id =     (m_design_id ?  m_design_id->Eval(local_context) :  INVALID_DESIGN_ID);
     int low =           (m_low ?        m_low->Eval(local_context) :        0);
     int high =          (m_high ?       m_high->Eval(local_context) :       INT_MAX);
     return EnqueuedSimpleMatch(m_build_type, name, design_id, empire_id, low, high)(candidate);
@@ -4224,14 +4570,27 @@ void Enqueued::SetTopLevelContent(const std::string& content_name) {
         m_high->SetTopLevelContent(content_name);
 }
 
+unsigned int Enqueued::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Enqueued");
+    CheckSums::CheckSumCombine(retval, m_name);
+    CheckSums::CheckSumCombine(retval, m_design_id);
+    CheckSums::CheckSumCombine(retval, m_empire_id);
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+
+    TraceLogger() << "GetCheckSum(Enqueued): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // FocusType                                             //
 ///////////////////////////////////////////////////////////
-FocusType::~FocusType() {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
-        delete name;
-    }
-}
+FocusType::FocusType(std::vector<std::unique_ptr<ValueRef::ValueRefBase<std::string>>>&& names) :
+    ConditionBase(),
+    m_names(std::move(names))
+{}
 
 bool FocusType::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -4261,15 +4620,15 @@ namespace {
                 return false;
 
             // is it a ResourceCenter or a Building on a Planet (that is a ResourceCenter)
-            std::shared_ptr<const ResourceCenter> res_center = std::dynamic_pointer_cast<const ResourceCenter>(candidate);
+            auto res_center = std::dynamic_pointer_cast<const ResourceCenter>(candidate);
             std::shared_ptr<const ::Building> building;
             if (!res_center && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
-                if (std::shared_ptr<const Planet> planet = GetPlanet(building->PlanetID()))
+                if (auto planet = GetPlanet(building->PlanetID()))
                     res_center = std::dynamic_pointer_cast<const ResourceCenter>(planet);
             }
             if (res_center) {
                 return !res_center->Focus().empty() &&
-                    (std::find(m_names.begin(), m_names.end(), res_center->Focus()) != m_names.end());
+                    std::count(m_names.begin(), m_names.end(), res_center->Focus());
             }
 
             return false;
@@ -4286,7 +4645,7 @@ void FocusType::Eval(const ScriptingContext& parent_context,
     bool simple_eval_safe = parent_context.condition_root_candidate || RootCandidateInvariant();
     if (simple_eval_safe) {
         // check each valueref for invariance to local candidate
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             if (!name->LocalCandidateInvariant()) {
                 simple_eval_safe = false;
                 break;
@@ -4297,7 +4656,7 @@ void FocusType::Eval(const ScriptingContext& parent_context,
         // evaluate names once, and use to check all candidate objects
         std::vector<std::string> names;
         // get all names from valuerefs
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             names.push_back(name->Eval(parent_context));
         }
         EvalImpl(matches, non_matches, search_domain, FocusTypeSimpleMatch(names));
@@ -4308,7 +4667,7 @@ void FocusType::Eval(const ScriptingContext& parent_context,
 }
 
 bool FocusType::RootCandidateInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->RootCandidateInvariant())
             return false;
     }
@@ -4316,7 +4675,7 @@ bool FocusType::RootCandidateInvariant() const {
 }
 
 bool FocusType::TargetInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->TargetInvariant())
             return false;
     }
@@ -4324,7 +4683,7 @@ bool FocusType::TargetInvariant() const {
 }
 
 bool FocusType::SourceInvariant() const {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (!name->SourceInvariant())
             return false;
     }
@@ -4351,14 +4710,14 @@ std::string FocusType::Description(bool negated/* = false*/) const {
         % values_str);
 }
 
-std::string FocusType::Dump() const {
-    std::string retval = DumpIndent() + "Focus name = ";
+std::string FocusType::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Focus name = ";
     if (m_names.size() == 1) {
-        retval += m_names[0]->Dump() + "\n";
+        retval += m_names[0]->Dump(ntabs) + "\n";
     } else {
         retval += "[ ";
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
-            retval += name->Dump() + " ";
+        for (auto& name : m_names) {
+            retval += name->Dump(ntabs) + " ";
         }
         retval += "]\n";
     }
@@ -4366,21 +4725,21 @@ std::string FocusType::Dump() const {
 }
 
 bool FocusType::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "FocusType::Match passed no candidate object";
         return false;
     }
 
     // is it a ResourceCenter or a Building on a Planet (that is a ResourceCenter)
-    std::shared_ptr<const ResourceCenter> res_center = std::dynamic_pointer_cast<const ResourceCenter>(candidate);
+    auto res_center = std::dynamic_pointer_cast<const ResourceCenter>(candidate);
     std::shared_ptr<const ::Building> building;
     if (!res_center && (building = std::dynamic_pointer_cast<const ::Building>(candidate))) {
-        if (std::shared_ptr<const Planet> planet = GetPlanet(building->PlanetID()))
+        if (auto planet = GetPlanet(building->PlanetID()))
             res_center = std::dynamic_pointer_cast<const ResourceCenter>(planet);
     }
     if (res_center) {
-        for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+        for (auto& name : m_names) {
             if (name->Eval(local_context) == res_center->Focus())
                 return true;
         }
@@ -4396,20 +4755,29 @@ void FocusType::GetDefaultInitialCandidateObjects(const ScriptingContext& parent
 }
 
 void FocusType::SetTopLevelContent(const std::string& content_name) {
-    for (ValueRef::ValueRefBase<std::string>* name : m_names) {
+    for (auto& name : m_names) {
         if (name)
             name->SetTopLevelContent(content_name);
     }
 }
 
+unsigned int FocusType::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::FocusType");
+    CheckSums::CheckSumCombine(retval, m_names);
+
+    TraceLogger() << "GetCheckSum(FocusType): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // StarType                                              //
 ///////////////////////////////////////////////////////////
-StarType::~StarType() {
-    for (ValueRef::ValueRefBase<::StarType>* type : m_types) {
-        delete type;
-    }
-}
+StarType::StarType(std::vector<std::unique_ptr<ValueRef::ValueRefBase< ::StarType>>>&& types) :
+    ConditionBase(),
+    m_types(std::move(types))
+{}
 
 bool StarType::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -4440,7 +4808,7 @@ namespace {
 
             std::shared_ptr<const System> system = GetSystem(candidate->SystemID());
             if (system || (system = std::dynamic_pointer_cast<const System>(candidate)))
-                return !m_types.empty() && (std::find(m_types.begin(), m_types.end(), system->GetStarType()) != m_types.end());
+                return !m_types.empty() && std::count(m_types.begin(), m_types.end(), system->GetStarType());
 
             return false;
         }
@@ -4456,7 +4824,7 @@ void StarType::Eval(const ScriptingContext& parent_context,
     bool simple_eval_safe = parent_context.condition_root_candidate || RootCandidateInvariant();
     if (simple_eval_safe) {
         // check each valueref for invariance to local candidate
-        for (ValueRef::ValueRefBase<::StarType>* type : m_types) {
+        for (auto& type : m_types) {
             if (!type->LocalCandidateInvariant()) {
                 simple_eval_safe = false;
                 break;
@@ -4467,7 +4835,7 @@ void StarType::Eval(const ScriptingContext& parent_context,
         // evaluate types once, and use to check all candidate objects
         std::vector< ::StarType> types;
         // get all types from valuerefs
-        for (ValueRef::ValueRefBase<::StarType>* type : m_types) {
+        for (auto& type : m_types) {
             types.push_back(type->Eval(parent_context));
         }
         EvalImpl(matches, non_matches, search_domain, StarTypeSimpleMatch(types));
@@ -4478,7 +4846,7 @@ void StarType::Eval(const ScriptingContext& parent_context,
 }
 
 bool StarType::RootCandidateInvariant() const {
-    for (ValueRef::ValueRefBase<::StarType>* type : m_types) {
+    for (auto& type : m_types) {
         if (!type->RootCandidateInvariant())
             return false;
     }
@@ -4486,7 +4854,7 @@ bool StarType::RootCandidateInvariant() const {
 }
 
 bool StarType::TargetInvariant() const {
-    for (ValueRef::ValueRefBase<::StarType>* type : m_types) {
+    for (auto& type : m_types) {
         if (!type->TargetInvariant())
             return false;
     }
@@ -4494,7 +4862,7 @@ bool StarType::TargetInvariant() const {
 }
 
 bool StarType::SourceInvariant() const {
-    for (ValueRef::ValueRefBase<::StarType>* type : m_types) {
+    for (auto& type : m_types) {
         if (!type->SourceInvariant())
             return false;
     }
@@ -4521,14 +4889,14 @@ std::string StarType::Description(bool negated/* = false*/) const {
         % values_str);
 }
 
-std::string StarType::Dump() const {
-    std::string retval = DumpIndent() + "Star type = ";
+std::string StarType::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Star type = ";
     if (m_types.size() == 1) {
-        retval += m_types[0]->Dump() + "\n";
+        retval += m_types[0]->Dump(ntabs) + "\n";
     } else {
         retval += "[ ";
-        for (ValueRef::ValueRefBase<::StarType>* type : m_types) {
-            retval += type->Dump() + " ";
+        for (auto& type : m_types) {
+            retval += type->Dump(ntabs) + " ";
         }
         retval += "]\n";
     }
@@ -4536,7 +4904,7 @@ std::string StarType::Dump() const {
 }
 
 bool StarType::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "StarType::Match passed no candidate object";
         return false;
@@ -4544,7 +4912,7 @@ bool StarType::Match(const ScriptingContext& local_context) const {
 
     std::shared_ptr<const System> system = GetSystem(candidate->SystemID());
     if (system || (system = std::dynamic_pointer_cast<const System>(candidate))) {
-        for (ValueRef::ValueRefBase<::StarType>* type : m_types) {
+        for (auto& type : m_types) {
             if (type->Eval(local_context) == system->GetStarType())
                 return true;
         }
@@ -4553,17 +4921,29 @@ bool StarType::Match(const ScriptingContext& local_context) const {
 }
 
 void StarType::SetTopLevelContent(const std::string& content_name) {
-    for (ValueRef::ValueRefBase<::StarType>* type : m_types) {
+    for (auto& type : m_types) {
         if (type)
             (type)->SetTopLevelContent(content_name);
     }
 }
 
+unsigned int StarType::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::StarType");
+    CheckSums::CheckSumCombine(retval, m_types);
+
+    TraceLogger() << "GetCheckSum(StarType): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // DesignHasHull                                         //
 ///////////////////////////////////////////////////////////
-DesignHasHull::~DesignHasHull()
-{ delete m_name; }
+DesignHasHull::DesignHasHull(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name) :
+    ConditionBase(),
+    m_name(std::move(name))
+{}
 
 bool DesignHasHull::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -4589,7 +4969,7 @@ namespace {
                 return false;
 
             // is it a ship?
-            std::shared_ptr<const ::Ship> ship = std::dynamic_pointer_cast<const ::Ship>(candidate);
+            auto ship = std::dynamic_pointer_cast<const ::Ship>(candidate);
             if (!ship)
                 return false;
             // with a valid design?
@@ -4644,16 +5024,16 @@ std::string DesignHasHull::Description(bool negated/* = false*/) const {
         % name_str);
 }
 
-std::string DesignHasHull::Dump() const {
-    std::string retval = DumpIndent() + "DesignHasHull";
+std::string DesignHasHull::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "DesignHasHull";
     if (m_name)
-        retval += " name = " + m_name->Dump();
+        retval += " name = " + m_name->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool DesignHasHull::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "DesignHasHull::Match passed no candidate object";
         return false;
@@ -4665,7 +5045,7 @@ bool DesignHasHull::Match(const ScriptingContext& local_context) const {
 }
 
 void DesignHasHull::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_context,
-                                                  ObjectSet& condition_non_targets) const
+                                                      ObjectSet& condition_non_targets) const
 {
     AddShipSet(condition_non_targets);
 }
@@ -4675,14 +5055,27 @@ void DesignHasHull::SetTopLevelContent(const std::string& content_name) {
         m_name->SetTopLevelContent(content_name);
 }
 
+unsigned int DesignHasHull::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::DesignHasHull");
+    CheckSums::CheckSumCombine(retval, m_name);
+
+    TraceLogger() << "GetCheckSum(DesignHasHull): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // DesignHasPart                                         //
 ///////////////////////////////////////////////////////////
-DesignHasPart::~DesignHasPart() {
-    delete m_name;
-    delete m_low;
-    delete m_high;
-}
+DesignHasPart::DesignHasPart(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name,
+                             std::unique_ptr<ValueRef::ValueRefBase<int>>&& low,
+                             std::unique_ptr<ValueRef::ValueRefBase<int>>&& high) :
+    ConditionBase(),
+    m_low(std::move(low)),
+    m_high(std::move(high)),
+    m_name(std::move(name))
+{}
 
 bool DesignHasPart::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -4712,7 +5105,7 @@ namespace {
                 return false;
 
             // is it a ship?
-            std::shared_ptr<const ::Ship> ship = std::dynamic_pointer_cast<const ::Ship>(candidate);
+            auto ship = std::dynamic_pointer_cast<const ::Ship>(candidate);
             if (!ship)
                 return false;
             // with a valid design?
@@ -4800,20 +5193,20 @@ std::string DesignHasPart::Description(bool negated/* = false*/) const {
         % name_str);
 }
 
-std::string DesignHasPart::Dump() const {
-    std::string retval = DumpIndent() + "DesignHasPart";
+std::string DesignHasPart::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "DesignHasPart";
     if (m_low)
-        retval += "low = " + m_low->Dump();
+        retval += "low = " + m_low->Dump(ntabs);
     if (m_high)
-        retval += " high = " + m_high->Dump();
+        retval += " high = " + m_high->Dump(ntabs);
     if (m_name)
-        retval += " name = " + m_name->Dump();
+        retval += " name = " + m_name->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool DesignHasPart::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "DesignHasPart::Match passed no candidate object";
         return false;
@@ -4841,13 +5234,29 @@ void DesignHasPart::SetTopLevelContent(const std::string& content_name) {
         m_name->SetTopLevelContent(content_name);
 }
 
+unsigned int DesignHasPart::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::DesignHasPart");
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+    CheckSums::CheckSumCombine(retval, m_name);
+
+    TraceLogger() << "GetCheckSum(DesignHasPart): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // DesignHasPartClass                                    //
 ///////////////////////////////////////////////////////////
-DesignHasPartClass::~DesignHasPartClass() {
-    delete m_low;
-    delete m_high;
-}
+DesignHasPartClass::DesignHasPartClass(ShipPartClass part_class,
+                                       std::unique_ptr<ValueRef::ValueRefBase<int>>&& low,
+                                       std::unique_ptr<ValueRef::ValueRefBase<int>>&& high) :
+    ConditionBase(),
+    m_low(std::move(low)),
+    m_high(std::move(high)),
+    m_class(std::move(part_class))
+{}
 
 bool DesignHasPartClass::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -4879,7 +5288,7 @@ namespace {
                 return false;
 
             // is it a ship?
-            std::shared_ptr<const ::Ship> ship = std::dynamic_pointer_cast<const ::Ship>(candidate);
+            auto ship = std::dynamic_pointer_cast<const ::Ship>(candidate);
             if (!ship)
                 return false;
             // with a valid design?
@@ -4954,19 +5363,19 @@ std::string DesignHasPartClass::Description(bool negated/* = false*/) const {
                % UserString(boost::lexical_cast<std::string>(m_class)));
 }
 
-std::string DesignHasPartClass::Dump() const {
-    std::string retval = DumpIndent() + "DesignHasPartClass";
+std::string DesignHasPartClass::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "DesignHasPartClass";
     if (m_low)
-        retval += " low = " + m_low->Dump();
+        retval += " low = " + m_low->Dump(ntabs);
     if (m_high)
-        retval += " high = " + m_high->Dump();
+        retval += " high = " + m_high->Dump(ntabs);
     retval += " class = " + UserString(boost::lexical_cast<std::string>(m_class));
     retval += "\n";
     return retval;
 }
 
 bool DesignHasPartClass::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "DesignHasPartClass::Match passed no candidate object";
         return false;
@@ -4991,11 +5400,30 @@ void DesignHasPartClass::SetTopLevelContent(const std::string& content_name) {
         m_high->SetTopLevelContent(content_name);
 }
 
+unsigned int DesignHasPartClass::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::DesignHasPartClass");
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+    CheckSums::CheckSumCombine(retval, m_class);
+
+    TraceLogger() << "GetCheckSum(DesignHasPartClass): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // PredefinedShipDesign                                  //
 ///////////////////////////////////////////////////////////
-PredefinedShipDesign::~PredefinedShipDesign()
-{ delete m_name; }
+PredefinedShipDesign::PredefinedShipDesign(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name) :
+    ConditionBase(),
+    m_name(std::move(name))
+{}
+
+PredefinedShipDesign::PredefinedShipDesign(ValueRef::ValueRefBase<std::string>* name) :
+    ConditionBase(),
+    m_name(name)
+{}
 
 bool PredefinedShipDesign::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -5023,7 +5451,7 @@ namespace {
         {}
 
         bool operator()(std::shared_ptr<const UniverseObject> candidate) const {
-            std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate);
+            auto ship = std::dynamic_pointer_cast<const Ship>(candidate);
             if (!ship)
                 return false;
             const ShipDesign* candidate_design = ship->Design();
@@ -5091,16 +5519,16 @@ std::string PredefinedShipDesign::Description(bool negated/* = false*/) const {
         % name_str);
 }
 
-std::string PredefinedShipDesign::Dump() const {
-    std::string retval = DumpIndent() + "PredefinedShipDesign";
+std::string PredefinedShipDesign::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "PredefinedShipDesign";
     if (m_name)
-        retval += " name = " + m_name->Dump();
+        retval += " name = " + m_name->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool PredefinedShipDesign::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "PredefinedShipDesign::Match passed no candidate object";
         return false;
@@ -5118,11 +5546,23 @@ void PredefinedShipDesign::SetTopLevelContent(const std::string& content_name) {
         m_name->SetTopLevelContent(content_name);
 }
 
+unsigned int PredefinedShipDesign::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::PredefinedShipDesign");
+    CheckSums::CheckSumCombine(retval, m_name);
+
+    TraceLogger() << "GetCheckSum(PredefinedShipDesign): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // NumberedShipDesign                                    //
 ///////////////////////////////////////////////////////////
-NumberedShipDesign::~NumberedShipDesign()
-{ delete m_design_id; }
+NumberedShipDesign::NumberedShipDesign(std::unique_ptr<ValueRef::ValueRefBase<int>>&& design_id) :
+    ConditionBase(),
+    m_design_id(std::move(design_id))
+{}
 
 bool NumberedShipDesign::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -5146,9 +5586,9 @@ namespace {
         bool operator()(std::shared_ptr<const UniverseObject> candidate) const {
             if (!candidate)
                 return false;
-            if (m_design_id == ShipDesign::INVALID_DESIGN_ID)
+            if (m_design_id == INVALID_DESIGN_ID)
                 return false;
-            if (std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate))
+            if (auto ship = std::dynamic_pointer_cast<const Ship>(candidate))
                 if (ship->DesignID() == m_design_id)
                     return true;
             return false;
@@ -5196,11 +5636,11 @@ std::string NumberedShipDesign::Description(bool negated/* = false*/) const {
                % id_str);
 }
 
-std::string NumberedShipDesign::Dump() const
-{ return DumpIndent() + "NumberedShipDesign design_id = " + m_design_id->Dump(); }
+std::string NumberedShipDesign::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "NumberedShipDesign design_id = " + m_design_id->Dump(ntabs); }
 
 bool NumberedShipDesign::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "NumberedShipDesign::Match passed no candidate object";
         return false;
@@ -5213,11 +5653,23 @@ void NumberedShipDesign::SetTopLevelContent(const std::string& content_name) {
         m_design_id->SetTopLevelContent(content_name);
 }
 
+unsigned int NumberedShipDesign::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::NumberedShipDesign");
+    CheckSums::CheckSumCombine(retval, m_design_id);
+
+    TraceLogger() << "GetCheckSum(NumberedShipDesign): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // ProducedByEmpire                                      //
 ///////////////////////////////////////////////////////////
-ProducedByEmpire::~ProducedByEmpire()
-{ delete m_empire_id; }
+ProducedByEmpire::ProducedByEmpire(std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id) :
+    ConditionBase(),
+    m_empire_id(std::move(empire_id))
+{}
 
 bool ProducedByEmpire::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -5242,9 +5694,9 @@ namespace {
             if (!candidate)
                 return false;
 
-            if (std::shared_ptr<const ::Ship> ship = std::dynamic_pointer_cast<const ::Ship>(candidate))
+            if (auto ship = std::dynamic_pointer_cast<const ::Ship>(candidate))
                 return ship->ProducedByEmpireID() == m_empire_id;
-            else if (std::shared_ptr<const ::Building> building = std::dynamic_pointer_cast<const ::Building>(candidate))
+            else if (auto building = std::dynamic_pointer_cast<const ::Building>(candidate))
                 return building->ProducedByEmpireID() == m_empire_id;
             return false;
         }
@@ -5298,11 +5750,11 @@ std::string ProducedByEmpire::Description(bool negated/* = false*/) const {
                % empire_str);
 }
 
-std::string ProducedByEmpire::Dump() const
-{ return DumpIndent() + "ProducedByEmpire empire_id = " + m_empire_id->Dump(); }
+std::string ProducedByEmpire::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "ProducedByEmpire empire_id = " + m_empire_id->Dump(ntabs); }
 
 bool ProducedByEmpire::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "ProducedByEmpire::Match passed no candidate object";
         return false;
@@ -5316,11 +5768,23 @@ void ProducedByEmpire::SetTopLevelContent(const std::string& content_name) {
         m_empire_id->SetTopLevelContent(content_name);
 }
 
+unsigned int ProducedByEmpire::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::ProducedByEmpire");
+    CheckSums::CheckSumCombine(retval, m_empire_id);
+
+    TraceLogger() << "GetCheckSum(ProducedByEmpire): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // Chance                                                //
 ///////////////////////////////////////////////////////////
-Chance::~Chance()
-{ delete m_chance; }
+Chance::Chance(std::unique_ptr<ValueRef::ValueRefBase<double>>&& chance) :
+    ConditionBase(),
+    m_chance(std::move(chance))
+{}
 
 bool Chance::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -5390,8 +5854,8 @@ std::string Chance::Description(bool negated/* = false*/) const {
     }
 }
 
-std::string Chance::Dump() const
-{ return DumpIndent() + "Random probability = " + m_chance->Dump() + "\n"; }
+std::string Chance::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "Random probability = " + m_chance->Dump(ntabs) + "\n"; }
 
 bool Chance::Match(const ScriptingContext& local_context) const {
     float chance = std::max(0.0, std::min(m_chance->Eval(local_context), 1.0));
@@ -5403,13 +5867,27 @@ void Chance::SetTopLevelContent(const std::string& content_name) {
         m_chance->SetTopLevelContent(content_name);
 }
 
+unsigned int Chance::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Chance");
+    CheckSums::CheckSumCombine(retval, m_chance);
+
+    TraceLogger() << "GetCheckSum(Chance): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // MeterValue                                            //
 ///////////////////////////////////////////////////////////
-MeterValue::~MeterValue() {
-    delete m_low;
-    delete m_high;
-}
+MeterValue::MeterValue(MeterType meter,
+                       std::unique_ptr<ValueRef::ValueRefBase<double>>&& low,
+                       std::unique_ptr<ValueRef::ValueRefBase<double>>&& high) :
+    ConditionBase(),
+    m_meter(meter),
+    m_low(std::move(low)),
+    m_high(std::move(high))
+{}
 
 bool MeterValue::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -5465,6 +5943,9 @@ namespace {
         case METER_MAX_SHIELD:          return "MaxShield";          break;
         case METER_MAX_STRUCTURE:       return "MaxStructure";       break;
         case METER_MAX_DEFENSE:         return "MaxDefense";         break;
+        case METER_MAX_SUPPLY:          return "MaxSupply";          break;
+        case METER_MAX_STOCKPILE:       return "MaxStockpile";       break;
+        case METER_MAX_TROOPS:          return "MaxTroops";          break;
         case METER_POPULATION:          return "Population";         break;
         case METER_INDUSTRY:            return "Industry";           break;
         case METER_RESEARCH:            return "Research";           break;
@@ -5475,6 +5956,7 @@ namespace {
         case METER_STRUCTURE:           return "Structure";          break;
         case METER_DEFENSE:             return "Defense";            break;
         case METER_SUPPLY:              return "Supply";             break;
+        case METER_STOCKPILE:           return "Stockpile";          break;
         case METER_STEALTH:             return "Stealth";            break;
         case METER_DETECTION:           return "Detection";          break;
         case METER_SPEED:               return "Speed";              break;
@@ -5545,19 +6027,19 @@ std::string MeterValue::Description(bool negated/* = false*/) const {
     }
 }
 
-std::string MeterValue::Dump() const {
-    std::string retval = DumpIndent();
+std::string MeterValue::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs);
     retval += MeterTypeDumpString(m_meter);
     if (m_low)
-        retval += " low = " + m_low->Dump();
+        retval += " low = " + m_low->Dump(ntabs);
     if (m_high)
-        retval += " high = " + m_high->Dump();
+        retval += " high = " + m_high->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool MeterValue::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "MeterValue::Match passed no candidate object";
         return false;
@@ -5574,14 +6056,31 @@ void MeterValue::SetTopLevelContent(const std::string& content_name) {
         m_high->SetTopLevelContent(content_name);
 }
 
+unsigned int MeterValue::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::MeterValue");
+    CheckSums::CheckSumCombine(retval, m_meter);
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+
+    TraceLogger() << "GetCheckSum(MeterValue): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // ShipPartMeterValue                                    //
 ///////////////////////////////////////////////////////////
-ShipPartMeterValue::~ShipPartMeterValue() {
-    delete m_part_name;
-    delete m_low;
-    delete m_high;
-}
+ShipPartMeterValue::ShipPartMeterValue(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& ship_part_name,
+                                       MeterType meter,
+                                       std::unique_ptr<ValueRef::ValueRefBase<double>>&& low,
+                                       std::unique_ptr<ValueRef::ValueRefBase<double>>&& high) :
+    ConditionBase(),
+    m_part_name(std::move(ship_part_name)),
+    m_meter(meter),
+    m_low(std::move(low)),
+    m_high(std::move(high))
+{}
 
 bool ShipPartMeterValue::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -5614,7 +6113,7 @@ namespace {
         bool operator()(std::shared_ptr<const UniverseObject> candidate) const {
             if (!candidate)
                 return false;
-            std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate);
+            auto ship = std::dynamic_pointer_cast<const Ship>(candidate);
             if (!ship)
                 return false;
             const Meter* meter = ship->GetPartMeter(m_meter, m_part_name);
@@ -5700,21 +6199,21 @@ std::string ShipPartMeterValue::Description(bool negated/* = false*/) const {
                % high_str);
 }
 
-std::string ShipPartMeterValue::Dump() const {
-    std::string retval = DumpIndent();
+std::string ShipPartMeterValue::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs);
     retval += MeterTypeDumpString(m_meter);
     if (m_part_name)
-        retval += " part = " + m_part_name->Dump();
+        retval += " part = " + m_part_name->Dump(ntabs);
     if (m_low)
-        retval += " low = " + m_low->Dump();
+        retval += " low = " + m_low->Dump(ntabs);
     if (m_high)
-        retval += " high = " + m_high->Dump();
+        retval += " high = " + m_high->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool ShipPartMeterValue::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "ShipPartMeterValue::Match passed no candidate object";
         return false;
@@ -5734,14 +6233,42 @@ void ShipPartMeterValue::SetTopLevelContent(const std::string& content_name) {
         m_high->SetTopLevelContent(content_name);
 }
 
+unsigned int ShipPartMeterValue::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::ShipPartMeterValue");
+    CheckSums::CheckSumCombine(retval, m_part_name);
+    CheckSums::CheckSumCombine(retval, m_meter);
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+
+    TraceLogger() << "GetCheckSum(ShipPartMeterValue): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // EmpireMeterValue                                      //
 ///////////////////////////////////////////////////////////
-EmpireMeterValue::~EmpireMeterValue() {
-    delete m_empire_id;
-    delete m_low;
-    delete m_high;
-}
+EmpireMeterValue::EmpireMeterValue(const std::string& meter,
+                                   std::unique_ptr<ValueRef::ValueRefBase<double>>&& low,
+                                   std::unique_ptr<ValueRef::ValueRefBase<double>>&& high) :
+    ConditionBase(),
+    m_empire_id(nullptr),
+    m_meter(meter),
+    m_low(std::move(low)),
+    m_high(std::move(high))
+{}
+
+EmpireMeterValue::EmpireMeterValue(std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id,
+                                   const std::string& meter,
+                                   std::unique_ptr<ValueRef::ValueRefBase<double>>&& low,
+                                   std::unique_ptr<ValueRef::ValueRefBase<double>>&& high) :
+    ConditionBase(),
+    m_empire_id(std::move(empire_id)),
+    m_meter(meter),
+    m_low(std::move(low)),
+    m_high(std::move(high))
+{}
 
 bool EmpireMeterValue::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -5860,21 +6387,21 @@ std::string EmpireMeterValue::Description(bool negated/* = false*/) const {
                % empire_str);
 }
 
-std::string EmpireMeterValue::Dump() const {
-    std::string retval = DumpIndent() + "EmpireMeterValue";
+std::string EmpireMeterValue::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "EmpireMeterValue";
     if (m_empire_id)
-        retval += " empire = " + m_empire_id->Dump();
+        retval += " empire = " + m_empire_id->Dump(ntabs);
     retval += " meter = " + m_meter;
     if (m_low)
-        retval += " low = " + m_low->Dump();
+        retval += " low = " + m_low->Dump(ntabs);
     if (m_high)
-        retval += " high = " + m_high->Dump();
+        retval += " high = " + m_high->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool EmpireMeterValue::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "EmpireMeterValue::Match passed no candidate object";
         return false;
@@ -5896,13 +6423,30 @@ void EmpireMeterValue::SetTopLevelContent(const std::string& content_name) {
         m_high->SetTopLevelContent(content_name);
 }
 
+unsigned int EmpireMeterValue::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::EmpireMeterValue");
+    CheckSums::CheckSumCombine(retval, m_empire_id);
+    CheckSums::CheckSumCombine(retval, m_meter);
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+
+    TraceLogger() << "GetCheckSum(EmpireMeterValue): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // EmpireStockpileValue                                  //
 ///////////////////////////////////////////////////////////
-EmpireStockpileValue::~EmpireStockpileValue() {
-    delete m_low;
-    delete m_high;
-}
+EmpireStockpileValue::EmpireStockpileValue(ResourceType stockpile,
+                                           std::unique_ptr<ValueRef::ValueRefBase<double>>&& low,
+                                           std::unique_ptr<ValueRef::ValueRefBase<double>>&& high) :
+    ConditionBase(),
+    m_stockpile(stockpile),
+    m_low(std::move(low)),
+    m_high(std::move(high))
+{}
 
 bool EmpireStockpileValue::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -5997,20 +6541,20 @@ std::string EmpireStockpileValue::Description(bool negated/* = false*/) const {
                % high_str);
 }
 
-std::string EmpireStockpileValue::Dump() const {
-    std::string retval = DumpIndent();
+std::string EmpireStockpileValue::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs);
     switch (m_stockpile) {
     case RE_TRADE:      retval += "OwnerTradeStockpile";    break;
     case RE_RESEARCH:   retval += "OwnerResearchStockpile"; break;
     case RE_INDUSTRY:   retval += "OwnerIndustryStockpile"; break;
     default: retval += "?"; break;
     }
-    retval += " low = " + m_low->Dump() + " high = " + m_high->Dump() + "\n";
+    retval += " low = " + m_low->Dump(ntabs) + " high = " + m_high->Dump(ntabs) + "\n";
     return retval;
 }
 
 bool EmpireStockpileValue::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "EmpireStockpileValue::Match passed no candidate object";
         return false;
@@ -6028,11 +6572,25 @@ void EmpireStockpileValue::SetTopLevelContent(const std::string& content_name) {
         m_high->SetTopLevelContent(content_name);
 }
 
+unsigned int EmpireStockpileValue::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::EmpireStockpileValue");
+    CheckSums::CheckSumCombine(retval, m_stockpile);
+    CheckSums::CheckSumCombine(retval, m_low);
+    CheckSums::CheckSumCombine(retval, m_high);
+
+    TraceLogger() << "GetCheckSum(EmpireStockpileValue): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // OwnerHasTech                                          //
 ///////////////////////////////////////////////////////////
-OwnerHasTech::~OwnerHasTech()
-{ delete m_name; }
+OwnerHasTech::OwnerHasTech(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name) :
+    ConditionBase(),
+    m_name(std::move(name))
+{}
 
 bool OwnerHasTech::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -6110,16 +6668,16 @@ std::string OwnerHasTech::Description(bool negated/* = false*/) const {
         % name_str);
 }
 
-std::string OwnerHasTech::Dump() const {
-    std::string retval = DumpIndent() + "OwnerHasTech";
+std::string OwnerHasTech::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "OwnerHasTech";
     if (m_name)
-        retval += " name = " + m_name->Dump();
+        retval += " name = " + m_name->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool OwnerHasTech::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "OwnerHasTech::Match passed no candidate object";
         return false;
@@ -6134,16 +6692,29 @@ void OwnerHasTech::SetTopLevelContent(const std::string& content_name) {
         m_name->SetTopLevelContent(content_name);
 }
 
+unsigned int OwnerHasTech::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::OwnerHasTech");
+    CheckSums::CheckSumCombine(retval, m_name);
+
+    TraceLogger() << "GetCheckSum(OwnerHasTech): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // OwnerHasBuildingTypeAvailable                         //
 ///////////////////////////////////////////////////////////
 OwnerHasBuildingTypeAvailable::OwnerHasBuildingTypeAvailable(const std::string& name) :
     ConditionBase(),
+    // TODO: Use std::make_unique when adopting C++14
     m_name(new ValueRef::Constant<std::string>(name))
 {}
 
-OwnerHasBuildingTypeAvailable::~OwnerHasBuildingTypeAvailable()
-{ delete m_name; }
+OwnerHasBuildingTypeAvailable::OwnerHasBuildingTypeAvailable(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name) :
+    ConditionBase(),
+    m_name(std::move(name))
+{}
 
 bool OwnerHasBuildingTypeAvailable::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -6216,16 +6787,16 @@ std::string OwnerHasBuildingTypeAvailable::Description(bool negated/* = false*/)
         : UserString("DESC_OWNER_HAS_BUILDING_TYPE_NOT");
 }
 
-std::string OwnerHasBuildingTypeAvailable::Dump() const {
-    std::string retval= DumpIndent() + "OwnerHasBuildingTypeAvailable";
+std::string OwnerHasBuildingTypeAvailable::Dump(unsigned short ntabs) const {
+    std::string retval= DumpIndent(ntabs) + "OwnerHasBuildingTypeAvailable";
     if (m_name)
-        retval += " name = " + m_name->Dump();
+        retval += " name = " + m_name->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool OwnerHasBuildingTypeAvailable::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "OwnerHasTech::Match passed no candidate object";
         return false;
@@ -6240,16 +6811,29 @@ void OwnerHasBuildingTypeAvailable::SetTopLevelContent(const std::string& conten
         m_name->SetTopLevelContent(content_name);
 }
 
+unsigned int OwnerHasBuildingTypeAvailable::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::OwnerHasBuildingTypeAvailable");
+    CheckSums::CheckSumCombine(retval, m_name);
+
+    TraceLogger() << "GetCheckSum(OwnerHasBuildingTypeAvailable): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // OwnerHasShipDesignAvailable                           //
 ///////////////////////////////////////////////////////////
 OwnerHasShipDesignAvailable::OwnerHasShipDesignAvailable(int id) :
     ConditionBase(),
+    // TODO: Use std::make_unique when adopting C++14
     m_id(new ValueRef::Constant<int>(id))
 {}
 
-OwnerHasShipDesignAvailable::~OwnerHasShipDesignAvailable()
-{ delete m_id; }
+OwnerHasShipDesignAvailable::OwnerHasShipDesignAvailable(std::unique_ptr<ValueRef::ValueRefBase<int>>&& id) :
+    ConditionBase(),
+    m_id(std::move(id))
+{}
 
 bool OwnerHasShipDesignAvailable::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -6297,7 +6881,7 @@ void OwnerHasShipDesignAvailable::Eval(const ScriptingContext& parent_context,
         // evaluate number limits once, use to match all candidates
         std::shared_ptr<const UniverseObject> no_object;
         ScriptingContext local_context(parent_context, no_object);
-        int id = m_id ? m_id->Eval(local_context) : ShipDesign::INVALID_DESIGN_ID;
+        int id = m_id ? m_id->Eval(local_context) : INVALID_DESIGN_ID;
         EvalImpl(matches, non_matches, search_domain, OwnerHasShipDesignAvailableSimpleMatch(id));
     } else {
         // re-evaluate allowed turn range for each candidate object
@@ -6322,22 +6906,22 @@ std::string OwnerHasShipDesignAvailable::Description(bool negated/* = false*/) c
         : UserString("DESC_OWNER_HAS_SHIP_DESIGN_NOT");
 }
 
-std::string OwnerHasShipDesignAvailable::Dump() const {
-    std::string retval = DumpIndent() + "OwnerHasShipDesignAvailable";
+std::string OwnerHasShipDesignAvailable::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "OwnerHasShipDesignAvailable";
     if (m_id)
-        retval += " id = " + m_id->Dump();
+        retval += " id = " + m_id->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool OwnerHasShipDesignAvailable::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "OwnerHasTech::Match passed no candidate object";
         return false;
     }
 
-    int id = m_id ? m_id->Eval(local_context) : ShipDesign::INVALID_DESIGN_ID;
+    int id = m_id ? m_id->Eval(local_context) : INVALID_DESIGN_ID;
     return OwnerHasShipDesignAvailableSimpleMatch(id)(candidate);
 }
 
@@ -6346,16 +6930,29 @@ void OwnerHasShipDesignAvailable::SetTopLevelContent(const std::string& content_
         m_id->SetTopLevelContent(content_name);
 }
 
+unsigned int OwnerHasShipDesignAvailable::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::OwnerHasShipDesignAvailable");
+    CheckSums::CheckSumCombine(retval, m_id);
+
+    TraceLogger() << "GetCheckSum(OwnerHasShipDesignAvailable): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // OwnerHasShipPartAvailable                             //
 ///////////////////////////////////////////////////////////
 OwnerHasShipPartAvailable::OwnerHasShipPartAvailable(const std::string& name) :
     ConditionBase(),
+    // TODO: Use std::make_unique when adopting C++14
     m_name(new ValueRef::Constant<std::string>(name))
 {}
 
-OwnerHasShipPartAvailable::~OwnerHasShipPartAvailable()
-{ delete m_name; }
+OwnerHasShipPartAvailable::OwnerHasShipPartAvailable(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name) :
+    ConditionBase(),
+    m_name(std::move(name))
+{}
 
 bool OwnerHasShipPartAvailable::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -6429,17 +7026,16 @@ std::string OwnerHasShipPartAvailable::Description(bool negated/* = false*/) con
         : UserString("DESC_OWNER_HAS_SHIP_PART_NOT");
 }
 
-std::string OwnerHasShipPartAvailable::Dump() const {
-    std::string retval = DumpIndent() + "OwnerHasShipPartAvailable";
+std::string OwnerHasShipPartAvailable::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "OwnerHasShipPartAvailable";
     if (m_name)
-        retval += " name = " + m_name->Dump();
+        retval += " name = " + m_name->Dump(ntabs);
     retval += "\n";
     return retval;
 }
 
 bool OwnerHasShipPartAvailable::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate =
-        local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "OwnerHasShipPart::Match passed no candidate object";
         return false;
@@ -6454,11 +7050,23 @@ void OwnerHasShipPartAvailable::SetTopLevelContent(const std::string& content_na
         m_name->SetTopLevelContent(content_name);
 }
 
+unsigned int OwnerHasShipPartAvailable::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::OwnerHasShipPartAvailable");
+    CheckSums::CheckSumCombine(retval, m_name);
+
+    TraceLogger() << "GetCheckSum(OwnerHasShipPartAvailable): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // VisibleToEmpire                                       //
 ///////////////////////////////////////////////////////////
-VisibleToEmpire::~VisibleToEmpire()
-{ delete m_empire_id; }
+VisibleToEmpire::VisibleToEmpire(std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id) :
+    ConditionBase(),
+    m_empire_id(std::move(empire_id))
+{}
 
 bool VisibleToEmpire::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -6534,11 +7142,11 @@ std::string VisibleToEmpire::Description(bool negated/* = false*/) const {
                % empire_str);
 }
 
-std::string VisibleToEmpire::Dump() const
-{ return DumpIndent() + "VisibleToEmpire empire_id = " + m_empire_id->Dump() + "\n"; }
+std::string VisibleToEmpire::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "VisibleToEmpire empire_id = " + m_empire_id->Dump(ntabs) + "\n"; }
 
 bool VisibleToEmpire::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "VisibleToEmpire::Match passed no candidate object";
         return false;
@@ -6552,13 +7160,25 @@ void VisibleToEmpire::SetTopLevelContent(const std::string& content_name) {
         m_empire_id->SetTopLevelContent(content_name);
 }
 
+unsigned int VisibleToEmpire::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::VisibleToEmpire");
+    CheckSums::CheckSumCombine(retval, m_empire_id);
+
+    TraceLogger() << "GetCheckSum(VisibleToEmpire): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // WithinDistance                                        //
 ///////////////////////////////////////////////////////////
-WithinDistance::~WithinDistance() {
-    delete m_distance;
-    delete m_condition;
-}
+WithinDistance::WithinDistance(std::unique_ptr<ValueRef::ValueRefBase<double>>&& distance,
+                               std::unique_ptr<ConditionBase>&& condition) :
+    ConditionBase(),
+    m_distance(std::move(distance)),
+    m_condition(std::move(condition))
+{}
 
 bool WithinDistance::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -6586,7 +7206,7 @@ namespace {
                 return false;
 
             // is candidate object close enough to any of the passed-in objects?
-            for (std::shared_ptr<const UniverseObject> obj : m_from_objects) {
+            for (auto& obj : m_from_objects) {
                 double delta_x = candidate->X() - obj->X();
                 double delta_y = candidate->Y() - obj->Y();
                 if (delta_x*delta_x + delta_y*delta_y <= m_distance2)
@@ -6646,16 +7266,14 @@ std::string WithinDistance::Description(bool negated/* = false*/) const {
                % m_condition->Description());
 }
 
-std::string WithinDistance::Dump() const {
-    std::string retval = DumpIndent() + "WithinDistance distance = " + m_distance->Dump() + " condition =\n";
-    ++g_indent;
-    retval += m_condition->Dump();
-    --g_indent;
+std::string WithinDistance::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "WithinDistance distance = " + m_distance->Dump(ntabs) + " condition =\n";
+    retval += m_condition->Dump(ntabs+1);
     return retval;
 }
 
 bool WithinDistance::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "WithinDistance::Match passed no candidate object";
         return false;
@@ -6677,13 +7295,26 @@ void WithinDistance::SetTopLevelContent(const std::string& content_name) {
         m_condition->SetTopLevelContent(content_name);
 }
 
+unsigned int WithinDistance::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::WithinDistance");
+    CheckSums::CheckSumCombine(retval, m_distance);
+    CheckSums::CheckSumCombine(retval, m_condition);
+
+    TraceLogger() << "GetCheckSum(WithinDistance): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // WithinStarlaneJumps                                   //
 ///////////////////////////////////////////////////////////
-WithinStarlaneJumps::~WithinStarlaneJumps() {
-    delete m_jumps;
-    delete m_condition;
-}
+WithinStarlaneJumps::WithinStarlaneJumps(std::unique_ptr<ValueRef::ValueRefBase<int>>&& jumps,
+                                         std::unique_ptr<ConditionBase>&& condition) :
+    ConditionBase(),
+    m_jumps(std::move(jumps)),
+    m_condition(std::move(condition))
+{}
 
 bool WithinStarlaneJumps::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -6742,16 +7373,14 @@ std::string WithinStarlaneJumps::Description(bool negated/* = false*/) const {
                % m_condition->Description());
 }
 
-std::string WithinStarlaneJumps::Dump() const {
-    std::string retval = DumpIndent() + "WithinStarlaneJumps jumps = " + m_jumps->Dump() + " condition =\n";
-    ++g_indent;
-    retval += m_condition->Dump();
-    --g_indent;
+std::string WithinStarlaneJumps::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "WithinStarlaneJumps jumps = " + m_jumps->Dump(ntabs) + " condition =\n";
+    retval += m_condition->Dump(ntabs+1);
     return retval;
 }
 
 bool WithinStarlaneJumps::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "WithinStarlaneJumps::Match passed no candidate object";
         return false;
@@ -6784,12 +7413,20 @@ void WithinStarlaneJumps::SetTopLevelContent(const std::string& content_name) {
         m_condition->SetTopLevelContent(content_name);
 }
 
+unsigned int WithinStarlaneJumps::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::WithinStarlaneJumps");
+    CheckSums::CheckSumCombine(retval, m_jumps);
+    CheckSums::CheckSumCombine(retval, m_condition);
+
+    TraceLogger() << "GetCheckSum(WithinStarlaneJumps): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // CanAddStarlaneConnection                              //
 ///////////////////////////////////////////////////////////
-CanAddStarlaneConnection::~CanAddStarlaneConnection()
-{ delete m_condition; }
-
 bool CanAddStarlaneConnection::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
         return true;
@@ -6835,7 +7472,7 @@ namespace {
         const float MAX_LANE_DOT_PRODUCT = 0.98f;   // magic limit copied from CullAngularlyTooCloseLanes in UniverseGenerator
 
         float dp = (dx1 * dx2) + (dy1 * dy2);
-        //std::cout << "systems: " << sys1->UniverseObject::Name() << "  " << lane1_sys2->UniverseObject::Name() << "  " << lane2_sys2->UniverseObject::Name() << "  dp: " << dp << std::endl;
+        //TraceLogger() << "systems: " << sys1->UniverseObject::Name() << "  " << lane1_sys2->UniverseObject::Name() << "  " << lane2_sys2->UniverseObject::Name() << "  dp: " << dp << std::endl;
 
         return dp >= MAX_LANE_DOT_PRODUCT;   // if dot product too high after normalizing vectors, angles are adequately separated
     }
@@ -6985,15 +7622,15 @@ namespace {
 
         // loop over all existing lanes in all systems, checking if a lane
         // beween the specified systems would cross any of the existing lanes
-        for (std::shared_ptr<const System> system : objects.FindObjects<System>()) {
+        for (auto& system : objects.FindObjects<System>()) {
             if (system == lane_end_sys1 || system == lane_end_sys2)
                 continue;
 
-            const std::map<int, bool>& sys_existing_lanes = system->StarlanesWormholes();
+            const auto& sys_existing_lanes = system->StarlanesWormholes();
 
             // check all existing lanes of currently-being-checked system
-            for (const std::map<int, bool>::value_type& lane : sys_existing_lanes) {
-                std::shared_ptr<const System> lane_end_sys3 = GetSystem(lane.first);
+            for (const auto& lane : sys_existing_lanes) {
+                auto lane_end_sys3 = GetSystem(lane.first);
                 if (!lane_end_sys3)
                     continue;
                 // don't need to check against existing lanes that include one
@@ -7002,7 +7639,7 @@ namespace {
                     continue;
 
                 if (LanesCross(lane_end_sys1, lane_end_sys2, system, lane_end_sys3)) {
-                    //std::cout << "... ... ... lane from: " << lane_end_sys1->UniverseObject::Name() << " to: " << lane_end_sys2->UniverseObject::Name()
+                    //TraceLogger() << "... ... ... lane from: " << lane_end_sys1->UniverseObject::Name() << " to: " << lane_end_sys2->UniverseObject::Name()
                     //          << " crosses lane from: " << system->UniverseObject::Name() << " to: " << lane_end_sys3->UniverseObject::Name() << std::endl;
                     return true;
                 }
@@ -7019,11 +7656,11 @@ namespace {
             return true;
 
         const ObjectMap& objects = Objects();
-        std::vector<std::shared_ptr<const System>> systems = objects.FindObjects<System>();
+        auto systems = objects.FindObjects<System>();
 
         // loop over all existing systems, checking if each is too close to a
         // lane between the specified lane endpoints
-        for (std::shared_ptr<const System> system : systems) {
+        for (auto& system : systems) {
             if (system == lane_end_sys1 || system == lane_end_sys2)
                 continue;
 
@@ -7041,8 +7678,8 @@ namespace {
             // get (one of each of) set of systems that are or that contain any
             // destination objects
             std::set<std::shared_ptr<const System>> dest_systems;
-            for (std::shared_ptr<const UniverseObject> obj : destination_objects) {
-                if (std::shared_ptr<const System> sys = GetSystem(obj->SystemID()))
+            for (auto& obj : destination_objects) {
+                if (auto sys = GetSystem(obj->SystemID()))
                     dest_systems.insert(sys);
             }
             std::copy(dest_systems.begin(), dest_systems.end(), std::inserter(m_destination_systems, m_destination_systems.end()));
@@ -7053,7 +7690,7 @@ namespace {
                 return false;
 
             // get system from candidate
-            std::shared_ptr<const System> candidate_sys = std::dynamic_pointer_cast<const System>(candidate);
+            auto candidate_sys = std::dynamic_pointer_cast<const System>(candidate);
             if (!candidate_sys)
                 candidate_sys = GetSystem(candidate->SystemID());
             if (!candidate_sys)
@@ -7061,30 +7698,30 @@ namespace {
 
 
             // check if candidate is one of the destination systems
-            for (std::shared_ptr<const System> destination : m_destination_systems) {
+            for (auto& destination : m_destination_systems) {
                 if (candidate_sys->ID() == destination->ID())
                     return false;
             }
 
 
             // check if candidate already has a lane to any of the destination systems
-            for (std::shared_ptr<const System> destination : m_destination_systems) {
+            for (auto& destination : m_destination_systems) {
                 if (candidate_sys->HasStarlaneTo(destination->ID()))
                     return false;
             }
 
             // check if any of the proposed lanes are too close to any already-
             // present lanes of the candidate system
-            //std::cout << "... Checking lanes of candidate system: " << candidate->UniverseObject::Name() << std::endl;
-            for (const std::map<int, bool>::value_type& lane : candidate_sys->StarlanesWormholes()) {
-                std::shared_ptr<const System> candidate_existing_lane_end_sys = GetSystem(lane.first);
+            //TraceLogger() << "... Checking lanes of candidate system: " << candidate->UniverseObject::Name() << std::endl;
+            for (const auto& lane : candidate_sys->StarlanesWormholes()) {
+                auto candidate_existing_lane_end_sys = GetSystem(lane.first);
                 if (!candidate_existing_lane_end_sys)
                     continue;
 
                 // check this existing lane against potential lanes to all destination systems
-                for (std::shared_ptr<const System> dest_sys : m_destination_systems) {
+                for (auto& dest_sys : m_destination_systems) {
                     if (LanesAngularlyTooClose(candidate_sys, candidate_existing_lane_end_sys, dest_sys)) {
-                        //std::cout << " ... ... can't add lane from candidate: " << candidate_sys->UniverseObject::Name() << " to " << dest_sys->UniverseObject::Name() << " due to existing lane to " << candidate_existing_lane_end_sys->UniverseObject::Name() << std::endl;
+                        //TraceLogger() << " ... ... can't add lane from candidate: " << candidate_sys->UniverseObject::Name() << " to " << dest_sys->UniverseObject::Name() << " due to existing lane to " << candidate_existing_lane_end_sys->UniverseObject::Name() << std::endl;
                         return false;
                     }
                 }
@@ -7093,17 +7730,17 @@ namespace {
 
             // check if any of the proposed lanes are too close to any already-
             // present lanes of any of the destination systems
-            //std::cout << "... Checking lanes of destination systems:" << std::endl;
-            for (std::shared_ptr<const System> dest_sys : m_destination_systems) {
+            //TraceLogger() << "... Checking lanes of destination systems:" << std::endl;
+            for (auto& dest_sys : m_destination_systems) {
                 // check this destination system's existing lanes against a lane
                 // to the candidate system
-                for (const std::map<int, bool>::value_type& dest_lane : dest_sys->StarlanesWormholes()) {
-                    std::shared_ptr<const System> dest_lane_end_sys = GetSystem(dest_lane.first);
+                for (const auto& dest_lane : dest_sys->StarlanesWormholes()) {
+                    auto dest_lane_end_sys = GetSystem(dest_lane.first);
                     if (!dest_lane_end_sys)
                         continue;
 
                     if (LanesAngularlyTooClose(dest_sys, candidate_sys, dest_lane_end_sys)) {
-                        //std::cout << " ... ... can't add lane from candidate: " << candidate_sys->UniverseObject::Name() << " to " << dest_sys->UniverseObject::Name() << " due to existing lane from dest to " << dest_lane_end_sys->UniverseObject::Name() << std::endl;
+                        //TraceLogger() << " ... ... can't add lane from candidate: " << candidate_sys->UniverseObject::Name() << " to " << dest_sys->UniverseObject::Name() << " due to existing lane from dest to " << dest_lane_end_sys->UniverseObject::Name() << std::endl;
                         return false;
                     }
                 }
@@ -7111,19 +7748,19 @@ namespace {
 
 
             // check if any of the proposed lanes are too close to eachother
-            //std::cout << "... Checking proposed lanes against eachother" << std::endl;
-            for (std::vector<std::shared_ptr<const System>>::const_iterator it1 = m_destination_systems.begin();
+            //TraceLogger() << "... Checking proposed lanes against eachother" << std::endl;
+            for (auto it1 = m_destination_systems.begin();
                  it1 != m_destination_systems.end(); ++it1)
             {
-                std::shared_ptr<const System> dest_sys1 = *it1;
+                auto dest_sys1 = *it1;
 
                 // don't need to check a lane in both directions, so start at one past it1
-                std::vector<std::shared_ptr<const System>>::const_iterator it2 = it1;
+                auto it2 = it1;
                 ++it2;
                 for (; it2 != m_destination_systems.end(); ++it2) {
-                    std::shared_ptr<const System> dest_sys2 = *it2;
+                    auto dest_sys2 = *it2;
                     if (LanesAngularlyTooClose(candidate_sys, dest_sys1, dest_sys2)) {
-                        //std::cout << " ... ... can't add lane from candidate: " << candidate_sys->UniverseObject::Name() << " to " << dest_sys1->UniverseObject::Name() << " and also to " << dest_sys2->UniverseObject::Name() << std::endl;
+                        //TraceLogger() << " ... ... can't add lane from candidate: " << candidate_sys->UniverseObject::Name() << " to " << dest_sys1->UniverseObject::Name() << " and also to " << dest_sys2->UniverseObject::Name() << std::endl;
                         return false;
                     }
                 }
@@ -7132,20 +7769,20 @@ namespace {
 
             // check that the proposed lanes are not too close to any existing
             // system they are not connected to
-            //std::cout << "... Checking proposed lanes for proximity to other systems" <<std::endl;
-            for (std::shared_ptr<const System> dest_sys : m_destination_systems) {
+            //TraceLogger() << "... Checking proposed lanes for proximity to other systems" <<std::endl;
+            for (auto& dest_sys : m_destination_systems) {
                 if (LaneTooCloseToOtherSystem(candidate_sys, dest_sys)) {
-                    //std::cout << " ... ... can't add lane from candidate: " << candidate_sys->Name() << " to " << dest_sys->Name() << " due to proximity to another system." << std::endl;
+                    //TraceLogger() << " ... ... can't add lane from candidate: " << candidate_sys->Name() << " to " << dest_sys->Name() << " due to proximity to another system." << std::endl;
                     return false;
                 }
             }
 
 
             // check that there are no lanes already existing that cross the proposed lanes
-            //std::cout << "... Checking for potential lanes crossing existing lanes" << std::endl;
-            for (std::shared_ptr<const System> dest_sys : m_destination_systems) {
+            //TraceLogger() << "... Checking for potential lanes crossing existing lanes" << std::endl;
+            for (auto& dest_sys : m_destination_systems) {
                 if (LaneCrossesExistingLane(candidate_sys, dest_sys)) {
-                    //std::cout << " ... ... can't add lane from candidate: " << candidate_sys->Name() << " to " << dest_sys->Name() << " due to crossing an existing lane." << std::endl;
+                    //TraceLogger() << " ... ... can't add lane from candidate: " << candidate_sys->Name() << " to " << dest_sys->Name() << " due to crossing an existing lane." << std::endl;
                     return false;
                 }
             }
@@ -7193,16 +7830,14 @@ std::string CanAddStarlaneConnection::Description(bool negated/* = false*/) cons
         % m_condition->Description());
 }
 
-std::string CanAddStarlaneConnection::Dump() const {
-    std::string retval = DumpIndent() + "CanAddStarlanesTo condition =\n";
-    ++g_indent;
-        retval += m_condition->Dump();
-    --g_indent;
+std::string CanAddStarlaneConnection::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "CanAddStarlanesTo condition =\n";
+    retval += m_condition->Dump(ntabs+1);
     return retval;
 }
 
 bool CanAddStarlaneConnection::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "CanAddStarlaneConnection::Match passed no candidate object";
         return false;
@@ -7220,11 +7855,23 @@ void CanAddStarlaneConnection::SetTopLevelContent(const std::string& content_nam
         m_condition->SetTopLevelContent(content_name);
 }
 
+unsigned int CanAddStarlaneConnection::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::CanAddStarlaneConnection");
+    CheckSums::CheckSumCombine(retval, m_condition);
+
+    TraceLogger() << "GetCheckSum(CanAddStarlaneConnection): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // ExploredByEmpire                                      //
 ///////////////////////////////////////////////////////////
-ExploredByEmpire::~ExploredByEmpire()
-{ delete m_empire_id; }
+ExploredByEmpire::ExploredByEmpire(std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id) :
+    ConditionBase(),
+    m_empire_id(std::move(empire_id))
+{}
 
 bool ExploredByEmpire::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -7304,11 +7951,11 @@ std::string ExploredByEmpire::Description(bool negated/* = false*/) const {
                % empire_str);
 }
 
-std::string ExploredByEmpire::Dump() const
-{ return DumpIndent() + "ExploredByEmpire empire_id = " + m_empire_id->Dump(); }
+std::string ExploredByEmpire::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "ExploredByEmpire empire_id = " + m_empire_id->Dump(ntabs); }
 
 bool ExploredByEmpire::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "ExploredByEmpire::Match passed no candidate object";
         return false;
@@ -7320,6 +7967,16 @@ bool ExploredByEmpire::Match(const ScriptingContext& local_context) const {
 void ExploredByEmpire::SetTopLevelContent(const std::string& content_name) {
     if (m_empire_id)
         m_empire_id->SetTopLevelContent(content_name);
+}
+
+unsigned int ExploredByEmpire::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::ExploredByEmpire");
+    CheckSums::CheckSumCombine(retval, m_empire_id);
+
+    TraceLogger() << "GetCheckSum(ExploredByEmpire): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
@@ -7334,11 +7991,11 @@ std::string Stationary::Description(bool negated/* = false*/) const {
         : UserString("DESC_STATIONARY_NOT");
 }
 
-std::string Stationary::Dump() const
-{ return DumpIndent() + "Stationary\n"; }
+std::string Stationary::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "Stationary\n"; }
 
 bool Stationary::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Stationary::Match passed no candidate object";
         return false;
@@ -7347,9 +8004,9 @@ bool Stationary::Match(const ScriptingContext& local_context) const {
     // the only objects that can move are fleets and the ships in them.  so,
     // attempt to cast the candidate object to a fleet or ship, and if it's a ship
     // get the fleet of that ship
-    std::shared_ptr<const Fleet> fleet = std::dynamic_pointer_cast<const Fleet>(candidate);
+    auto fleet = std::dynamic_pointer_cast<const Fleet>(candidate);
     if (!fleet)
-        if (std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate))
+        if (auto ship = std::dynamic_pointer_cast<const Ship>(candidate))
             fleet = GetFleet(ship->FleetID());
 
     if (fleet) {
@@ -7364,6 +8021,15 @@ bool Stationary::Match(const ScriptingContext& local_context) const {
     }
 
     return true;
+}
+
+unsigned int Stationary::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Stationary");
+
+    TraceLogger() << "GetCheckSum(Stationary): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
@@ -7383,11 +8049,11 @@ std::string Aggressive::Description(bool negated/* = false*/) const {
             : UserString("DESC_PASSIVE_NOT");
 }
 
-std::string Aggressive::Dump() const
-{ return DumpIndent() + (m_aggressive ? "Aggressive\n" : "Passive\n"); }
+std::string Aggressive::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + (m_aggressive ? "Aggressive\n" : "Passive\n"); }
 
 bool Aggressive::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Aggressive::Match passed no candidate object";
         return false;
@@ -7396,9 +8062,9 @@ bool Aggressive::Match(const ScriptingContext& local_context) const {
     // the only objects that can be aggressive are fleets and the ships in them.
     // so, attempt to cast the candidate object to a fleet or ship, and if it's
     // a ship get the fleet of that ship
-    std::shared_ptr<const Fleet> fleet = std::dynamic_pointer_cast<const Fleet>(candidate);
+    auto fleet = std::dynamic_pointer_cast<const Fleet>(candidate);
     if (!fleet)
-        if (std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate))
+        if (auto ship = std::dynamic_pointer_cast<const Ship>(candidate))
             fleet = GetFleet(ship->FleetID());
 
     if (!fleet)
@@ -7407,11 +8073,23 @@ bool Aggressive::Match(const ScriptingContext& local_context) const {
     return m_aggressive == fleet->Aggressive();
 }
 
+unsigned int Aggressive::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Aggressive");
+    CheckSums::CheckSumCombine(retval, m_aggressive);
+
+    TraceLogger() << "GetCheckSum(Aggressive): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // FleetSupplyableByEmpire                               //
 ///////////////////////////////////////////////////////////
-FleetSupplyableByEmpire::~FleetSupplyableByEmpire()
-{ delete m_empire_id; }
+FleetSupplyableByEmpire::FleetSupplyableByEmpire(std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id) :
+    ConditionBase(),
+    m_empire_id(std::move(empire_id))
+{}
 
 bool FleetSupplyableByEmpire::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -7441,11 +8119,11 @@ namespace {
                 return false;
 
             const SupplyManager& supply = GetSupplyManager();
-            const std::map<int, std::set<int>>& empire_supplyable_systems = supply.FleetSupplyableSystemIDs();
-            std::map<int, std::set<int>>::const_iterator it = empire_supplyable_systems.find(m_empire_id);
+            const auto& empire_supplyable_systems = supply.FleetSupplyableSystemIDs();
+            auto it = empire_supplyable_systems.find(m_empire_id);
             if (it == empire_supplyable_systems.end())
                 return false;
-            return it->second.find(candidate->SystemID()) != it->second.end();
+            return it->second.count(candidate->SystemID());
         }
 
         int m_empire_id;
@@ -7497,11 +8175,11 @@ std::string FleetSupplyableByEmpire::Description(bool negated/* = false*/) const
                % empire_str);
 }
 
-std::string FleetSupplyableByEmpire::Dump() const
-{ return DumpIndent() + "ResupplyableBy empire_id = " + m_empire_id->Dump(); }
+std::string FleetSupplyableByEmpire::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "ResupplyableBy empire_id = " + m_empire_id->Dump(ntabs); }
 
 bool FleetSupplyableByEmpire::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "FleetSupplyableByEmpire::Match passed no candidate object";
         return false;
@@ -7517,13 +8195,26 @@ void FleetSupplyableByEmpire::SetTopLevelContent(const std::string& content_name
         m_empire_id->SetTopLevelContent(content_name);
 }
 
+unsigned int FleetSupplyableByEmpire::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::FleetSupplyableByEmpire");
+    CheckSums::CheckSumCombine(retval, m_empire_id);
+
+    TraceLogger() << "GetCheckSum(FleetSupplyableByEmpire): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // ResourceSupplyConnectedByEmpire                       //
 ///////////////////////////////////////////////////////////
-ResourceSupplyConnectedByEmpire::~ResourceSupplyConnectedByEmpire() {
-    delete m_empire_id;
-    delete m_condition;
-}
+ResourceSupplyConnectedByEmpire::ResourceSupplyConnectedByEmpire(
+    std::unique_ptr<ValueRef::ValueRefBase<int>>&& empire_id,
+    std::unique_ptr<ConditionBase>&& condition) :
+    ConditionBase(),
+    m_empire_id(std::move(empire_id)),
+    m_condition(std::move(condition))
+{}
 
 bool ResourceSupplyConnectedByEmpire::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -7550,16 +8241,47 @@ namespace {
                 return false;
             if (m_from_objects.empty())
                 return false;
-            const std::set<std::set<int>>& groups = GetSupplyManager().ResourceSupplyGroups(m_empire_id);
+            const auto& groups = GetSupplyManager().ResourceSupplyGroups(m_empire_id);
             if (groups.empty())
                 return false;
 
             // is candidate object connected to a subcondition matching object by resource supply?
-            for (std::shared_ptr<const UniverseObject> from_object : m_from_objects) {
-                for (const std::set<int>& group : groups) {
-                    if (group.find(from_object->SystemID()) != group.end()) {
-                        // found resource sharing group containing test object.  Does it also contain candidate?
-                        if (group.find(candidate->SystemID()) != group.end())
+            // first check if candidate object is (or is a building on) a blockaded planet
+            // "isolated" objects are anything not in a non-blockaded system
+            bool is_isolated = true;
+            for (const auto& group : groups) {
+                if (group.count(candidate->SystemID())) {
+                    is_isolated = false;
+                    break;
+                }
+            }
+            if (is_isolated) {
+                // planets are still supply-connected to themselves even if blockaded
+                auto candidate_planet = std::dynamic_pointer_cast<const Planet>(candidate);
+                std::shared_ptr<const ::Building> building;
+                if (!candidate_planet && (building = std::dynamic_pointer_cast<const ::Building>(candidate)))
+                    candidate_planet = GetPlanet(building->PlanetID());
+                if (candidate_planet) {
+                    int candidate_planet_id = candidate_planet->ID();
+                    // can only match if the from_object is (or is on) the same planet
+                    for (auto& from_object : m_from_objects) {
+                        auto from_obj_planet = std::dynamic_pointer_cast<const Planet>(from_object);
+                        std::shared_ptr<const ::Building> from_building;
+                        if (!from_obj_planet && (from_building = std::dynamic_pointer_cast<const ::Building>(from_object)))
+                            from_obj_planet = GetPlanet(from_building->PlanetID());
+                        if (from_obj_planet && from_obj_planet->ID() == candidate_planet_id)
+                            return true;
+                    }
+                }
+                // candidate is isolated, but did not match planet for any test object
+                return false;
+            }
+            // candidate is not blockaded, so check for system group matches
+            for (auto& from_object : m_from_objects) {
+                for (const auto& group : groups) {
+                    if (group.count(from_object->SystemID())) {
+                        // found resource sharing group containing test object system.  Does it also contain candidate?
+                        if (group.count(candidate->SystemID()))
                             return true;    // test object and candidate object are in same resourse sharing group
                         else
                             // test object is not in resource sharing group with candidate
@@ -7614,7 +8336,7 @@ bool ResourceSupplyConnectedByEmpire::SourceInvariant() const
 { return m_empire_id->SourceInvariant() && m_condition->SourceInvariant(); }
 
 bool ResourceSupplyConnectedByEmpire::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "ResourceSupplyConnectedByEmpire::Match passed no candidate object";
         return false;
@@ -7647,12 +8369,10 @@ std::string ResourceSupplyConnectedByEmpire::Description(bool negated/* = false*
                % m_condition->Description());
 }
 
-std::string ResourceSupplyConnectedByEmpire::Dump() const {
-    std::string retval = DumpIndent() + "ResourceSupplyConnectedBy empire_id = " + m_empire_id->Dump() +
-                                        " condition = \n";
-    ++g_indent;
-    retval += m_condition->Dump();
-    --g_indent;
+std::string ResourceSupplyConnectedByEmpire::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "ResourceSupplyConnectedBy empire_id = "
+        + m_empire_id->Dump(ntabs) + " condition = \n";
+    retval += m_condition->Dump(ntabs+1);
     return retval;
 }
 
@@ -7661,6 +8381,17 @@ void ResourceSupplyConnectedByEmpire::SetTopLevelContent(const std::string& cont
         m_empire_id->SetTopLevelContent(content_name);
     if (m_condition)
         m_condition->SetTopLevelContent(content_name);
+}
+
+unsigned int ResourceSupplyConnectedByEmpire::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::ResourceSupplyConnectedByEmpire");
+    CheckSums::CheckSumCombine(retval, m_empire_id);
+    CheckSums::CheckSumCombine(retval, m_condition);
+
+    TraceLogger() << "GetCheckSum(ResourceSupplyConnectedByEmpire): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
@@ -7675,11 +8406,11 @@ std::string CanColonize::Description(bool negated/* = false*/) const {
         : UserString("DESC_CAN_COLONIZE_NOT")));
 }
 
-std::string CanColonize::Dump() const
-{ return DumpIndent() + "CanColonize\n"; }
+std::string CanColonize::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "CanColonize\n"; }
 
 bool CanColonize::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "CanColonize::Match passed no candidate object";
         return false;
@@ -7688,7 +8419,7 @@ bool CanColonize::Match(const ScriptingContext& local_context) const {
     // is it a ship, a planet, or a building on a planet?
     std::string species_name;
     if (candidate->ObjectType() == OBJ_PLANET) {
-        std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+        auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
         if (!planet) {
             ErrorLogger() << "CanColonize couldn't cast supposedly planet candidate";
             return false;
@@ -7696,12 +8427,12 @@ bool CanColonize::Match(const ScriptingContext& local_context) const {
         species_name = planet->SpeciesName();
 
     } else if (candidate->ObjectType() == OBJ_BUILDING) {
-        std::shared_ptr<const ::Building> building = std::dynamic_pointer_cast<const ::Building>(candidate);
+        auto building = std::dynamic_pointer_cast<const ::Building>(candidate);
         if (!building) {
             ErrorLogger() << "CanColonize couldn't cast supposedly building candidate";
             return false;
         }
-        std::shared_ptr<const Planet> planet = GetPlanet(building->PlanetID());
+        auto planet = GetPlanet(building->PlanetID());
         if (!planet) {
             ErrorLogger() << "CanColonize couldn't get building's planet";
             return false;
@@ -7709,7 +8440,7 @@ bool CanColonize::Match(const ScriptingContext& local_context) const {
         species_name = planet->SpeciesName();
 
     } else if (candidate->ObjectType() == OBJ_SHIP) {
-        std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate);
+        auto ship = std::dynamic_pointer_cast<const Ship>(candidate);
         if (!ship) {
             ErrorLogger() << "CanColonize couldn't cast supposedly ship candidate";
             return false;
@@ -7719,12 +8450,21 @@ bool CanColonize::Match(const ScriptingContext& local_context) const {
 
     if (species_name.empty())
         return false;
-    const ::Species* species = GetSpecies(species_name);
+    auto species = GetSpecies(species_name);
     if (!species) {
         ErrorLogger() << "CanColonize couldn't get species: " << species_name;
         return false;
     }
     return species->CanColonize();
+}
+
+unsigned int CanColonize::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::CanColonize");
+
+    TraceLogger() << "GetCheckSum(CanColonize): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
@@ -7739,11 +8479,11 @@ std::string CanProduceShips::Description(bool negated/* = false*/) const {
         : UserString("DESC_CAN_PRODUCE_SHIPS_NOT")));
 }
 
-std::string CanProduceShips::Dump() const
-{ return DumpIndent() + "CanColonize\n"; }
+std::string CanProduceShips::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "CanColonize\n"; }
 
 bool CanProduceShips::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "CanProduceShips::Match passed no candidate object";
         return false;
@@ -7752,7 +8492,7 @@ bool CanProduceShips::Match(const ScriptingContext& local_context) const {
     // is it a ship, a planet, or a building on a planet?
     std::string species_name;
     if (candidate->ObjectType() == OBJ_PLANET) {
-        std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+        auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
         if (!planet) {
             ErrorLogger() << "CanProduceShips couldn't cast supposedly planet candidate";
             return false;
@@ -7760,12 +8500,12 @@ bool CanProduceShips::Match(const ScriptingContext& local_context) const {
         species_name = planet->SpeciesName();
 
     } else if (candidate->ObjectType() == OBJ_BUILDING) {
-        std::shared_ptr<const ::Building> building = std::dynamic_pointer_cast<const ::Building>(candidate);
+        auto building = std::dynamic_pointer_cast<const ::Building>(candidate);
         if (!building) {
             ErrorLogger() << "CanProduceShips couldn't cast supposedly building candidate";
             return false;
         }
-        std::shared_ptr<const Planet> planet = GetPlanet(building->PlanetID());
+        auto planet = GetPlanet(building->PlanetID());
         if (!planet) {
             ErrorLogger() << "CanProduceShips couldn't get building's planet";
             return false;
@@ -7773,7 +8513,7 @@ bool CanProduceShips::Match(const ScriptingContext& local_context) const {
         species_name = planet->SpeciesName();
 
     } else if (candidate->ObjectType() == OBJ_SHIP) {
-        std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(candidate);
+        auto ship = std::dynamic_pointer_cast<const Ship>(candidate);
         if (!ship) {
             ErrorLogger() << "CanProduceShips couldn't cast supposedly ship candidate";
             return false;
@@ -7783,7 +8523,7 @@ bool CanProduceShips::Match(const ScriptingContext& local_context) const {
 
     if (species_name.empty())
         return false;
-    const ::Species* species = GetSpecies(species_name);
+    auto species = GetSpecies(species_name);
     if (!species) {
         ErrorLogger() << "CanProduceShips couldn't get species: " << species_name;
         return false;
@@ -7791,11 +8531,22 @@ bool CanProduceShips::Match(const ScriptingContext& local_context) const {
     return species->CanProduceShips();
 }
 
+unsigned int CanProduceShips::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::CanProduceShips");
+
+    TraceLogger() << "GetCheckSum(CanProduceShips): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // OrderedBombarded                                      //
 ///////////////////////////////////////////////////////////
-OrderedBombarded::~OrderedBombarded()
-{ delete m_by_object_condition; }
+OrderedBombarded::OrderedBombarded(std::unique_ptr<ConditionBase>&& by_object_condition) :
+    ConditionBase(),
+    m_by_object_condition(std::move(by_object_condition))
+{}
 
 bool OrderedBombarded::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -7821,7 +8572,7 @@ namespace {
                 return false;
             if (m_by_objects.empty())
                 return false;
-            std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(candidate);
+            auto planet = std::dynamic_pointer_cast<const Planet>(candidate);
             if (!planet)
                 return false;
             int planet_id = planet->ID();
@@ -7829,8 +8580,8 @@ namespace {
                 return false;
 
             // check if any of the by_objects is ordered to bombard the candidate planet
-            for (std::shared_ptr<const UniverseObject> obj : m_by_objects) {
-                std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(obj);
+            for (auto& obj : m_by_objects) {
+                auto ship = std::dynamic_pointer_cast<const Ship>(obj);
                 if (!ship)
                     continue;
                 if (ship->OrderedBombardPlanet() == planet_id)
@@ -7884,11 +8635,11 @@ std::string OrderedBombarded::Description(bool negated/* = false*/) const {
                % by_str);
 }
 
-std::string OrderedBombarded::Dump() const
-{ return DumpIndent() + "OrderedBombarded by_object = " + m_by_object_condition->Dump(); }
+std::string OrderedBombarded::Dump(unsigned short ntabs) const
+{ return DumpIndent(ntabs) + "OrderedBombarded by_object = " + m_by_object_condition->Dump(ntabs); }
 
 bool OrderedBombarded::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "OrderedBombarded::Match passed no candidate object";
         return false;
@@ -7906,13 +8657,100 @@ void OrderedBombarded::SetTopLevelContent(const std::string& content_name) {
         m_by_object_condition->SetTopLevelContent(content_name);
 }
 
+unsigned int OrderedBombarded::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::OrderedBombarded");
+    CheckSums::CheckSumCombine(retval, m_by_object_condition);
+
+    TraceLogger() << "GetCheckSum(OrderedBombarded): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // ValueTest                                             //
 ///////////////////////////////////////////////////////////
-ValueTest::~ValueTest() {
-    delete m_value_ref1;
-    delete m_value_ref2;
-    delete m_value_ref3;
+namespace {
+    bool Comparison(float val1, ComparisonType comp, float val2) {
+        switch (comp) {
+            case EQUAL:                 return val1 == val2;
+            case GREATER_THAN:          return val1 > val2;
+            case GREATER_THAN_OR_EQUAL: return val1 >= val2;
+            case LESS_THAN:             return val1 < val2;
+            case LESS_THAN_OR_EQUAL:    return val1 <= val2;
+            case NOT_EQUAL:             return val1 != val2;
+            case INVALID_COMPARISON:
+            default:                    return false;
+        }
+    }
+    bool Comparison(const std::string& val1, ComparisonType comp,
+                    const std::string& val2)
+    {
+        switch (comp) {
+            case EQUAL:                 return val1 == val2;
+            case NOT_EQUAL:             return val1 != val2;
+            case INVALID_COMPARISON:
+            default:                    return false;
+        }
+    }
+
+    std::string CompareTypeString(ComparisonType comp) {
+        switch (comp) {
+        case EQUAL:                 return "=";
+        case GREATER_THAN:          return ">";
+        case GREATER_THAN_OR_EQUAL: return ">=";
+        case LESS_THAN:             return "<";
+        case LESS_THAN_OR_EQUAL:    return "<=";
+        case NOT_EQUAL:             return "!=";
+        case INVALID_COMPARISON:
+        default:                    return "";
+        }
+    }
+}
+
+ValueTest::ValueTest(std::unique_ptr<ValueRef::ValueRefBase<double>>&& value_ref1,
+                     ComparisonType comp1,
+                     std::unique_ptr<ValueRef::ValueRefBase<double>>&& value_ref2,
+                     ComparisonType comp2,
+                     std::unique_ptr<ValueRef::ValueRefBase<double>>&& value_ref3) :
+    ConditionBase(),
+    m_value_ref1(std::move(value_ref1)),
+    m_value_ref2(std::move(value_ref2)),
+    m_value_ref3(std::move(value_ref3)),
+    m_compare_type1(comp1),
+    m_compare_type2(comp2)
+{}
+
+ValueTest::ValueTest(std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& value_ref1,
+                     ComparisonType comp1,
+                     std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& value_ref2,
+                     ComparisonType comp2,
+                     std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& value_ref3) :
+    ConditionBase(),
+    m_string_value_ref1(std::move(value_ref1)),
+    m_string_value_ref2(std::move(value_ref2)),
+    m_string_value_ref3(std::move(value_ref3)),
+    m_compare_type1(comp1),
+    m_compare_type2(comp2)
+{
+    /*DebugLogger() << "String ValueTest(" << value_ref1->Dump(ntabs) << " "
+                                         << CompareTypeString(comp1) << " "
+                                         << value_ref2->Dump(ntabs) << ")";*/
+}
+
+ValueTest::ValueTest(std::unique_ptr<ValueRef::ValueRefBase<int>>&& value_ref1,
+                     ComparisonType comp1,
+                     std::unique_ptr<ValueRef::ValueRefBase<int>>&& value_ref2,
+                     ComparisonType comp2,
+                     std::unique_ptr<ValueRef::ValueRefBase<int>>&& value_ref3) :
+    ConditionBase(),
+    m_int_value_ref1(std::move(value_ref1)),
+    m_int_value_ref2(std::move(value_ref2)),
+    m_int_value_ref3(std::move(value_ref3)),
+    m_compare_type1(comp1),
+    m_compare_type2(comp2)
+{
+    //DebugLogger() << "ValueTest(double)";
 }
 
 bool ValueTest::operator==(const ConditionBase& rhs) const {
@@ -7926,6 +8764,12 @@ bool ValueTest::operator==(const ConditionBase& rhs) const {
     CHECK_COND_VREF_MEMBER(m_value_ref1)
     CHECK_COND_VREF_MEMBER(m_value_ref2)
     CHECK_COND_VREF_MEMBER(m_value_ref3)
+    CHECK_COND_VREF_MEMBER(m_string_value_ref1)
+    CHECK_COND_VREF_MEMBER(m_string_value_ref2)
+    CHECK_COND_VREF_MEMBER(m_string_value_ref3)
+    CHECK_COND_VREF_MEMBER(m_int_value_ref1)
+    CHECK_COND_VREF_MEMBER(m_int_value_ref2)
+    CHECK_COND_VREF_MEMBER(m_int_value_ref3)
 
     if (m_compare_type1 != rhs_.m_compare_type1)
         return false;
@@ -7935,58 +8779,67 @@ bool ValueTest::operator==(const ConditionBase& rhs) const {
     return true;
 }
 
-namespace {
-    bool Comparison(float val1, ComparisonType comp, float val2) {
-        switch(comp) {
-            case EQUAL:                  return val1 == val2;
-            case GREATER_THAN:           return val1 > val2;
-            case GREATER_THAN_OR_EQUAL:  return val1 >= val2;
-            case LESS_THAN:              return val1 < val2;
-            case LESS_THAN_OR_EQUAL:     return val1 <= val2;
-            case NOT_EQUAL:              return val1 != val2;
-            case INVALID_COMPARISON:
-            default:                                return false;
-        }
-    }
-
-    std::string CompareTypeString(ComparisonType comp) {
-        switch(comp) {
-        case EQUAL:                  return "=";
-        case GREATER_THAN:           return ">";
-        case GREATER_THAN_OR_EQUAL:  return ">=";
-        case LESS_THAN:              return "<";
-        case LESS_THAN_OR_EQUAL:     return "<=";
-        case NOT_EQUAL:              return "!=";
-        case INVALID_COMPARISON:
-        default:                                return "";
-        }
-    }
-}
-
 void ValueTest::Eval(const ScriptingContext& parent_context,
                      ObjectSet& matches, ObjectSet& non_matches,
                      SearchDomain search_domain/* = NON_MATCHES*/) const
 {
-    bool simple_eval_safe = ((!m_value_ref1 || m_value_ref1->LocalCandidateInvariant()) &&
-                             (!m_value_ref2 || m_value_ref2->LocalCandidateInvariant()) &&
-                             (!m_value_ref3 || m_value_ref3->LocalCandidateInvariant()) &&
+    bool simple_eval_safe = ((!m_value_ref1         || m_value_ref1->LocalCandidateInvariant()) &&
+                             (!m_value_ref2         || m_value_ref2->LocalCandidateInvariant()) &&
+                             (!m_value_ref3         || m_value_ref3->LocalCandidateInvariant()) &&
+                             (!m_string_value_ref1  || m_string_value_ref1->LocalCandidateInvariant()) &&
+                             (!m_string_value_ref2  || m_string_value_ref2->LocalCandidateInvariant()) &&
+                             (!m_string_value_ref3  || m_string_value_ref3->LocalCandidateInvariant()) &&
+                             (!m_int_value_ref1     || m_int_value_ref1->LocalCandidateInvariant()) &&
+                             (!m_int_value_ref2     || m_int_value_ref2->LocalCandidateInvariant()) &&
+                             (!m_int_value_ref3     || m_int_value_ref3->LocalCandidateInvariant()) &&
                              (parent_context.condition_root_candidate || RootCandidateInvariant()));
 
     if (simple_eval_safe) {
         // evaluate value and range limits once, use to match all candidates
         std::shared_ptr<const UniverseObject> no_object;
         ScriptingContext local_context(parent_context, no_object);
+        bool passed = false;
 
-        float val1, val2, val3;
-        bool passed = m_value_ref1 && m_value_ref2;
-        if (passed) {
-            val1 = m_value_ref1->Eval(local_context);
-            val2 = m_value_ref2->Eval(local_context);
-            passed = Comparison(val1, m_compare_type1, val2);
-        }
-        if (passed && m_value_ref3) {
-            val3 = m_value_ref3->Eval(local_context);
-            passed = Comparison(val2, m_compare_type2, val3);
+        if (m_value_ref1) {
+            float val1, val2, val3;
+            passed = /*m_value_ref1 &&*/ m_value_ref2.get();
+            if (passed) {
+                val1 = m_value_ref1->Eval(local_context);
+                val2 = m_value_ref2->Eval(local_context);
+                passed = Comparison(val1, m_compare_type1, val2);
+            }
+            if (passed && m_value_ref3) {
+                val3 = m_value_ref3->Eval(local_context);
+                passed = Comparison(val2, m_compare_type2, val3);
+            }
+
+        } else if (m_string_value_ref1) {
+            std::string val1, val2, val3;
+            passed = /*m_string_value_ref1 &&*/ m_string_value_ref2.get();
+            if (passed) {
+                val1 = m_string_value_ref1->Eval(local_context);
+                val2 = m_string_value_ref2->Eval(local_context);
+                passed = Comparison(val1, m_compare_type1, val2);
+            }
+            if (passed && m_string_value_ref3) {
+                val3 = m_string_value_ref3->Eval(local_context);
+                passed = Comparison(val2, m_compare_type2, val3);
+            }
+
+        } else if (m_int_value_ref1) {
+            int val1, val2, val3;
+            passed = /*m_int_value_ref1 &&*/ m_int_value_ref2.get();
+            if (passed) {
+                val1 = m_int_value_ref1->Eval(local_context);
+                val2 = m_int_value_ref2->Eval(local_context);
+                passed = Comparison(val1, m_compare_type1, val2);
+            }
+            if (passed && m_int_value_ref3) {
+                val3 = m_int_value_ref3->Eval(local_context);
+                passed = Comparison(val2, m_compare_type2, val3);
+            }
+        } else {
+            // passed remains false
         }
 
         // transfer objects to or from candidate set, according to whether the value comparisons were true
@@ -7999,6 +8852,7 @@ void ValueTest::Eval(const ScriptingContext& parent_context,
             non_matches.clear();
         }
 
+
     } else {
         // re-evaluate value and ranges for each candidate object
         ConditionBase::Eval(parent_context, matches, non_matches, search_domain);
@@ -8006,31 +8860,63 @@ void ValueTest::Eval(const ScriptingContext& parent_context,
 }
 
 bool ValueTest::RootCandidateInvariant() const {
-    return (!m_value_ref1   || m_value_ref1->RootCandidateInvariant()) &&
-           (!m_value_ref2   || m_value_ref2->RootCandidateInvariant()) &&
-           (!m_value_ref3   || m_value_ref3->RootCandidateInvariant());
+    return (!m_value_ref1           || m_value_ref1->RootCandidateInvariant()) &&
+           (!m_value_ref2           || m_value_ref2->RootCandidateInvariant()) &&
+           (!m_value_ref3           || m_value_ref3->RootCandidateInvariant()) &&
+           (!m_string_value_ref1    || m_string_value_ref1->RootCandidateInvariant()) &&
+           (!m_string_value_ref2    || m_string_value_ref2->RootCandidateInvariant()) &&
+           (!m_string_value_ref3    || m_string_value_ref3->RootCandidateInvariant()) &&
+           (!m_int_value_ref1       || m_int_value_ref1->RootCandidateInvariant()) &&
+           (!m_int_value_ref2       || m_int_value_ref2->RootCandidateInvariant()) &&
+           (!m_int_value_ref3       || m_int_value_ref3->RootCandidateInvariant());
 }
 
 bool ValueTest::TargetInvariant() const {
-    return (!m_value_ref1   || m_value_ref1->TargetInvariant()) &&
-           (!m_value_ref2   || m_value_ref2->TargetInvariant()) &&
-           (!m_value_ref3   || m_value_ref3->TargetInvariant());
+    return (!m_value_ref1           || m_value_ref1->TargetInvariant()) &&
+           (!m_value_ref2           || m_value_ref2->TargetInvariant()) &&
+           (!m_value_ref3           || m_value_ref3->TargetInvariant()) &&
+           (!m_string_value_ref1    || m_string_value_ref1->TargetInvariant()) &&
+           (!m_string_value_ref2    || m_string_value_ref2->TargetInvariant()) &&
+           (!m_string_value_ref3    || m_string_value_ref3->TargetInvariant()) &&
+           (!m_int_value_ref1       || m_int_value_ref1->TargetInvariant()) &&
+           (!m_int_value_ref2       || m_int_value_ref2->TargetInvariant()) &&
+           (!m_int_value_ref3       || m_int_value_ref3->TargetInvariant());
 }
 
 bool ValueTest::SourceInvariant() const {
-    return (!m_value_ref1   || m_value_ref1->SourceInvariant()) &&
-           (!m_value_ref2   || m_value_ref2->SourceInvariant()) &&
-           (!m_value_ref3   || m_value_ref3->SourceInvariant());
+    return (!m_value_ref1           || m_value_ref1->SourceInvariant()) &&
+           (!m_value_ref2           || m_value_ref2->SourceInvariant()) &&
+           (!m_value_ref3           || m_value_ref3->SourceInvariant()) &&
+           (!m_string_value_ref1    || m_string_value_ref1->SourceInvariant()) &&
+           (!m_string_value_ref2    || m_string_value_ref2->SourceInvariant()) &&
+           (!m_string_value_ref3    || m_string_value_ref3->SourceInvariant()) &&
+           (!m_int_value_ref1       || m_int_value_ref1->SourceInvariant()) &&
+           (!m_int_value_ref2       || m_int_value_ref2->SourceInvariant()) &&
+           (!m_int_value_ref3       || m_int_value_ref3->SourceInvariant());
 }
 
 std::string ValueTest::Description(bool negated/* = false*/) const {
     std::string value_str1, value_str2, value_str3;
     if (m_value_ref1)
         value_str1 = m_value_ref1->Description();
+    else if (m_string_value_ref1)
+        value_str1 = m_string_value_ref1->Description();
+    else if (m_int_value_ref1)
+        value_str1 = m_int_value_ref1->Description();
+
     if (m_value_ref2)
         value_str2 = m_value_ref2->Description();
+    else if (m_string_value_ref2)
+        value_str2 = m_string_value_ref2->Description();
+    else if (m_int_value_ref2)
+        value_str2 = m_int_value_ref2->Description();
+
     if (m_value_ref3)
         value_str3 = m_value_ref3->Description();
+    else if (m_string_value_ref3)
+        value_str3 = m_string_value_ref3->Description();
+    else if (m_int_value_ref3)
+        value_str3 = m_int_value_ref3->Description();
 
     std::string comp_str1 = CompareTypeString(m_compare_type1);
     std::string comp_str2 = CompareTypeString(m_compare_type2);
@@ -8047,46 +8933,93 @@ std::string ValueTest::Description(bool negated/* = false*/) const {
                % composed_comparison);
 }
 
-std::string ValueTest::Dump() const {
-    std::string retval = DumpIndent() + "(";
+std::string ValueTest::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "(";
     if (m_value_ref1)
-        retval += m_value_ref1->Dump();
+        retval += m_value_ref1->Dump(ntabs);
+    else if (m_string_value_ref1)
+        retval += m_string_value_ref1->Dump(ntabs);
+    else if (m_int_value_ref1)
+        retval += m_int_value_ref1->Dump(ntabs);
 
     if (m_compare_type1 != INVALID_COMPARISON)
         retval += " " + CompareTypeString(m_compare_type1);
 
     if (m_value_ref2)
-        retval += " " + m_value_ref2->Dump();
+        retval += " " + m_value_ref2->Dump(ntabs);
+    else if (m_string_value_ref2)
+        retval += " " + m_string_value_ref2->Dump(ntabs);
+    else if (m_int_value_ref2)
+        retval += " " + m_int_value_ref2->Dump(ntabs);
 
     if (m_compare_type2 != INVALID_COMPARISON)
         retval += " " + CompareTypeString(m_compare_type2);
 
     if (m_value_ref3)
-        retval += " " + m_value_ref3->Dump();
+        retval += " " + m_value_ref3->Dump(ntabs);
+    else if (m_string_value_ref3)
+        retval += " " + m_string_value_ref3->Dump(ntabs);
+    else if (m_int_value_ref3)
+        retval += " " + m_int_value_ref3->Dump(ntabs);
 
     retval += ")\n";
     return retval;
 }
 
 bool ValueTest::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "ValueTest::Match passed no candidate object";
         return false;
     }
-    if (!m_value_ref1 || !m_value_ref2 || m_compare_type1 == INVALID_COMPARISON)
+    if (m_compare_type1 == INVALID_COMPARISON)
         return false;
 
-    float val1 = m_value_ref1->Eval(local_context);
-    float val2 = m_value_ref2->Eval(local_context);
-    if (!Comparison(val1, m_compare_type1, val2))
-        return false;
+    if (m_value_ref1) {
+        if (!m_value_ref2)
+            return false;
 
-    if (m_compare_type2 == INVALID_COMPARISON || !m_value_ref3)
-        return true;
+        float val1 = m_value_ref1->Eval(local_context);
+        float val2 = m_value_ref2->Eval(local_context);
+        if (!Comparison(val1, m_compare_type1, val2))
+            return false;
 
-    float val3 = m_value_ref3->Eval(local_context);
-    return Comparison(val2, m_compare_type1, val3);
+        if (m_compare_type2 == INVALID_COMPARISON || !m_value_ref3)
+            return true;
+
+        float val3 = m_value_ref3->Eval(local_context);
+        return Comparison(val2, m_compare_type1, val3);
+
+    } else if (m_string_value_ref1) {
+        if (!m_string_value_ref2)
+            return false;
+
+        std::string val1 = m_string_value_ref1->Eval(local_context);
+        std::string val2 = m_string_value_ref2->Eval(local_context);
+        if (!Comparison(val1, m_compare_type1, val2))
+            return false;
+
+        if (m_compare_type2 == INVALID_COMPARISON || !m_value_ref3)
+            return true;
+
+        std::string val3 = m_string_value_ref3->Eval(local_context);
+        return Comparison(val2, m_compare_type1, val3);
+    } else if (m_int_value_ref1) {
+        if (!m_int_value_ref2)
+            return false;
+
+        int val1 = m_int_value_ref1->Eval(local_context);
+        int val2 = m_int_value_ref2->Eval(local_context);
+        if (!Comparison(val1, m_compare_type1, val2))
+            return false;
+
+        if (m_compare_type2 == INVALID_COMPARISON || !m_value_ref3)
+            return true;
+
+        int val3 = m_int_value_ref3->Eval(local_context);
+        return Comparison(val2, m_compare_type1, val3);
+    }
+    return false;
 }
 
 void ValueTest::SetTopLevelContent(const std::string& content_name) {
@@ -8096,6 +9029,38 @@ void ValueTest::SetTopLevelContent(const std::string& content_name) {
         m_value_ref2->SetTopLevelContent(content_name);
     if (m_value_ref3)
         m_value_ref3->SetTopLevelContent(content_name);
+    if (m_string_value_ref1)
+        m_string_value_ref1->SetTopLevelContent(content_name);
+    if (m_string_value_ref2)
+        m_string_value_ref2->SetTopLevelContent(content_name);
+    if (m_string_value_ref3)
+        m_string_value_ref3->SetTopLevelContent(content_name);
+    if (m_int_value_ref1)
+        m_int_value_ref1->SetTopLevelContent(content_name);
+    if (m_int_value_ref2)
+        m_int_value_ref2->SetTopLevelContent(content_name);
+    if (m_int_value_ref3)
+        m_int_value_ref3->SetTopLevelContent(content_name);
+}
+
+unsigned int ValueTest::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::ValueTest");
+    CheckSums::CheckSumCombine(retval, m_value_ref1);
+    CheckSums::CheckSumCombine(retval, m_value_ref2);
+    CheckSums::CheckSumCombine(retval, m_value_ref3);
+    CheckSums::CheckSumCombine(retval, m_string_value_ref1);
+    CheckSums::CheckSumCombine(retval, m_string_value_ref2);
+    CheckSums::CheckSumCombine(retval, m_string_value_ref3);
+    CheckSums::CheckSumCombine(retval, m_int_value_ref1);
+    CheckSums::CheckSumCombine(retval, m_int_value_ref2);
+    CheckSums::CheckSumCombine(retval, m_int_value_ref3);
+    CheckSums::CheckSumCombine(retval, m_compare_type1);
+    CheckSums::CheckSumCombine(retval, m_compare_type2);
+
+    TraceLogger() << "GetCheckSum(ValueTest): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
@@ -8110,28 +9075,28 @@ namespace {
             return nullptr;
         switch (content_type) {
         case CONTENT_BUILDING: {
-            if (const BuildingType* bt = GetBuildingType(name1))
+            if (auto bt = GetBuildingType(name1))
                 return bt->Location();
             break;
         }
         case CONTENT_SPECIES: {
-            const ::Species* s = GetSpecies(name1);
+            auto s = GetSpecies(name1);
             if (!s)
                 return nullptr;
             return s->Location();
         }
         case CONTENT_SHIP_HULL: {
-            if (const HullType* h = GetHullType(name1))
+            if (auto h = GetHullType(name1))
                 return h->Location();
             break;
         }
         case CONTENT_SHIP_PART: {
-            if (const PartType* p = GetPartType(name1))
+            if (auto p = GetPartType(name1))
                 return p->Location();
             break;
         }
         case CONTENT_SPECIAL: {
-            if (const Special* s = GetSpecial(name1))
+            if (auto s = GetSpecial(name1))
                 return s->Location();
             break;
         }
@@ -8139,8 +9104,8 @@ namespace {
             if (name2.empty())
                 return nullptr;
             // get species, then focus from that species
-            if (const ::Species* s = GetSpecies(name1)) {
-                for (const ::FocusType& f : s->Foci()) {
+            if (auto s = GetSpecies(name1)) {
+                for (auto& f : s->Foci()) {
                     if (f.Name() == name2)
                         return f.Location();
                 }
@@ -8154,10 +9119,14 @@ namespace {
     }
 }
 
-Location::~Location() {
-    delete m_name1;
-    delete m_name2;
-}
+Location::Location(ContentType content_type,
+                   std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name1,
+                   std::unique_ptr<ValueRef::ValueRefBase<std::string>>&& name2) :
+    ConditionBase(),
+    m_name1(std::move(name1)),
+    m_name2(std::move(name2)),
+    m_content_type(content_type)
+{}
 
 bool Location::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -8193,7 +9162,7 @@ void Location::Eval(const ScriptingContext& parent_context,
         std::string name2 = (m_name2 ? m_name2->Eval(local_context) : "");
 
         // get condition from content, apply to matches / non_matches
-        const ConditionBase* condition = GetLocationCondition(m_content_type, name1, name2);
+        const auto condition = GetLocationCondition(m_content_type, name1, name2);
         if (condition && condition != this) {
             condition->Eval(parent_context, matches, non_matches, search_domain);
         } else {
@@ -8247,8 +9216,8 @@ std::string Location::Description(bool negated/* = false*/) const {
                % name2_str);
 }
 
-std::string Location::Dump() const {
-    std::string retval = DumpIndent() + "Location content_type = ";
+std::string Location::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Location content_type = ";
 
     switch (m_content_type) {
     case CONTENT_BUILDING:  retval += "Building";   break;
@@ -8261,14 +9230,14 @@ std::string Location::Dump() const {
     }
 
     if (m_name1)
-        retval += " name1 = " + m_name1->Dump();
+        retval += " name1 = " + m_name1->Dump(ntabs);
     if (m_name2)
-        retval += " name2 = " + m_name2->Dump();
+        retval += " name2 = " + m_name2->Dump(ntabs);
     return retval;
 }
 
 bool Location::Match(const ScriptingContext& local_context) const {
-    std::shared_ptr<const UniverseObject> candidate = local_context.condition_local_candidate;
+    auto candidate = local_context.condition_local_candidate;
     if (!candidate) {
         ErrorLogger() << "Location::Match passed no candidate object";
         return false;
@@ -8277,7 +9246,7 @@ bool Location::Match(const ScriptingContext& local_context) const {
     std::string name1 = (m_name1 ? m_name1->Eval(local_context) : "");
     std::string name2 = (m_name2 ? m_name2->Eval(local_context) : "");
 
-    const ConditionBase* condition = GetLocationCondition(m_content_type, name1, name2);
+    const auto condition = GetLocationCondition(m_content_type, name1, name2);
     if (!condition || condition == this)
         return false;
 
@@ -8293,12 +9262,32 @@ void Location::SetTopLevelContent(const std::string& content_name) {
         m_name2->SetTopLevelContent(content_name);
 }
 
+unsigned int Location::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Location");
+    CheckSums::CheckSumCombine(retval, m_name1);
+    CheckSums::CheckSumCombine(retval, m_name2);
+    CheckSums::CheckSumCombine(retval, m_content_type);
+
+    TraceLogger() << "GetCheckSum(Location): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // And                                                   //
 ///////////////////////////////////////////////////////////
-And::~And() {
-    for (ConditionBase* operand : m_operands)
-        delete operand;
+And::And(std::vector<std::unique_ptr<ConditionBase>>&& operands) :
+    ConditionBase(),
+    m_operands(std::move(operands))
+{}
+
+And::And(std::unique_ptr<ConditionBase>&& operand1, std::unique_ptr<ConditionBase>&& operand2) :
+    ConditionBase()
+{
+    // would prefer to initialize the vector m_operands in the initializer list, but this is difficult with non-copyable unique_ptr parameters
+    m_operands.push_back(std::move(operand1));
+    m_operands.push_back(std::move(operand2));
 }
 
 bool And::operator==(const ConditionBase& rhs) const {
@@ -8328,7 +9317,7 @@ void And::Eval(const ScriptingContext& parent_context, ObjectSet& matches,
         ErrorLogger() << "And::Eval given no operands!";
         return;
     }
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         if (!operand) {
             ErrorLogger() << "And::Eval given null operand!";
             return;
@@ -8359,7 +9348,7 @@ void And::Eval(const ScriptingContext& parent_context, ObjectSet& matches,
         // check all operand conditions on all objects in the matches set, moving those
         // that don't pass a condition to the non-matches set
 
-        for (ConditionBase* operand : m_operands) {
+        for (auto& operand : m_operands) {
             if (matches.empty()) break;
             operand->Eval(local_context, matches, non_matches, MATCHES);
         }
@@ -8373,7 +9362,7 @@ bool And::RootCandidateInvariant() const {
     if (m_root_candidate_invariant != UNKNOWN_INVARIANCE)
         return m_root_candidate_invariant == INVARIANT;
 
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         if (!operand->RootCandidateInvariant()) {
             m_root_candidate_invariant = VARIANT;
             return false;
@@ -8387,7 +9376,7 @@ bool And::TargetInvariant() const {
     if (m_target_invariant != UNKNOWN_INVARIANCE)
         return m_target_invariant == INVARIANT;
 
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         if (!operand->TargetInvariant()) {
             m_target_invariant = VARIANT;
             return false;
@@ -8401,7 +9390,7 @@ bool And::SourceInvariant() const {
     if (m_source_invariant != UNKNOWN_INVARIANCE)
         return m_source_invariant == INVARIANT;
 
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         if (!operand->SourceInvariant()) {
             m_source_invariant = VARIANT;
             return false;
@@ -8412,29 +9401,41 @@ bool And::SourceInvariant() const {
 }
 
 std::string And::Description(bool negated/* = false*/) const {
+    std::string values_str;
     if (m_operands.size() == 1) {
-        return m_operands[0]->Description();
+        values_str += (!negated)
+            ? UserString("DESC_AND_BEFORE_SINGLE_OPERAND")
+            : UserString("DESC_NOT_AND_BEFORE_SINGLE_OPERAND");
+        // Pushing the negation to the enclosed conditions
+        values_str += m_operands[0]->Description(negated);
+        values_str += (!negated)
+            ? UserString("DESC_AND_AFTER_SINGLE_OPERAND")
+            : UserString("DESC_NOT_AND_AFTER_SINGLE_OPERAND");
     } else {
-        // TODO: use per-operand-type connecting language
-        std::string values_str;
+        values_str += (!negated)
+            ? UserString("DESC_AND_BEFORE_OPERANDS")
+            : UserString("DESC_NOT_AND_BEFORE_OPERANDS");
         for (unsigned int i = 0; i < m_operands.size(); ++i) {
-            values_str += m_operands[i]->Description();
+            // Pushing the negation to the enclosed conditions
+            values_str += m_operands[i]->Description(negated);
             if (i != m_operands.size() - 1) {
-                values_str += UserString("DESC_AND_BETWEEN_OPERANDS");
+                values_str += (!negated)
+                    ? UserString("DESC_AND_BETWEEN_OPERANDS")
+                    : UserString("DESC_NOT_AND_BETWEEN_OPERANDS");
             }
         }
-        return values_str;
+        values_str += (!negated)
+            ? UserString("DESC_AND_AFTER_OPERANDS")
+            : UserString("DESC_NOT_AND_AFTER_OPERANDS");
     }
+    return values_str;
 }
 
-std::string And::Dump() const {
-    std::string retval = DumpIndent() + "And [\n";
-    ++g_indent;
-    for (ConditionBase* operand : m_operands) {
-        retval += operand->Dump();
-    }
-    --g_indent;
-    retval += DumpIndent() + "]\n";
+std::string And::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "And [\n";
+    for (auto& operand : m_operands)
+        retval += operand->Dump(ntabs+1);
+    retval += DumpIndent(ntabs) + "]\n";
     return retval;
 }
 
@@ -8447,18 +9448,35 @@ void And::GetDefaultInitialCandidateObjects(const ScriptingContext& parent_conte
 }
 
 void And::SetTopLevelContent(const std::string& content_name) {
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         operand->SetTopLevelContent(content_name);
     }
+}
+
+unsigned int And::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::And");
+    CheckSums::CheckSumCombine(retval, m_operands);
+
+    TraceLogger() << "GetCheckSum(And): retval: " << retval;
+    return retval;
+}
+
+const std::vector<ConditionBase*> And::Operands() const {
+    std::vector<ConditionBase*> retval(m_operands.size());
+    std::transform(m_operands.begin(), m_operands.end(), retval.begin(),
+                   [](const std::unique_ptr<ConditionBase>& xx) {return xx.get();});
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
 // Or                                                    //
 ///////////////////////////////////////////////////////////
-Or::~Or() {
-    for (ConditionBase* operand : m_operands)
-        delete operand;
-}
+Or::Or(std::vector<std::unique_ptr<ConditionBase>>&& operands) :
+    ConditionBase(),
+    m_operands(std::move(operands))
+{}
 
 bool Or::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -8487,7 +9505,7 @@ void Or::Eval(const ScriptingContext& parent_context, ObjectSet& matches,
         ErrorLogger() << "Or::Eval given no operands!";
         return;
     }
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         if (!operand) {
             ErrorLogger() << "Or::Eval given null operand!";
             return;
@@ -8499,7 +9517,7 @@ void Or::Eval(const ScriptingContext& parent_context, ObjectSet& matches,
         // if a non-candidate item matches an operand condition, move the item to the
         // matches set.
 
-        for (ConditionBase* operand : m_operands) {
+        for (auto& operand : m_operands) {
             if (non_matches.empty()) break;
             operand->Eval(local_context, matches, non_matches, NON_MATCHES);
         }
@@ -8516,7 +9534,7 @@ void Or::Eval(const ScriptingContext& parent_context, ObjectSet& matches,
         m_operands[0]->Eval(local_context, matches, partly_checked_matches, MATCHES);
 
         // move items that pass any of the other conditions back into matches
-        for (ConditionBase* operand : m_operands) {
+        for (auto& operand : m_operands) {
             if (partly_checked_matches.empty()) break;
             operand->Eval(local_context, matches, partly_checked_matches, NON_MATCHES);
         }
@@ -8534,7 +9552,7 @@ bool Or::RootCandidateInvariant() const {
     if (m_root_candidate_invariant != UNKNOWN_INVARIANCE)
         return m_root_candidate_invariant == INVARIANT;
 
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         if (!operand->RootCandidateInvariant()) {
             m_root_candidate_invariant = VARIANT;
             return false;
@@ -8548,7 +9566,7 @@ bool Or::TargetInvariant() const {
     if (m_target_invariant != UNKNOWN_INVARIANCE)
         return m_target_invariant == INVARIANT;
 
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         if (!operand->TargetInvariant()) {
             m_target_invariant = VARIANT;
             return false;
@@ -8562,7 +9580,7 @@ bool Or::SourceInvariant() const {
     if (m_source_invariant != UNKNOWN_INVARIANCE)
         return m_source_invariant == INVARIANT;
 
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         if (!operand->SourceInvariant()) {
             m_source_invariant = VARIANT;
             return false;
@@ -8573,43 +9591,68 @@ bool Or::SourceInvariant() const {
 }
 
 std::string Or::Description(bool negated/* = false*/) const {
+    std::string values_str;
     if (m_operands.size() == 1) {
-        return m_operands[0]->Description();
+        values_str += (!negated)
+            ? UserString("DESC_OR_BEFORE_SINGLE_OPERAND")
+            : UserString("DESC_NOT_OR_BEFORE_SINGLE_OPERAND");
+        // Pushing the negation to the enclosed conditions
+        values_str += m_operands[0]->Description(negated);
+        values_str += (!negated)
+            ? UserString("DESC_OR_AFTER_SINGLE_OPERAND")
+            : UserString("DESC_NOT_OR_AFTER_SINGLE_OPERAND");
     } else {
         // TODO: use per-operand-type connecting language
-        std::string values_str;
+        values_str += (!negated)
+            ? UserString("DESC_OR_BEFORE_OPERANDS")
+            : UserString("DESC_NOT_OR_BEFORE_OPERANDS");
         for (unsigned int i = 0; i < m_operands.size(); ++i) {
-            values_str += m_operands[i]->Description();
+            // Pushing the negation to the enclosed conditions
+            values_str += m_operands[i]->Description(negated);
             if (i != m_operands.size() - 1) {
-                values_str += UserString("DESC_OR_BETWEEN_OPERANDS");
+                values_str += (!negated)
+                    ? UserString("DESC_OR_BETWEEN_OPERANDS")
+                    : UserString("DESC_NOT_OR_BETWEEN_OPERANDS");
             }
         }
-        return values_str;
+        values_str += (!negated)
+            ? UserString("DESC_OR_AFTER_OPERANDS")
+            : UserString("DESC_NOT_OR_AFTER_OPERANDS");
     }
+    return values_str;
 }
 
-std::string Or::Dump() const {
-    std::string retval = DumpIndent() + "Or [\n";
-    ++g_indent;
-    for (ConditionBase* operand : m_operands) {
-        retval += operand->Dump();
-    }
-    --g_indent;
-    retval += "\n" + DumpIndent() + "]\n";
+std::string Or::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Or [\n";
+    for (auto& operand : m_operands)
+        retval += operand->Dump(ntabs+1);
+    retval += "\n" + DumpIndent(ntabs) + "]\n";
     return retval;
 }
 
 void Or::SetTopLevelContent(const std::string& content_name) {
-    for (ConditionBase* operand : m_operands) {
+    for (auto& operand : m_operands) {
         operand->SetTopLevelContent(content_name);
     }
+}
+
+unsigned int Or::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Or");
+    CheckSums::CheckSumCombine(retval, m_operands);
+
+    TraceLogger() << "GetCheckSum(Or): retval: " << retval;
+    return retval;
 }
 
 ///////////////////////////////////////////////////////////
 // Not                                                   //
 ///////////////////////////////////////////////////////////
-Not::~Not()
-{ delete m_operand; }
+Not::Not(std::unique_ptr<ConditionBase>&& operand) :
+    ConditionBase(),
+    m_operand(std::move(operand))
+{}
 
 bool Not::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
@@ -8668,13 +9711,11 @@ bool Not::SourceInvariant() const {
 }
 
 std::string Not::Description(bool negated/* = false*/) const
-{ return m_operand->Description(true); }
+{ return m_operand->Description(!negated); }
 
-std::string Not::Dump() const {
-    std::string retval = DumpIndent() + "Not\n";
-    ++g_indent;
-    retval += m_operand->Dump();
-    --g_indent;
+std::string Not::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "Not\n";
+    retval += m_operand->Dump(ntabs+1);
     return retval;
 }
 
@@ -8683,12 +9724,19 @@ void Not::SetTopLevelContent(const std::string& content_name) {
         m_operand->SetTopLevelContent(content_name);
 }
 
+unsigned int Not::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Not");
+    CheckSums::CheckSumCombine(retval, m_operand);
+
+    TraceLogger() << "GetCheckSum(Not): retval: " << retval;
+    return retval;
+}
+
 ///////////////////////////////////////////////////////////
 // Described                                             //
 ///////////////////////////////////////////////////////////
-Described::~Described()
-{ delete m_condition; }
-
 bool Described::operator==(const ConditionBase& rhs) const {
     if (this == &rhs)
         return true;
@@ -8739,5 +9787,16 @@ bool Described::SourceInvariant() const
 void Described::SetTopLevelContent(const std::string& content_name) {
     if (m_condition)
         m_condition->SetTopLevelContent(content_name);
+}
+
+unsigned int Described::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, "Condition::Described");
+    CheckSums::CheckSumCombine(retval, m_condition);
+    CheckSums::CheckSumCombine(retval, m_desc_stringtable_key);
+
+    TraceLogger() << "GetCheckSum(Described): retval: " << retval;
+    return retval;
 }
 } // namespace Condition

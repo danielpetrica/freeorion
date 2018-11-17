@@ -83,12 +83,11 @@ trait components to the FOCS description of a playable species.
 # empires to protect the galaxy?
 #
 
-
-import sys
 import abc
 from collections import Counter
 import math
 import random
+from logging import warn, debug
 
 import freeOrionAIInterface as fo  # pylint: disable=import-error
 
@@ -238,6 +237,10 @@ class Trait(object):
         """Return true if allowed to target research/industry > 1.5"""
         return True
 
+    def may_use_growth_focus(self):
+        """Return True if permitted to use growth focus."""
+        return True
+
     def may_travel_beyond_supply(self, distance):  # pylint: disable=no-self-use,unused-argument
         """Return True if able to travel distance hops beyond empire supply"""
         # TODO Remove this tap it is one of the empire id dependent taps. See EmpireIDTrait.
@@ -278,6 +281,12 @@ class Trait(object):
         """Return an exponent to scale the production cost of a warship in ShipDesignAI."""
         return None
 
+    def secondary_valuation_factor_for_invasion_targets(self):  # pylint: disable=no-self-use,unused-argument
+        """Return a value in range [0.0 : 1.0], used in colonization scoring calculations where subscores for a primary
+        planet depend on traits of secondary planets, for what portion of the subscore should be assigned if the secondary
+        planet would need to be acquired via invasion"""
+        return None
+
 
 class Aggression(Trait):
     """A trait that models level of difficulty and aggression."""
@@ -313,7 +322,8 @@ class Aggression(Trait):
 
     def max_number_colonies(self):
         # significant growth barrier for low aggression, negligible for high aggression
-        return 2 + ((0.5 + self.aggression) ** 2) * fo.currentTurn() / 50.0
+        # TODO: consider further changes, including a dependency on galaxy size and planet density
+        return 2 + ((0.5 + 1.4*self.aggression) ** 2) * fo.currentTurn() / 50.0
 
     def may_invade(self):
         return (self.aggression > fo.aggression.turtle
@@ -373,10 +383,15 @@ class Aggression(Trait):
         return [4.0, 3.0, 2.0, 1.5, 1.2, 1.0][self.aggression]
 
     def may_dither_focus_to_gain_research(self):
-        return self.aggression < fo.aggression.aggressive
+        return self.aggression >= fo.aggression.aggressive
 
     def may_research_heavily(self):
         return self.aggression > fo.aggression.cautious
+
+    def may_use_growth_focus(self):
+        # For now, allow using growth focus for all aggression settings
+        # but leaving this here for easier modification.
+        return self.aggression >= fo.aggression.beginner
 
     def may_research_xeno_genetics_variances(self):
         return self.aggression >= fo.aggression.cautious
@@ -444,6 +459,20 @@ class Aggression(Trait):
             exponent = 1.0
         return exponent
 
+    def secondary_valuation_factor_for_invasion_targets(self):  # pylint: disable=no-self-use,unused-argument
+        """Return a value in range [0.0 : 1.0], used in colonization scoring calculations where subscores for a primary
+        planet depend on traits of secondary planets, for what portion of the subscore should be assigned if the secondary
+        planet would need to be acquired via invasion"""
+        if self.aggression == fo.aggression.maniacal:
+            factor = 0.8
+        elif self.aggression == fo.aggression.aggressive:
+            factor = 0.4
+        elif self.aggression == fo.aggression.typical:
+            factor = 0.2
+        else:
+            factor = 0.0
+        return factor
+
 
 class EmpireIDTrait(Trait):
     """A trait that models empire id influence.
@@ -464,7 +493,7 @@ class EmpireIDTrait(Trait):
     # can describe, "Look the 'Continuum' is behaving like a 1 modulo 2 character."
 
     def __init__(self, empire_id, aggression):
-        print "EmpireIDTrait initialized."
+        debug("EmpireIDTrait initialized.")
         self.id = empire_id
         self.aggression = aggression  # TODO remove when old research style get_research_index is removed
 
@@ -543,10 +572,11 @@ def _make_single_function_combiner(funcnamei, f_combo):
         return f_combo([getattr(x, funcnamei)(*args, **kwargs) for x in self.traits])
     return func
 
+
 # Create combiners for traits that all must be true
 for funcname in ["may_explore_system", "may_surge_industry", "may_maximize_research", "may_invade",
                  "may-invade_with_bases", "may_build_building", "may_produce_troops",
-                 "may_dither_focus_to_gain_research", "may_research_heavily",
+                 "may_dither_focus_to_gain_research", "may_research_heavily", "may_use_growth_focus",
                  "may_travel_beyond_supply", "may_research_xeno_genetics_variances",
                  "prefer_research_defensive", "prefer_research_low_aggression", "may_research_tech",
                  "may_research_tech_classic"]:
@@ -573,22 +603,25 @@ def average_not_none(llin):
         return 0
     return sum(ll) / float(len(ll))
 
-for funcname in ["attitude_to_empire"]:
+
+for funcname in ["attitude_to_empire", "secondary_valuation_factor_for_invasion_targets"]:
     setattr(Character, funcname, _make_single_function_combiner(funcname, average_not_none))
+
 
 # Create combiners for traits that use the geometic mean of all not None results
 def geometric_mean_not_none(llin):
     ll_not_none = [x for x in llin if x is not None]
     ll = [x for x in ll_not_none if x > 0]
     if len(ll_not_none) != len(ll):
-        print >> sys.stderr, ("In AI Character calculating the geometric mean of ", ll_not_none,
-                              " contains negative numbers which will be ignored.")
+        warn("Calculating the geometric mean of %s contains negative numbers which will be ignored." % ll_not_none)
     if not ll:
         return 1
     return math.exp(sum(map(math.log, ll)) / float(len(ll)))
 
+
 for funcname in ["warship_adjusted_production_cost_exponent"]:
     setattr(Character, funcname, _make_single_function_combiner(funcname, geometric_mean_not_none))
+
 
 def _make_most_preferred_combiner(funcnamei):
     """Make a combiner that runs the preference function for each trait and
@@ -602,6 +635,7 @@ def _make_most_preferred_combiner(funcnamei):
             return prefs[0]
         return Counter.most_common(Counter(prefs), 1)[0][0]
     return _most_preferred
+
 
 # Create combiners for traits deal with preference
 for funcname in ["preferred_research_cutoff", "preferred_colonization_portion",
@@ -626,21 +660,21 @@ def create_character(aggression=fo.aggression.maniacal, empire_id=0):
 def get_trait_bypass_value(name, default, sentinel):
     """Fetch a bypassed trait value or return the default from OptionsDB.
 
-    In OptionsDB a section AI.config.trait can contain default trait
+    In OptionsDB a section ai.config.trait can contain default trait
     values for all of the AIs or specific AIs which will override the
     default value passed into this function.
 
     If there is an XML element in config.xml/persistent_config.xml
-    AI.config.trait.<name of trait here>.force
+    ai.trait.<name of trait here>.force.enabled
     with a non zero value
 
-    ,then the value of AI.config.trait.<name of trait here>.<AI ID number here>
+    ,then the value of ai.trait.<name of trait here>.ai_<AI ID number here>
 
     will be checked.  If it is not the sentinel value (typically -1) the it
     will be returned as the trait's value.
 
     Otherwise the value of
-    AI.config.trait.<name of trait here>.all
+    ai.trait.<name of trait here>.default
     is checked.  Again if it is not the sentinel value it will ovverride
     the returned value for trait.
 
@@ -650,31 +684,33 @@ def get_trait_bypass_value(name, default, sentinel):
     Here is an example section providing override values aggression and the
     empire-id trait.
 
-    <mAI>
-      <config>
-        <trait>
-          <aggression>
-            <force>1</force>
-            <all>4</all>
-            <AI_0>5</AI_0>
-            <AI_1>4</AI_1>
-            <AI_2>3</AI_2>
-            <AI_3>2</AI_3>
-            <AI_4>1</AI_4>
-            <AI_5>0</AI_5>
-          </aggression>
-          <empire-id>
-            <force>1</force>
-            <AI_0>5</AI_0>
-            <AI_1>4</AI_1>
-            <AI_2>3</AI_2>
-            <AI_3>2</AI_3>
-            <AI_4>1</AI_4>
-            <AI_5>0</AI_5>
-          </empire-id>
-        </trait>
-      </config>
-    </mAI>
+    <ai>
+      <trait>
+        <aggression>
+          <force>
+            <enabled>1</enabled>
+          </force>
+          <default>4</default>
+          <ai_0>5</ai_0>
+          <ai_1>4</ai_1>
+          <ai_2>3</ai_2>
+          <ai_3>2</ai_3>
+          <ai_4>1</ai_4>
+          <ai_5>0</ai_5>
+        </aggression>
+        <empire-id>
+          <force>
+            <enabled>1</enabled>
+          </force>
+          <ai_0>5</ai_0>
+          <ai_1>4</ai_1>
+          <ai_2>3</ai_2>
+          <ai_3>2</ai_3>
+          <ai_4>1</ai_4>
+          <ai_5>0</ai_5>
+        </empire-id>
+      </trait>
+    </ai>
 
     :param name: Name of the trait.
     :type name: string
@@ -687,12 +723,12 @@ def get_trait_bypass_value(name, default, sentinel):
 
     """
 
-    force_option = "AI.config.trait.%s.force" % (name,)
+    force_option = "ai.trait.%s.force.enabled" % (name.lower(),)
     if not fo.getOptionsDBOptionBool(force_option):
         return default
 
-    per_id_option = "AI.config.trait.%s.%s" % (name, fo.playerName())
-    all_id_option = "AI.config.trait.%s.all" % (name,)
+    per_id_option = "ai.trait.%s.%s" % (name.lower(), fo.playerName().lower())
+    all_id_option = "ai.trait.%s.default" % (name.lower(),)
 
     trait = fo.getOptionsDBOptionInt(per_id_option)
     if trait is None or trait == sentinel:
@@ -701,5 +737,5 @@ def get_trait_bypass_value(name, default, sentinel):
     if trait is None or trait == sentinel:
         trait = default
     else:
-        print "%s trait bypassed and set to %s for %s" % (name, repr(trait), fo.playerName())
+        debug("%s trait bypassed and set to %s for %s", name, repr(trait), fo.playerName())
     return trait

@@ -17,6 +17,7 @@ Species
     effectsgroups = [
         [[BAD_INDUSTRY]]
         [[BAD_RESEARCH]]
+        [[AVERAGE_STOCKPILE]]
 
         [[BAD_POPULATION]]
         [[AVERAGE_HAPPINESS]]
@@ -28,13 +29,7 @@ Species
         [[BAD_DETECTION]]
         [[BAD_STEALTH]]
 
-        EffectsGroup
-            description = "BAD_FUEL_DESC"
-            scope = And [
-                Ship
-                Source
-            ]
-            effects = SetMaxFuel value = Value - 1
+        [[BAD_FUEL]]
 
         // not for description
         [[AVERAGE_PLANETARY_SHIELDS]]

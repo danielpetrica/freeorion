@@ -21,9 +21,6 @@ ClientApp::ClientApp() :
     m_current_turn(INVALID_GAME_TURN)
 {}
 
-ClientApp::~ClientApp()
-{}
-
 int ClientApp::PlayerID() const
 { return m_networking->PlayerID(); }
 
@@ -77,7 +74,7 @@ const ClientNetworking& ClientApp::Networking() const
 { return *m_networking; }
 
 int ClientApp::EmpirePlayerID(int empire_id) const {
-    for (const std::map<int, PlayerInfo>::value_type& entry : m_player_info)
+    for (const auto& entry : m_player_info)
         if (entry.second.empire_id == empire_id)
             return entry.first;
     return Networking::INVALID_PLAYER_ID;
@@ -89,7 +86,7 @@ Networking::ClientType ClientApp::GetEmpireClientType(int empire_id) const
 Networking::ClientType ClientApp::GetPlayerClientType(int player_id) const {
     if (player_id == Networking::INVALID_PLAYER_ID)
         return Networking::INVALID_CLIENT_TYPE;
-    std::map<int, PlayerInfo>::const_iterator it = m_player_info.find(player_id);
+    auto it = m_player_info.find(player_id);
     if (it != m_player_info.end())
         return it->second.client_type;
     return Networking::INVALID_CLIENT_TYPE;
@@ -116,9 +113,27 @@ void ClientApp::SetPlayerStatus(int player_id, Message::PlayerStatus status) {
     m_player_status[player_id] = status;
 }
 
-void ClientApp::StartTurn() {
-    m_networking->SendMessage(TurnOrdersMessage(m_networking->PlayerID(), m_orders));
-    m_orders.Reset();
+void ClientApp::StartTurn()
+{ m_networking->SendMessage(TurnOrdersMessage(m_orders)); }
+
+void ClientApp::HandleTurnPhaseUpdate(Message::TurnProgressPhase phase_id) {
+    switch (phase_id) {
+    case Message::WAITING_FOR_PLAYERS:
+        // Orders have been received by server, so clear the orders.
+        m_orders.Reset();
+        break;
+    case Message::FLEET_MOVEMENT:
+    case Message::COMBAT:
+    case Message::EMPIRE_PRODUCTION:
+    case Message::PROCESSING_ORDERS:
+    case Message::COLONIZE_AND_SCRAP:
+    case Message::DOWNLOADING:
+    case Message::LOADING_GAME:
+    case Message::GENERATING_UNIVERSE:
+    case Message::STARTING_AIS:
+    default:
+        break;
+    }
 }
 
 OrderSet& ClientApp::Orders()
@@ -134,28 +149,10 @@ std::string ClientApp::GetVisibleObjectName(std::shared_ptr<const UniverseObject
     }
 
     std::string name_text = object->PublicName(m_empire_id);
-    if (std::shared_ptr<const System> system = std::dynamic_pointer_cast<const System>(object))
+    if (auto system = std::dynamic_pointer_cast<const System>(object))
         name_text = system->ApparentName(m_empire_id);
 
     return name_text;
-}
-
-int ClientApp::GetNewObjectID() {
-    Message msg;
-    m_networking->SendSynchronousMessage(RequestNewObjectIDMessage(m_networking->PlayerID()), msg);
-    std::string text = msg.Text();
-    if (text.empty())
-        throw std::runtime_error("ClientApp::GetNewObjectID() didn't get a new object ID");
-    return boost::lexical_cast<int>(text);
-}
-
-int ClientApp::GetNewDesignID() {
-    Message msg;
-    m_networking->SendSynchronousMessage(RequestNewDesignIDMessage(m_networking->PlayerID()), msg);
-    std::string text = msg.Text();
-    if (text.empty())
-        throw std::runtime_error("ClientApp::GetNewDesignID() didn't get a new design ID");
-    return boost::lexical_cast<int>(text);
 }
 
 ClientApp* ClientApp::GetApp()
@@ -166,3 +163,26 @@ void ClientApp::SetEmpireID(int empire_id)
 
 void ClientApp::SetCurrentTurn(int turn)
 { m_current_turn = turn; }
+
+bool ClientApp::VerifyCheckSum(const Message& msg) {
+    std::map<std::string, unsigned int> server_checksums;
+    ExtractContentCheckSumMessageData(msg, server_checksums);
+
+    auto client_checksums = CheckSumContent();
+
+    if (server_checksums == client_checksums) {
+        InfoLogger() << "Checksum received from server matches client checksum.";
+        return true;
+    } else {
+        WarnLogger() << "Checksum received from server does not match client checksum.";
+        for (const auto& name_and_checksum : server_checksums) {
+            const auto& name = name_and_checksum.first;
+            const auto client_checksum = client_checksums[name];
+            if (client_checksum != name_and_checksum.second)
+                WarnLogger() << "Checksum for " << name << " on server "
+                             << name_and_checksum.second << " != client "
+                             << client_checksum;
+        }
+        return false;
+    }
+}

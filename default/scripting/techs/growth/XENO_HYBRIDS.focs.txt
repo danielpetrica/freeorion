@@ -14,8 +14,8 @@ Tech
                 OwnedBy empire = Source.Owner
                 Planet environment = [ Poor ]
             ]
-            priority = [[EARLY_PRIORITY]]
-            effects = SetTargetPopulation value = Value + 1 * Target.SizeAsDouble accountinglabel = "GRO_XENO_HYBRIDS"
+            priority = [[TARGET_POPULATION_BEFORE_SCALING_PRIORITY]]
+            effects = SetTargetPopulation value = Value + 1 * Target.HabitableSize accountinglabel = "GRO_XENO_HYBRIDS"
 
         EffectsGroup
             scope = And [
@@ -23,8 +23,8 @@ Tech
                 OwnedBy empire = Source.Owner
                 Planet environment = [ Hostile ]
             ]
-            priority = [[EARLY_PRIORITY]]
-            effects = SetTargetPopulation value = Value + 2 * Target.SizeAsDouble accountinglabel = "GRO_XENO_HYBRIDS"
+            priority = [[TARGET_POPULATION_BEFORE_SCALING_PRIORITY]]
+            effects = SetTargetPopulation value = Value + 2 * Target.HabitableSize accountinglabel = "GRO_XENO_HYBRIDS"
     ]
     graphic = "icons/tech/xenological_hybridization.png"
 

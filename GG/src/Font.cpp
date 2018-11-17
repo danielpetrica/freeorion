@@ -409,12 +409,13 @@ std::ostream& GG::operator<<(std::ostream& os, const Font::Substring& substr)
     return os;
 }
 
-CPSize GG::CodePointIndexOf(std::size_t line, CPSize index, const std::vector<Font::LineData>& line_data)
+CPSize GG::CodePointIndexOf(std::size_t line, CPSize index,
+                            const std::vector<Font::LineData>& line_data)
 {
     CPSize retval(0);
     if (line_data.size() <= line) {
-        std::vector<Font::LineData>::const_reverse_iterator it = line_data.rbegin();
-        std::vector<Font::LineData>::const_reverse_iterator end_it = line_data.rend();
+        auto it = line_data.rbegin();
+        auto end_it = line_data.rend();
         while (it != end_it) {
             if (!it->char_data.empty()) {
                 retval = it->char_data.back().code_point_index + 1;
@@ -425,9 +426,8 @@ CPSize GG::CodePointIndexOf(std::size_t line, CPSize index, const std::vector<Fo
     } else if (index < line_data[line].char_data.size()) {
         retval = line_data[line].char_data[Value(index)].code_point_index;
     } else {
-        std::vector<Font::LineData>::const_reverse_iterator it =
-            line_data.rbegin() + (line_data.size() - 1 - line);
-        std::vector<Font::LineData>::const_reverse_iterator end_it = line_data.rend();
+        auto it = line_data.rbegin() + (line_data.size() - 1 - line);
+        auto end_it = line_data.rend();
         while (it != end_it) {
             if (!it->char_data.empty()) {
                 retval = it->char_data.back().code_point_index + 1;
@@ -439,12 +439,13 @@ CPSize GG::CodePointIndexOf(std::size_t line, CPSize index, const std::vector<Fo
     return retval;
 }
 
-StrSize GG::StringIndexOf(std::size_t line, CPSize index, const std::vector<Font::LineData>& line_data)
+StrSize GG::StringIndexOf(std::size_t line, CPSize index,
+                          const std::vector<Font::LineData>& line_data)
 {
     StrSize retval(0);
     if (line_data.size() <= line) {
-        std::vector<Font::LineData>::const_reverse_iterator it = line_data.rbegin();
-        std::vector<Font::LineData>::const_reverse_iterator end_it = line_data.rend();
+        auto it = line_data.rbegin();
+        auto end_it = line_data.rend();
         while (it != end_it) {
             if (!it->char_data.empty()) {
                 retval = it->char_data.back().string_index + it->char_data.back().string_size;
@@ -455,9 +456,8 @@ StrSize GG::StringIndexOf(std::size_t line, CPSize index, const std::vector<Font
     } else if (index < line_data[line].char_data.size()) {
         retval = line_data[line].char_data[Value(index)].string_index;
     } else {
-        std::vector<Font::LineData>::const_reverse_iterator it =
-            line_data.rbegin() + (line_data.size() - 1 - line);
-        std::vector<Font::LineData>::const_reverse_iterator end_it = line_data.rend();
+        auto it = line_data.rbegin() + (line_data.size() - 1 - line);
+        auto end_it = line_data.rend();
         while (it != end_it) {
             if (!it->char_data.empty()) {
                 retval = it->char_data.back().string_index + it->char_data.back().string_size;
@@ -469,11 +469,13 @@ StrSize GG::StringIndexOf(std::size_t line, CPSize index, const std::vector<Font
     return retval;
 }
 
-std::pair<std::size_t, CPSize> GG::LinePositionOf(CPSize index, const std::vector<Font::LineData>& line_data)
+std::pair<std::size_t, CPSize> GG::LinePositionOf(
+    CPSize index, const std::vector<Font::LineData>& line_data)
 {
-    std::pair<std::size_t, CPSize> retval(std::numeric_limits<std::size_t>::max(), INVALID_CP_SIZE);
+    std::pair<std::size_t, CPSize> retval(std::numeric_limits<std::size_t>::max(),
+                                          INVALID_CP_SIZE);
     for (std::size_t i = 0; i < line_data.size(); ++i) {
-        const std::vector<Font::LineData::CharData>& char_data = line_data[i].char_data;
+        const auto& char_data = line_data[i].char_data;
         if (!char_data.empty() &&
             char_data.front().code_point_index <= index &&
             index <= char_data.back().code_point_index)
@@ -495,7 +497,8 @@ namespace {
         regular expression.*/
     class CompiledRegex {
     public:
-        CompiledRegex(const std::unordered_set<std::string>& known_tags, bool strip_unpaired_tags) :
+        CompiledRegex(const std::unordered_set<std::string>& known_tags,
+                      bool strip_unpaired_tags) :
             m_text(nullptr),
             m_known_tags(&known_tags),
             m_ignore_tags(false),
@@ -617,7 +620,7 @@ namespace {
         { m_known_tags.clear(); }
 
         bool IsKnown(const std::string &tag) const
-        { return m_known_tags.find(tag) != m_known_tags.end(); }
+        { return m_known_tags.count(tag); }
 
         // Return a regex bound to \p text using the currently known
         // tags.  If required \p ignore_tags and/or \p strip_unpaired_tags.
@@ -999,7 +1002,7 @@ void Font::RenderState::PushColor(GLubyte r, GLubyte g, GLubyte b, GLubyte a)
 void Font::RenderState::PopColor()
 {
     // Never remove the initial color from the stack
-    if(color_index_stack.size() > 1)
+    if (color_index_stack.size() > 1)
         color_index_stack.pop();
 }
 
@@ -1046,7 +1049,7 @@ Font::LineData::CharData::CharData(X extent_, StrSize str_index, StrSize str_siz
     code_point_index(cp_index),
     tags()
 {
-    for (std::shared_ptr<TextElement> tag : tags_) {
+    for (auto tag : tags_) {
         tags.push_back(std::dynamic_pointer_cast<FormattingTag>(tag));
     }
 }
@@ -1168,9 +1171,9 @@ X Font::RenderText(const Pt& pt_, const std::string& text) const
     RenderCache cache;
     RenderState render_state;
 
-    for (std::string::const_iterator text_it = text.begin(); text_it != text.end();) {
+    for (auto text_it = text.begin(); text_it != text.end();) {
         std::uint32_t c = utf8::next(text_it, text.end());
-        GlyphMap::const_iterator it = m_glyphs.find(c);
+        auto it = m_glyphs.find(c);
         if (it == m_glyphs.end()) {
             pt.x += m_space_width; // move forward by the extent of the character when a whitespace or unprintable glyph is requested
         } else {
@@ -1252,17 +1255,17 @@ void Font::PreRenderText(const Pt& ul, const Pt& lr, const std::string& text, Fl
         if (i == end_line - 1)
             end = std::max(CP0, std::min(end_char, CPSize(line.char_data.size())));
 
-        std::string::const_iterator string_end_it = text.end();
+        auto string_end_it = text.end();
         for (CPSize j = start; j < end; ++j) {
-            const LineData::CharData& char_data = line.char_data[Value(j)];
-            for (std::shared_ptr<FormattingTag> tag : char_data.tags) {
+            const auto& char_data = line.char_data[Value(j)];
+            for (auto tag : char_data.tags) {
                 HandleTag(tag, orig_color, render_state);
             }
             std::uint32_t c = utf8::peek_next(text.begin() + Value(char_data.string_index), string_end_it);
             assert((text[Value(char_data.string_index)] == '\n') == (c == WIDE_NEWLINE));
             if (c == WIDE_NEWLINE)
                 continue;
-            GlyphMap::const_iterator it = m_glyphs.find(c);
+            auto it = m_glyphs.find(c);
             if (it == m_glyphs.end()) {
                 x = x_origin + char_data.extent; // move forward by the extent of the character when a whitespace or unprintable glyph is requested
             } else {
@@ -1306,12 +1309,16 @@ void Font::ProcessTagsBefore(const std::vector<LineData>& line_data, RenderState
     double orig_color[4];
     glGetDoublev(GL_CURRENT_COLOR, orig_color);
 
+    if (line_data.empty())
+        return;
+
     for (std::size_t i = 0; i <= begin_line; ++i) {
         const LineData& line = line_data[i];
         for (CPSize j = CP0;
              j < ((i == begin_line) ? begin_char : CPSize(line.char_data.size()));
-             ++j) {
-            for (std::shared_ptr<Font::FormattingTag> tag : line.char_data[Value(j)].tags) {
+             ++j)
+        {
+            for (auto& tag : line.char_data[Value(j)].tags) {
                 HandleTag(tag, orig_color, render_state);
             }
         }
@@ -1385,8 +1392,8 @@ void Font::ThrowBadGlyph(const std::string& format_str, std::uint32_t c)
 namespace DebugOutput {
     void PrintParseResults(const std::vector<std::shared_ptr<Font::TextElement>>& text_elements) {
         std::cout << "results of parse:\n";
-        for (std::shared_ptr<Font::TextElement> elem : text_elements) {
-            if (std::shared_ptr<Font::FormattingTag> tag_elem = std::dynamic_pointer_cast<Font::FormattingTag>(elem)) {
+        for (auto& elem : text_elements) {
+            if (auto tag_elem = std::dynamic_pointer_cast<Font::FormattingTag>(elem)) {
                 std::cout << "FormattingTag\n    text=\"" << tag_elem->text << "\" (@ "
                           << static_cast<const void*>(&*tag_elem->text.begin()) << ")\n    widths=";
                 for (const X& width : tag_elem->widths) {
@@ -1423,24 +1430,24 @@ namespace DebugOutput {
         std::cout << "Line breakdown:\n";
         for (std::size_t i = 0; i < line_data.size(); ++i) {
             std::cout << "Line " << i << ":\n    extents=";
-            for (const Font::LineData::CharData& character : line_data[i].char_data) {
+            for (const auto& character : line_data[i].char_data) {
                 std::cout << character.extent << " ";
             }
             std::cout << "\n    string indices=";
-            for (const Font::LineData::CharData& character : line_data[i].char_data) {
+            for (const auto& character : line_data[i].char_data) {
                 std::cout << character.string_index << " ";
             }
             std::cout << "\n    code point indices=";
-            for (const Font::LineData::CharData& character : line_data[i].char_data) {
+            for (const auto& character : line_data[i].char_data) {
                 std::cout << character.code_point_index << " ";
             }
             std::cout << "\n    chars on line: \"";
-            for (const Font::LineData::CharData& character : line_data[i].char_data) {
+            for (const auto& character : line_data[i].char_data) {
                 std::cout << text[Value(character.string_index)];
             }
             std::cout << "\"" << std::endl;
             for (std::size_t j = 0; j < line_data[i].char_data.size(); ++j) {
-                for (std::shared_ptr<Font::FormattingTag> tag_elem : line_data[i].char_data[j].tags) {
+                for (auto& tag_elem : line_data[i].char_data[j].tags) {
                     if (tag_elem) {
                         std::cout << "FormattingTag @" << j << "\n    text=\"" << tag_elem->text << "\"\n    widths=";
                         for (const X& width : tag_elem->widths) {
@@ -1448,7 +1455,7 @@ namespace DebugOutput {
                         }
                         std::cout << "\n    whitespace=" << tag_elem->whitespace
                                   << "\n    newline=" << tag_elem->newline << "\n    params=\n";
-                        for (const Font::Substring& param : tag_elem->params) {
+                        for (const auto& param : tag_elem->params) {
                             std::cout << "        \"" << param << "\"\n";
                         }
                         std::cout << "    tag_name=\"" << tag_elem->tag_name << "\"\n    close_tag="
@@ -1461,8 +1468,9 @@ namespace DebugOutput {
     }
 }
 
-std::vector<std::shared_ptr<Font::TextElement>> Font::ExpensiveParseFromTextToTextElements(const std::string& text,
-                                                                                              const Flags<TextFormat>& format) const
+std::vector<std::shared_ptr<Font::TextElement>>
+    Font::ExpensiveParseFromTextToTextElements(const std::string& text,
+                                               const Flags<TextFormat>& format) const
 {
     std::vector<std::shared_ptr<TextElement>> text_elements;
 
@@ -1516,10 +1524,8 @@ std::vector<std::shared_ptr<Font::TextElement>> Font::ExpensiveParseFromTextToTe
                 // might have RGB parameters.
                 if (1 < (*it).nested_results().size()) {
                     element->params.reserve((*it).nested_results().size() - 1);
-                    for (smatch::nested_results_type::const_iterator nested_it =
-                             ++(*it).nested_results().begin();
-                         nested_it != (*it).nested_results().end();
-                         ++nested_it)
+                    for (auto nested_it = ++(*it).nested_results().begin();
+                         nested_it != (*it).nested_results().end(); ++nested_it)
                     {
                         element->params.push_back(Substring(text, (*nested_it)[0]));
                     }
@@ -1575,20 +1581,20 @@ void Font::FillTemplatedText(
     std::vector<std::shared_ptr<Font::TextElement>>::iterator start) const
 {
     // For each TextElement in text_elements starting from start.
-    std::vector<std::shared_ptr<Font::TextElement>>::iterator& te_it = start;
+    auto& te_it = start;
     for (; te_it != text_elements.end(); ++te_it) {
         std::shared_ptr<TextElement> elem = (*te_it);
 
         // For each character in the TextElement.
-        std::string::const_iterator it = elem->text.begin();
-        std::string::const_iterator end_it = elem->text.end();
-        while (it != end_it) {
+        auto text_it = elem->text.begin();
+        auto end_it = elem->text.end();
+        while (text_it != end_it) {
 
             // Find and set the width of the character glyph.
             elem->widths.push_back(X0);
-            std::uint32_t c = utf8::next(it, end_it);
+            std::uint32_t c = utf8::next(text_it, end_it);
             if (c != WIDE_NEWLINE) {
-                GlyphMap::const_iterator it = m_glyphs.find(c);
+                auto it = m_glyphs.find(c);
                 // use a space when an unrendered glyph is requested (the
                 // space chararacter is always renderable)
                 elem->widths.back() = (it != m_glyphs.end()) ? it->second.advance : m_space_width;
@@ -1609,7 +1615,7 @@ void Font::ChangeTemplatedText(
     if (new_text.empty())
         return;
 
-    int change_of_len;
+    int change_of_len = 0;
 
     // Find the target text element.
     size_t curr_offset = 0;
@@ -1658,9 +1664,17 @@ void Font::ChangeTemplatedText(
     FillTemplatedText(text, text_elements, start_of_reflow);
 }
 
-std::vector<Font::LineData> Font::DetermineLines(const std::string& text, Flags<TextFormat>& format, X box_width,
-                                                 const std::vector<std::shared_ptr<TextElement>>& text_elements) const
+std::vector<Font::LineData> Font::DetermineLines(
+    const std::string& text, Flags<TextFormat>& format, X box_width,
+    const std::vector<std::shared_ptr<TextElement>>& text_elements) const
 {
+    // HACK - Workaround for #2166
+    // On OSX, right clicking an unowned planet at game start may result in utf8::invalid_utf8 or utf8::not_enough_room
+    if (!utf8::is_valid(text.begin(), text.end())) {
+        std::cerr << "Invalid UTF8 in text: " << text;
+        return std::vector<Font::LineData>{};
+    }
+
     ValidateFormat(format);
 
     RenderState render_state;
@@ -1688,7 +1702,7 @@ std::vector<Font::LineData> Font::DetermineLines(const std::string& text, Flags<
     // the index of the first code point of the current TextElement
     CPSize code_point_offset(0);
     std::vector<std::shared_ptr<TextElement>> pending_formatting_tags;
-    for (const std::shared_ptr<TextElement>& elem : text_elements) {
+    for (const auto& elem : text_elements) {
         // if a newline is explicitly requested, start a new one
         if (elem->Type() == TextElement::NEWLINE) {
             line_data.push_back(LineData());
@@ -1697,9 +1711,10 @@ std::vector<Font::LineData> Font::DetermineLines(const std::string& text, Flags<
                              orig_just,
                              line_data[line_data.size() - 2].justification);
             x = X0;
+
         } else if (elem->Type() == TextElement::WHITESPACE) {
-            std::string::const_iterator it = elem->text.begin();
-            std::string::const_iterator end_it = elem->text.end();
+            auto it = elem->text.begin();
+            auto end_it = elem->text.end();
             while (it != end_it) {
                 StrSize char_index(std::distance(elem->text.begin(), it));
                 std::uint32_t c = utf8::next(it, end_it);
@@ -1765,8 +1780,8 @@ std::vector<Font::LineData> Font::DetermineLines(const std::string& text, Flags<
                                      orig_just,
                                      line_data[line_data.size() - 2].justification);
                 }
-                std::string::const_iterator it = elem->text.begin();
-                std::string::const_iterator end_it = elem->text.end();
+                auto it = elem->text.begin();
+                auto end_it = elem->text.end();
                 std::size_t j = 0;
                 while (it != end_it) {
                     StrSize char_index(std::distance(elem->text.begin(), it));
@@ -1784,8 +1799,8 @@ std::vector<Font::LineData> Font::DetermineLines(const std::string& text, Flags<
                     ++code_point_offset;
                 }
             } else {
-                std::string::const_iterator it = elem->text.begin();
-                std::string::const_iterator end_it = elem->text.end();
+                auto it = elem->text.begin();
+                auto end_it = elem->text.end();
                 std::size_t j = 0;
                 while (it != end_it) {
                     StrSize char_index(std::distance(elem->text.begin(), it));
@@ -1948,13 +1963,13 @@ void Font::Init(FT_Face& face)
     Y y = Y0;
     X max_x = X0;
     Y max_y = Y0;
-    for (const std::pair<std::uint32_t, std::uint32_t>& range : range_vec) {
+    for (const auto& range : range_vec) {
         std::uint32_t low = range.first;
         std::uint32_t high = range.second;
 
         // copy glyph images
         for (std::uint32_t c = low; c < high; ++c) {
-            if (temp_glyph_data.find(c) == temp_glyph_data.end() && GenerateGlyph(face, c)) {
+            if (!temp_glyph_data.count(c) && GenerateGlyph(face, c)) {
                 const FT_Bitmap& glyph_bitmap = face->glyph->bitmap;
                 if ((glyph_bitmap.width > TEX_MAX_SIZE) | (glyph_bitmap.rows > TEX_MAX_SIZE)) {
                     ThrowBadGlyph("GG::Font::Init : Glyph too large for buffer'%1%'", c); // catch broken fonts
@@ -2011,11 +2026,11 @@ void Font::Init(FT_Face& face)
                     (unsigned char*)buffer.Buffer(), GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, 2);
 
     // create Glyph objects from temp glyph data
-    for (const std::map<std::uint32_t, TempGlyphData>::value_type& glyph_data : temp_glyph_data)
+    for (const auto& glyph_data : temp_glyph_data)
         m_glyphs[glyph_data.first] = Glyph(m_texture, glyph_data.second.ul, glyph_data.second.lr, glyph_data.second.y_offset, glyph_data.second.left_b, glyph_data.second.adv);
 
     // record the width of the space character
-    GlyphMap::const_iterator glyph_it = m_glyphs.find(WIDE_SPACE);
+    auto glyph_it = m_glyphs.find(WIDE_SPACE);
     assert(glyph_it != m_glyphs.end());
     m_space_width = glyph_it->second.advance;
 }
@@ -2147,10 +2162,12 @@ X Font::StoreGlyph(const Pt& pt, const Glyph& glyph, const Font::RenderState* re
     }
 
     // render main text
-    StoreGlyphImpl(cache, render_state->CurrentColor(), pt, glyph, italic_top_offset, super_sub_offset);
-    if (render_state && render_state->draw_underline) {
-        StoreUnderlineImpl(cache, render_state->CurrentColor(), pt, glyph, m_descent,
-                           m_height, Y(m_underline_height), Y(m_underline_offset));
+    if (render_state) {
+        StoreGlyphImpl(cache, render_state->CurrentColor(), pt, glyph, italic_top_offset, super_sub_offset);
+        if (render_state->draw_underline) {
+            StoreUnderlineImpl(cache, render_state->CurrentColor(), pt, glyph, m_descent,
+                               m_height, Y(m_underline_height), Y(m_underline_offset));
+        }
     }
 
     return glyph.advance;
@@ -2283,7 +2300,7 @@ FontManager::FontManager()
 {}
 
 bool FontManager::HasFont(const std::string& font_filename, unsigned int pts) const
-{ return m_rendered_fonts.find(FontKey(font_filename, pts)) != m_rendered_fonts.end(); }
+{ return m_rendered_fonts.count(FontKey(font_filename, pts)); }
 
 std::shared_ptr<Font> FontManager::GetFont(const std::string& font_filename, unsigned int pts)
 {

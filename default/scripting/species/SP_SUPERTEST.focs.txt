@@ -6,7 +6,7 @@ Species
     CanProduceShips
     CanColonize
 
-    tags = [ "ORGANIC" "ROBOTIC" "LITHIC" "PHOTOTROPHIC" "SELF_SUSTAINING" "TELEPATHIC" "GREAT_INDUSTRY" "GREAT_RESEARCH" "GOOD_POPULATION"  "ULTIMATE_SUPPLY" "INFINITE_DETECTION" "GREAT_ATTACKTROOPS" ]
+    tags = [ "ORGANIC" "ROBOTIC" "LITHIC" "PHOTOTROPHIC" "SELF_SUSTAINING" "TELEPATHIC" "GREAT_INDUSTRY" "GREAT_RESEARCH" "GOOD_POPULATION"  "ULTIMATE_SUPPLY" "INFINITE_DETECTION" "INFINITE_STEALTH" "GREAT_ATTACKTROOPS" ]
 
     foci = [
         [[HAS_INDUSTRY_FOCUS]]
@@ -18,6 +18,7 @@ Species
     effectsgroups = [
         [[GREAT_INDUSTRY]]
         [[GREAT_RESEARCH]]
+        [[GREAT_STOCKPILE]]
 
         [[GOOD_POPULATION]]
         [[AVERAGE_HAPPINESS]]
@@ -26,6 +27,7 @@ Species
         [[GREAT_OFFENSE_TROOPS]]
 
         [[ULTIMATE_WEAPONS]]
+        [[GREAT_FUEL]]
 
         // not for description
         [[AVERAGE_PLANETARY_SHIELDS]]
@@ -35,6 +37,10 @@ Species
         EffectsGroup
             scope = Source
             effects = SetDetection value = Value + 10000
+
+        EffectsGroup
+            scope = Source
+            effects = SetStealth value = Value + 500
 
         EffectsGroup
             scope = And [

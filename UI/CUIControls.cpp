@@ -1,5 +1,6 @@
 #include "CUIControls.h"
 
+#include "CUISpin.h"
 #include "ClientUI.h"
 #include "CUIDrawUtil.h"
 #include "IconTextBrowseWnd.h"
@@ -12,10 +13,11 @@
 #include "../Empire/Empire.h"
 #include "TextBrowseWnd.h"
 
+#include <GG/utf8/checked.h>
+#include <GG/dialogs/ColorDlg.h>
+#include <GG/DrawUtil.h>
 #include <GG/GUI.h>
 #include <GG/Layout.h>
-#include <GG/DrawUtil.h>
-#include <GG/dialogs/ColorDlg.h>
 
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
@@ -27,22 +29,22 @@
 
 namespace {
     void PlayButtonClickSound()
-    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("UI.sound.button-click"), true); }
+    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("ui.button.press.sound.path"), true); }
 
     void PlayButtonRolloverSound()
-    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("UI.sound.button-rollover"), true); }
+    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("ui.button.rollover.sound.path"), true); }
 
     void PlayListSelectSound(const GG::ListBox::SelectionSet&)
-    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("UI.sound.list-select"), true); }
+    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("ui.listbox.select.sound.path"), true); }
 
     void PlayDropDownListOpenSound()
-    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("UI.sound.list-pulldown"), true); }
+    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("ui.dropdownlist.select.sound.path"), true); }
 
     void PlayItemDropSound(GG::ListBox::iterator)
-    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("UI.sound.item-drop"), true); }
+    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("ui.listbox.drop.sound.path"), true); }
 
     void PlayTextTypingSound(const std::string&)
-    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("UI.sound.text-typing"), true); }
+    { Sound::GetSound().PlaySound(GetOptionsDB().Get<std::string>("ui.input.keyboard.sound.path"), true); }
 
     const double ARROW_BRIGHTENING_SCALE_FACTOR = 1.5;
     const double STATE_BUTTON_BRIGHTENING_SCALE_FACTOR = 1.25;
@@ -68,22 +70,11 @@ CUILabel::CUILabel(const std::string& str,
 {}
 
 void CUILabel::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
+    auto copy_wnd_action = [this]() { GG::GUI::GetGUI()->CopyWndText(this); };
     // create popup menu
-    GG::MenuItem menu_contents;
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_COPY"),          2, false, false));
-
-    CUIPopupMenu popup(pt.x, pt.y, menu_contents);
-    if (popup.Run()) {
-        switch (popup.MenuID()) {
-        case 2: { // copy
-            GG::GUI::GetGUI()->CopyWndText(this);
-            break;
-        }
-
-        default:
-            break;
-        }
-    }
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_COPY"), false, false, copy_wnd_action));
+    popup->Run();
 }
 
 
@@ -96,7 +87,10 @@ namespace {
 
 CUIButton::CUIButton(const std::string& str) :
     Button(str, ClientUI::GetFont(), ClientUI::CtrlColor(), ClientUI::TextColor(), GG::INTERACTIVE)
-{ GG::Connect(LeftClickedSignal, &PlayButtonClickSound, -1); }
+{
+    LeftClickedSignal.connect(-1,
+        &PlayButtonClickSound);
+}
 
 CUIButton::CUIButton(const GG::SubTexture& unpressed, const GG::SubTexture& pressed,
                      const GG::SubTexture& rollover) :
@@ -106,7 +100,8 @@ CUIButton::CUIButton(const GG::SubTexture& unpressed, const GG::SubTexture& pres
     SetUnpressedGraphic(unpressed);
     SetPressedGraphic  (pressed);
     SetRolloverGraphic (rollover);
-    GG::Connect(LeftClickedSignal, &PlayButtonClickSound, -1);
+    LeftClickedSignal.connect(-1,
+        &PlayButtonClickSound);
 }
 
 bool CUIButton::InWindow(const GG::Pt& pt) const {
@@ -222,7 +217,10 @@ CUIArrowButton::CUIArrowButton(ShapeOrientation orientation, bool fill_backgroun
     Button("", nullptr, ClientUI::DropDownListArrowColor(), GG::CLR_ZERO, flags),
     m_orientation(orientation),
     m_fill_background_with_wnd_color(fill_background)
-{ GG::Connect(LeftClickedSignal, &PlayButtonClickSound, -1); }
+{
+    LeftClickedSignal.connect(-1,
+        &PlayButtonClickSound);
+}
 
 bool CUIArrowButton::InWindow(const GG::Pt& pt) const {
     if (m_fill_background_with_wnd_color) {
@@ -576,6 +574,20 @@ CUIStateButton::CUIStateButton(const std::string& str, GG::Flags<GG::TextFormat>
 
 
 ///////////////////////////////////////
+// class CUISpin
+///////////////////////////////////////
+template<>
+void CUISpin<double>::SetEditTextFromValue()
+{
+    if (!this->m_edit)
+        return;
+    std::stringstream ss;
+    ss << std::fixed << std::setprecision(1) << this->Value();
+    this->m_edit->SetText(ss.str());
+}
+
+
+///////////////////////////////////////
 // class CUITabBar
 ///////////////////////////////////////
 CUITabBar::CUITabBar(const std::shared_ptr<GG::Font>& font, GG::Clr color, GG::Clr text_color) :
@@ -715,11 +727,11 @@ void CUIScroll::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
 ///////////////////////////////////////
 // class CUIListBox
 ///////////////////////////////////////
-CUIListBox::CUIListBox(void):
+CUIListBox::CUIListBox(void) :
     ListBox(ClientUI::CtrlBorderColor(), ClientUI::CtrlColor())
 {
-    GG::Connect(SelChangedSignal,   &PlayListSelectSound,   -1);
-    GG::Connect(DroppedSignal,      &PlayItemDropSound,     -1);
+    SelRowsChangedSignal.connect(-1,    &PlayListSelectSound);
+    DroppedRowSignal.connect(-1,        &PlayItemDropSound);
 }
 
 void CUIListBox::Render() {
@@ -761,7 +773,7 @@ void CUIDropDownList::InitBuffer() {
 
     GG::Pt triangle_ul = GG::Pt(sz.x - triangle_width - margin * 5 / 2, GG::Y(2 * margin));
     GG::Pt triangle_lr = GG::Pt(sz.x - margin * 5 / 2, sz.y - 2 * margin);
-    BufferStoreIsoscelesTriangle(this->m_buffer, triangle_ul, triangle_lr, SHAPE_DOWN);
+    BufferStoreIsoscelesTriangle(this->m_buffer, triangle_ul, triangle_lr, ShapeOrientation::DOWN);
 
     GG::Pt btn_ul = GG::Pt(sz.x - outline_width - margin, GG::Y(margin));
     GG::Pt btn_lr = GG::Pt(sz.x - margin, sz.y - margin);
@@ -861,59 +873,36 @@ void CUIDropDownList::EnableDropArrow()
 // class CUIEdit
 ///////////////////////////////////////
 CUIEdit::CUIEdit(const std::string& str) :
-    Edit(str, ClientUI::GetFont(), ClientUI::CtrlBorderColor(), ClientUI::TextColor(), ClientUI::CtrlColor())
+    Edit(str, ClientUI::GetFont(), ClientUI::CtrlBorderColor(),
+         ClientUI::TextColor(), ClientUI::CtrlColor())
 {
-    GG::Connect(EditedSignal, &PlayTextTypingSound, -1);
+    EditedSignal.connect(-1, &PlayTextTypingSound);
     SetHiliteColor(ClientUI::EditHiliteColor());
 }
 
 void CUIEdit::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
-    // create popup menu
-    GG::MenuItem menu_contents;
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_CUT"),           1, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_COPY"),          2, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_PASTE"),         3, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(true)); // separator
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_SELECT_ALL"),    4, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_DESELECT"),      5, false, false));
+    auto hotkey_cut_action        = [this]() { GG::GUI::GetGUI()->CutWndText(this); };
+    auto hotkey_copy_action       = [this]() { GG::GUI::GetGUI()->CopyWndText(this); };
+    auto hotkey_paste_action      = [this]() { GG::GUI::GetGUI()->PasteWndText(this, GG::GUI::GetGUI()->ClipboardText()); };
+    auto hotkey_select_all_action = [this]() { GG::GUI::GetGUI()->WndSelectAll(this); };
+    auto hotkey_deselect_action   = [this]() { GG::GUI::GetGUI()->WndDeselect(this); };
+
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
+
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_CUT"),           false, false, hotkey_cut_action));
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_COPY"),          false, false, hotkey_copy_action));
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_PASTE"),         false, false, hotkey_paste_action));
+    popup->AddMenuItem(GG::MenuItem(true)); // separator
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_SELECT_ALL"),    false, false, hotkey_select_all_action));
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_DESELECT"),      false, false, hotkey_deselect_action));
+    popup->Run();
 
     // todo: italicize, underline, or colour selected text
-
-    CUIPopupMenu popup(pt.x, pt.y, menu_contents);
-    if (popup.Run()) {
-        switch (popup.MenuID()) {
-        case 1: { // cut
-            GG::GUI::GetGUI()->CutWndText(this);
-            break;
-        }
-
-        case 2: { // copy
-            GG::GUI::GetGUI()->CopyWndText(this);
-            break;
-        }
-
-        case 3: { // paste
-            GG::GUI::GetGUI()->PasteWndText(this, GG::GUI::GetGUI()->ClipboardText());
-            break;
-        }
-
-        case 4: { // select all
-            GG::GUI::GetGUI()->WndSelectAll(this);
-            break;
-        }
-
-        case 5: { // deselect all
-            GG::GUI::GetGUI()->WndDeselect(this);
-            break;
-        }
-
-        default:
-            break;
-        }
-    }
 }
 
-void CUIEdit::KeyPress(GG::Key key, std::uint32_t key_code_point, GG::Flags<GG::ModKey> mod_keys) {
+void CUIEdit::KeyPress(GG::Key key, std::uint32_t key_code_point,
+                       GG::Flags<GG::ModKey> mod_keys)
+{
     if (Disabled()) {
         GG::Edit::KeyPress(key, key_code_point, mod_keys);
         return;
@@ -963,11 +952,168 @@ void CUIEdit::Render() {
 
 
 ///////////////////////////////////////
+// class CensoredCUIEdit
+///////////////////////////////////////
+CensoredCUIEdit::CensoredCUIEdit(const std::string& str, char display_placeholder) :
+    CUIEdit(str),
+    m_placeholder{display_placeholder},
+    m_raw_text{str}
+{
+    // TODO: allow multi-byte UTF-8 characters as placeholders, stored in a string...?
+    if (m_placeholder == 0)
+        m_placeholder = ' ';
+}
+
+const std::string& CensoredCUIEdit::RawText() const
+{ return m_raw_text; }
+
+void CensoredCUIEdit::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
+    auto hotkey_paste_action      = [this]() { GG::GUI::GetGUI()->PasteWndText(this, GG::GUI::GetGUI()->ClipboardText()); };
+    auto hotkey_select_all_action = [this]() { GG::GUI::GetGUI()->WndSelectAll(this); };
+    auto hotkey_deselect_action   = [this]() { GG::GUI::GetGUI()->WndDeselect(this); };
+
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
+
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_PASTE"),         false, false, hotkey_paste_action));
+    popup->AddMenuItem(GG::MenuItem(true)); // separator
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_SELECT_ALL"),    false, false, hotkey_select_all_action));
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_DESELECT"),      false, false, hotkey_deselect_action));
+    popup->Run();
+}
+
+void CensoredCUIEdit::KeyPress(GG::Key key, std::uint32_t key_code_point,
+                               GG::Flags<GG::ModKey> mod_keys)
+{
+    if (Disabled()) {
+        CUIEdit::KeyPress(key, key_code_point, mod_keys);
+        return;
+    }
+
+    bool shift_down = mod_keys & (GG::MOD_KEY_LSHIFT | GG::MOD_KEY_RSHIFT);
+    //bool ctrl_down = mod_keys & (GG::MOD_KEY_CTRL | GG::MOD_KEY_RCTRL);
+    //bool numlock_on = mod_keys & GG::MOD_KEY_NUM;
+
+    if (key == GG::GGK_DELETE && shift_down) {
+        GG::GUI::GetGUI()->CutWndText(this);    // should just copy the placeholder character
+
+    } else if (key == GG::GGK_INSERT && shift_down) {
+        GG::GUI::GetGUI()->PasteWndText(this, GG::GUI::GetGUI()->ClipboardText());
+
+    } else if (key == GG::GGK_BACKSPACE) {
+        if (MultiSelected()) {
+            ClearSelected();
+
+        } else if (0 < m_cursor_pos.first) {
+            // delete character before cursor
+            m_cursor_pos.second = m_cursor_pos.first--;
+            ClearSelected();
+        }
+
+    } else if (key == GG::GGK_DELETE) {
+        if (MultiSelected()) {
+            ClearSelected();
+
+        } else {
+            m_cursor_pos.second = m_cursor_pos.first + 1;
+            ClearSelected();
+        }
+
+    } else {
+        CUIEdit::KeyPress(key, key_code_point, mod_keys);
+    }
+}
+
+void CensoredCUIEdit::SetText(const std::string& str) {
+    m_raw_text = str;
+
+    auto font = GetFont();
+    if (!font) {
+        ErrorLogger() << "CensoredCUIEdit::SetText couldn't get font!";
+        return;
+    }
+    auto format = this->GetTextFormat();
+    auto text_elements = font->ExpensiveParseFromTextToTextElements(m_raw_text, format);
+    auto line_data = font->DetermineLines(m_raw_text, format, ClientSize().x, text_elements);
+
+    // generate censored text by appending one placeholder char per char in raw text
+    std::string censored_text;
+    for (const auto& curr_line : line_data)
+        censored_text += std::string(curr_line.char_data.size(), m_placeholder);
+
+    CUIEdit::SetText(censored_text);
+}
+
+void CensoredCUIEdit::AcceptPastedText(const std::string& text) {
+    if (!Interactive())
+        return;
+    if (!utf8::is_valid(text.begin(), text.end()))
+        return;
+
+    bool modified_text = false;
+
+    if (MultiSelected()) {
+        ClearSelected();
+        modified_text = true;
+        m_cursor_pos.second = m_cursor_pos.first;   // should be redundant
+    }
+
+    if (!text.empty()) {
+        GG::CPSize pos;
+        std::size_t line;
+        std::tie(line, pos) = LinePositionOf(m_cursor_pos.first, GetLineData());
+
+        auto new_raw_text = m_raw_text;
+        new_raw_text.insert(Value(StringIndexOf(line, pos, GetLineData())), text);
+
+        SetText(new_raw_text);
+
+        modified_text = true;
+    }
+
+    if (modified_text) {
+        // moves cursor to end of pasted text
+        GG::CPSize text_span(utf8::distance(text.begin(), text.end()));
+        GG::CPSize new_cursor_pos = std::max(GG::CP0, std::min(Length(), m_cursor_pos.second + text_span));
+        m_cursor_pos.second = new_cursor_pos;
+
+        // ensure nothing is selected after pasting
+        m_cursor_pos.first = m_cursor_pos.second;
+
+        // notify rest of GUI of change to text in this Edit
+        EditedSignal(Text());
+    }
+}
+
+void CensoredCUIEdit::ClearSelected() {
+    // get range of indices to remove
+    GG::CPSize low = std::min(m_cursor_pos.first, m_cursor_pos.second);
+    GG::CPSize high = std::max(m_cursor_pos.first, m_cursor_pos.second);
+    // set cursor start/end to start of range to remove
+    m_cursor_pos = {low, low};
+
+    auto it = m_raw_text.begin() + Value(low);
+    auto end_it = m_raw_text.begin() + Value(high);
+
+    if (it == end_it)
+        return;
+
+    m_raw_text.erase(it, end_it);
+
+    SetText(m_raw_text);
+}
+
+///////////////////////////////////////
 // class CUIMultiEdit
 ///////////////////////////////////////
-CUIMultiEdit::CUIMultiEdit(const std::string& str, GG::Flags<GG::MultiEditStyle> style/* = MULTI_LINEWRAP*/) :
-    MultiEdit(str, ClientUI::GetFont(), ClientUI::CtrlBorderColor(), style, ClientUI::TextColor(), ClientUI::CtrlColor())
-{
+CUIMultiEdit::CUIMultiEdit(const std::string& str,
+                           GG::Flags<GG::MultiEditStyle> style/* = MULTI_LINEWRAP*/) :
+    MultiEdit(str, ClientUI::GetFont(), ClientUI::CtrlBorderColor(), style,
+              ClientUI::TextColor(), ClientUI::CtrlColor())
+{}
+
+void CUIMultiEdit::CompleteConstruction() {
+    GG::MultiEdit::CompleteConstruction();
+
     RecreateScrolls();
     SetHiliteColor(ClientUI::EditHiliteColor());
 }
@@ -987,63 +1133,46 @@ void CUIMultiEdit::Render() {
 }
 
 void CUIMultiEdit::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
+    auto hotkey_cut_action        = [this]() { GG::GUI::GetGUI()->CutWndText(this); };
+    auto hotkey_copy_action       = [this]() { GG::GUI::GetGUI()->CopyWndText(this); };
+    auto hotkey_paste_action      = [this]() { GG::GUI::GetGUI()->PasteWndText(this, GG::GUI::GetGUI()->ClipboardText()); };
+    auto hotkey_select_all_action = [this]() { GG::GUI::GetGUI()->WndSelectAll(this); };
+    auto hotkey_deselect_action   = [this]() { GG::GUI::GetGUI()->WndDeselect(this); };
+
     // create popup menu
-    GG::MenuItem menu_contents;
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
     if (!(this->Style() & GG::MULTI_READ_ONLY))
-        menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_CUT"),       1, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_COPY"),          2, false, false));
+        popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_CUT"),       false, false, hotkey_cut_action));
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_COPY"),          false, false, hotkey_copy_action));
     if (!(this->Style() & GG::MULTI_READ_ONLY))
-        menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_PASTE"),     3, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(true)); // separator
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_SELECT_ALL"),    4, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_DESELECT"),      5, false, false));
-
+        popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_PASTE"),     false, false, hotkey_paste_action));
+    popup->AddMenuItem(GG::MenuItem(true)); // separator
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_SELECT_ALL"),    false, false, hotkey_select_all_action));
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_DESELECT"),      false, false, hotkey_deselect_action));
+    popup->Run();
     // todo: italicize, underline, or colour selected text
-
-    CUIPopupMenu popup(pt.x, pt.y, menu_contents);
-    if (popup.Run()) {
-        switch (popup.MenuID()) {
-        case 1: { // cut
-            GG::GUI::GetGUI()->CutWndText(this);
-            break;
-        }
-
-        case 2: { // copy
-            GG::GUI::GetGUI()->CopyWndText(this);
-            break;
-        }
-
-        case 3: { // paste
-            GG::GUI::GetGUI()->PasteWndText(this, GG::GUI::GetGUI()->ClipboardText());
-            break;
-        }
-
-        case 4: { // select all
-            GG::GUI::GetGUI()->WndSelectAll(this);
-            break;
-        }
-
-        case 5: { // deselect all
-            GG::GUI::GetGUI()->WndDeselect(this);
-            break;
-        }
-
-        default:
-            break;
-        }
-    }
 }
 
 
 ///////////////////////////////////////
 // class CUILinkTextMultiEdit
 ///////////////////////////////////////
-CUILinkTextMultiEdit::CUILinkTextMultiEdit(const std::string& str, GG::Flags<GG::MultiEditStyle> style) :
+CUILinkTextMultiEdit::CUILinkTextMultiEdit(const std::string& str,
+                                           GG::Flags<GG::MultiEditStyle> style) :
     CUIMultiEdit(str, style),
     TextLinker(),
     m_already_setting_text_so_dont_link(false),
     m_raw_text(str)
-{
+{}
+
+void CUILinkTextMultiEdit::CompleteConstruction() {
+    // Prevent double wrapping or setting the raw_text equal to an already
+    // wrapped raw text.  CUIMultiEdit::CompleteConstruction calls
+    // SetText when adjusting the scroll bars.
+    m_already_setting_text_so_dont_link = true;
+    CUIMultiEdit::CompleteConstruction();
+    m_already_setting_text_so_dont_link = false;
+
     FindLinks();
     MarkLinks();
 }
@@ -1074,61 +1203,30 @@ void CUILinkTextMultiEdit::LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_ke
 }
 
 void CUILinkTextMultiEdit::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
+    auto rclick_action = [this, pt, mod_keys]() { TextLinker::RClick_(pt, mod_keys); };
+    auto hotkey_cut_action        = [this]() { GG::GUI::GetGUI()->CutWndText(this); };
+    auto hotkey_copy_action       = [this]() { GG::GUI::GetGUI()->CopyWndText(this); };
+    auto hotkey_paste_action      = [this]() { GG::GUI::GetGUI()->PasteWndText(this, GG::GUI::GetGUI()->ClipboardText()); };
+    auto hotkey_select_all_action = [this]() { GG::GUI::GetGUI()->WndSelectAll(this); };
+    auto hotkey_deselect_action   = [this]() { GG::GUI::GetGUI()->WndDeselect(this); };
+
     // create popup menu
-    GG::MenuItem menu_contents;
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
     if (GetLinkUnderPt(pt) != -1) {
-        menu_contents.next_level.push_back(GG::MenuItem(UserString("OPEN"),             9, false, false));
-        menu_contents.next_level.push_back(GG::MenuItem(true)); // separator
+        popup->AddMenuItem(GG::MenuItem(UserString("OPEN"),             false, false, rclick_action));
+        popup->AddMenuItem(GG::MenuItem(true)); // separator
     }
     if (!(this->Style() & GG::MULTI_READ_ONLY))
-        menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_CUT"),       1, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_COPY"),          2, false, false));
+        popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_CUT"),       false, false, hotkey_cut_action));
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_COPY"),          false, false, hotkey_copy_action));
     if (!(this->Style() & GG::MULTI_READ_ONLY))
-        menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_PASTE"),     3, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(true)); // separator
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_SELECT_ALL"),    4, false, false));
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("HOTKEY_DESELECT"),      5, false, false));
+        popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_PASTE"),     false, false, hotkey_paste_action));
+    popup->AddMenuItem(GG::MenuItem(true)); // separator
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_SELECT_ALL"),    false, false, hotkey_select_all_action));
+    popup->AddMenuItem(GG::MenuItem(UserString("HOTKEY_DESELECT"),      false, false, hotkey_deselect_action));
+    popup->Run();
 
     // todo: italicize, underline, or colour selected text
-
-    CUIPopupMenu popup(pt.x, pt.y, menu_contents);
-    if (popup.Run()) {
-        switch (popup.MenuID()) {
-
-        case 9: {
-            TextLinker::RClick_(pt, mod_keys);
-            break;
-        }
-
-        case 1: { // cut
-            GG::GUI::GetGUI()->CutWndText(this);
-            break;
-        }
-
-        case 2: { // copy
-            GG::GUI::GetGUI()->CopyWndText(this);
-            break;
-        }
-
-        case 3: { // paste
-            GG::GUI::GetGUI()->PasteWndText(this, GG::GUI::GetGUI()->ClipboardText());
-            break;
-        }
-
-        case 4: { // select all
-            GG::GUI::GetGUI()->WndSelectAll(this);
-            break;
-        }
-
-        case 5: { // deselect all
-            GG::GUI::GetGUI()->WndDeselect(this);
-            break;
-        }
-
-        default:
-            break;
-        }
-    }
 }
 
 void CUILinkTextMultiEdit::MouseHere(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
@@ -1162,12 +1260,15 @@ void CUILinkTextMultiEdit::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
 }
 
 void CUILinkTextMultiEdit::SetText(const std::string& str) {
-    // MultiEdit have scrollbars that are adjusted every time the text is set.  Adjusting scrollbars also requires
-    // setting text, because the space for the text is added or removed when scrollbars are shown or hidden.
-    // Since highlighting links on rollover also involves setting text, there are a lot of potentially unnecessary
-    // calls to SetText and FindLinks.  This check for whether text is already being set eliminates many of those
-    // calls when they aren't necessary, since the results will be overridden later anyway by the outermost (or
-    // lowest on stack, or first) call to SetText
+    // MultiEdit have scrollbars that are adjusted every time the text is set.
+    // Adjusting scrollbars also requires setting text, because the space for
+    // the text is added or removed when scrollbars are shown or hidden. Since
+    // highlighting links on rollover also involves setting text, there are a
+    // lot of potentially unnecessary calls to SetText and FindLinks.  This
+    // check for whether text is already being set eliminates many of those
+    // calls when they aren't necessary, since the results will be overridden
+    // later anyway by the outermost (or lowest on stack, or first) call to
+    // SetText
     if (!m_already_setting_text_so_dont_link) {
         m_already_setting_text_so_dont_link = true;
         m_raw_text = str;
@@ -1196,10 +1297,15 @@ void CUILinkTextMultiEdit::SetLinkedText(const std::string& str) {
 // static(s)
 const GG::Y CUISimpleDropDownListRow::DEFAULT_ROW_HEIGHT(22);
 
-CUISimpleDropDownListRow::CUISimpleDropDownListRow(const std::string& row_text, GG::Y row_height/* = DEFAULT_ROW_HEIGHT*/) :
-    GG::ListBox::Row(GG::X1, row_height, "")
-{
-    push_back(new CUILabel(row_text, GG::FORMAT_LEFT | GG::FORMAT_NOWRAP));
+CUISimpleDropDownListRow::CUISimpleDropDownListRow(const std::string& row_text,
+                                                   GG::Y row_height/* = DEFAULT_ROW_HEIGHT*/) :
+    GG::ListBox::Row(GG::X1, row_height, ""),
+    m_row_label(GG::Wnd::Create<CUILabel>(row_text, GG::FORMAT_LEFT | GG::FORMAT_NOWRAP))
+{}
+
+void CUISimpleDropDownListRow::CompleteConstruction() {
+    GG::ListBox::Row::CompleteConstruction();
+    push_back(m_row_label);
 }
 
 
@@ -1211,9 +1317,8 @@ namespace {
 }
 
 StatisticIcon::StatisticIcon(const std::shared_ptr<GG::Texture> texture,
-                             GG::X x /*= GG::X0*/, GG::Y y /*= GG::Y0*/,
                              GG::X w /*= GG::X1*/, GG::Y h /*= GG::Y1*/) :
-    GG::Control(x, y, w, h, GG::INTERACTIVE),
+    GG::Control(GG::X0, GG::Y0, w, h, GG::INTERACTIVE),
     m_num_values(0),
     m_values(),
     m_digits(),
@@ -1221,20 +1326,13 @@ StatisticIcon::StatisticIcon(const std::shared_ptr<GG::Texture> texture,
     m_icon(nullptr),
     m_text(nullptr)
 {
-    m_icon = new GG::StaticGraphic(texture, GG::GRAPHIC_FITGRAPHIC);
-
-    SetBrowseModeTime(GetOptionsDB().Get<int>("UI.tooltip-delay"));
-
-    AttachChild(m_icon);
-
-    RequirePreRender();
+    m_icon = GG::Wnd::Create<GG::StaticGraphic>(texture, GG::GRAPHIC_FITGRAPHIC);
 }
 
 StatisticIcon::StatisticIcon(const std::shared_ptr<GG::Texture> texture,
                              double value, int digits, bool showsign,
-                             GG::X x /*= GG::X0*/, GG::Y y /*= GG::Y0*/,
                              GG::X w /*= GG::X1*/, GG::Y h /*= GG::Y1*/) :
-    GG::Control(x, y, w, h, GG::INTERACTIVE),
+    GG::Control(GG::X0, GG::Y0, w, h, GG::INTERACTIVE),
     m_num_values(1),
     m_values(std::vector<double>(1, value)),
     m_digits(std::vector<int>(1, digits)),
@@ -1242,21 +1340,14 @@ StatisticIcon::StatisticIcon(const std::shared_ptr<GG::Texture> texture,
     m_icon(nullptr),
     m_text(nullptr)
 {
-    m_icon = new GG::StaticGraphic(texture, GG::GRAPHIC_FITGRAPHIC);
-
-    SetBrowseModeTime(GetOptionsDB().Get<int>("UI.tooltip-delay"));
-
-    AttachChild(m_icon);
-
-    RequirePreRender();
+    m_icon = GG::Wnd::Create<GG::StaticGraphic>(texture, GG::GRAPHIC_FITGRAPHIC);
 }
 
 StatisticIcon::StatisticIcon(const std::shared_ptr<GG::Texture> texture,
                              double value0, double value1, int digits0, int digits1,
                              bool showsign0, bool showsign1,
-                             GG::X x /*= GG::X0*/, GG::Y y /*= GG::Y0*/,
                              GG::X w /*= GG::X1*/, GG::Y h /*= GG::Y1*/) :
-    GG::Control(x, y, w, h, GG::INTERACTIVE),
+    GG::Control(GG::X0, GG::Y0, w, h, GG::INTERACTIVE),
     m_num_values(2),
     m_values(std::vector<double>(2, 0.0)),
     m_digits(std::vector<int>(2, 2)),
@@ -1264,8 +1355,7 @@ StatisticIcon::StatisticIcon(const std::shared_ptr<GG::Texture> texture,
     m_icon(nullptr),
     m_text(nullptr)
 {
-    SetName("StatisticIcon");
-    m_icon = new GG::StaticGraphic(texture, GG::GRAPHIC_FITGRAPHIC);
+    m_icon = GG::Wnd::Create<GG::StaticGraphic>(texture, GG::GRAPHIC_FITGRAPHIC);
 
     m_values[0] = value0;
     m_values[1] = value1;
@@ -1273,8 +1363,14 @@ StatisticIcon::StatisticIcon(const std::shared_ptr<GG::Texture> texture,
     m_digits[1] = digits1;
     m_show_signs[0] = showsign0;
     m_show_signs[1] = showsign1;
+}
 
-    SetBrowseModeTime(GetOptionsDB().Get<int>("UI.tooltip-delay"));
+void StatisticIcon::CompleteConstruction() {
+    GG::Control::CompleteConstruction();
+
+    SetName("StatisticIcon");
+
+    SetBrowseModeTime(GetOptionsDB().Get<int>("ui.tooltip.delay"));
 
     AttachChild(m_icon);
 
@@ -1373,9 +1469,9 @@ void StatisticIcon::DoLayout() {
 
     if (!m_text) {
         // Create new label in correct place.
-        m_text = new CUILabel(text_elements.Text(), text_elements.Elements(),
-                              format, GG::NO_WND_FLAGS,
-                              text_ul.x, text_ul.y, text_lr.x - text_ul.x, text_lr.y - text_ul.y);
+        m_text = GG::Wnd::Create<CUILabel>(text_elements.Text(), text_elements.Elements(),
+                                           format, GG::NO_WND_FLAGS,
+                                           text_ul.x, text_ul.y, text_lr.x - text_ul.x, text_lr.y - text_ul.y);
         AttachChild(m_text);
     } else {
         // Adjust text and place label.
@@ -1421,7 +1517,7 @@ CUIToolBar::CUIToolBar() :
 {}
 
 bool CUIToolBar::InWindow(const GG::Pt& pt) const {
-    for (GG::Wnd* wnd : Children())
+    for (auto& wnd : Children())
         if (wnd->InWindow(pt))
             return true;
     return GG::Wnd::InWindow(pt);
@@ -1448,6 +1544,7 @@ namespace {
             if (!species)
                 return;
             const std::string& species_name = species->Name();
+            GG::Wnd::SetName(species_name);
             Init(species_name, UserString(species_name), species->GameplayDescription(), w, h,
                  ClientUI::SpeciesIcon(species_name));
         };
@@ -1455,33 +1552,44 @@ namespace {
         SpeciesRow(const std::string& species_name, const std::string& localized_name, const std::string& species_desc,
                    GG::X w, GG::Y h, std::shared_ptr<GG::Texture> species_icon) :
             GG::ListBox::Row(w, h, "", GG::ALIGN_VCENTER, 0)
-        { Init(species_name, localized_name, species_desc, w, h, species_icon); };
+        {
+            GG::Wnd::SetName(species_name);
+            Init(species_name, localized_name, species_desc, w, h, species_icon);
+        };
 
+        void CompleteConstruction() override {
+            GG::ListBox::Row::CompleteConstruction();
+
+            push_back(m_icon);
+            push_back(m_species_label);
+            GG::X first_col_width(Value(Height()));
+            SetColWidth(0, first_col_width);
+            SetColWidth(1, Width() - first_col_width);
+            GetLayout()->SetColumnStretch(0, 0.0);
+            GetLayout()->SetColumnStretch(1, 1.0);
+        }
     private:
         void Init(const std::string& species_name, const std::string& localized_name, const std::string& species_desc,
                   GG::X width, GG::Y height, std::shared_ptr<GG::Texture> species_icon)
         {
             GG::Wnd::SetName(species_name);
-            GG::StaticGraphic* icon = new GG::StaticGraphic(species_icon, GG::GRAPHIC_FITGRAPHIC| GG::GRAPHIC_PROPSCALE);
-            icon->Resize(GG::Pt(GG::X(Value(height - 5)), height - 5));
-            push_back(icon);
-            GG::Label* species_label = new CUILabel(localized_name, GG::FORMAT_LEFT | GG::FORMAT_VCENTER);
-            push_back(species_label);
-            GG::X first_col_width(Value(height));
-            SetColWidth(0, first_col_width);
-            SetColWidth(1, width - first_col_width);
-            GetLayout()->SetColumnStretch(0, 0.0);
-            GetLayout()->SetColumnStretch(1, 1.0);
+            m_icon = GG::Wnd::Create<GG::StaticGraphic>(species_icon, GG::GRAPHIC_FITGRAPHIC| GG::GRAPHIC_PROPSCALE);
+            m_icon->Resize(GG::Pt(GG::X(Value(height - 5)), height - 5));
+            m_species_label = GG::Wnd::Create<CUILabel>(localized_name, GG::FORMAT_LEFT | GG::FORMAT_VCENTER);
             if (!species_desc.empty()) {
-                SetBrowseModeTime(GetOptionsDB().Get<int>("UI.tooltip-delay"));
-                SetBrowseInfoWnd(std::make_shared<IconTextBrowseWnd>(species_icon, localized_name,
+                SetBrowseModeTime(GetOptionsDB().Get<int>("ui.tooltip.delay"));
+                SetBrowseInfoWnd(GG::Wnd::Create<IconTextBrowseWnd>(species_icon, localized_name,
                                                                      species_desc));
             }
         }
+
+        std::shared_ptr<GG::StaticGraphic> m_icon;
+        std::shared_ptr<CUILabel> m_species_label;
+
     };
 }
 
-SpeciesSelector::SpeciesSelector(GG::X w, GG::Y h) :
+SpeciesSelector::SpeciesSelector(const std::string& preselect_species, GG::X w, GG::Y h) :
     CUIDropDownList(6)
 {
     ManuallyManageColProps();
@@ -1490,59 +1598,44 @@ SpeciesSelector::SpeciesSelector(GG::X w, GG::Y h) :
     SetChildClippingMode(ClipToClient);
 
     Resize(GG::Pt(w, h - 8));
+
+    SelChangedSignal.connect(
+        [this](GG::DropDownList::iterator it) {
+            SpeciesChangedSignal((it == this->end() || !(*it)) ? EMPTY_STRING : (*it)->Name()); });
+
     const SpeciesManager& sm = GetSpeciesManager();
-    for (SpeciesManager::playable_iterator it = sm.playable_begin(); it != sm.playable_end(); ++it)
-        Insert(new SpeciesRow(it->second, w, h - 4));
+    for (auto it = sm.playable_begin(); it != sm.playable_end(); ++it) {
+        auto row_it = Insert(GG::Wnd::Create<SpeciesRow>(it->second.get(), w, h - 4));
+        if (it->first == preselect_species)
+            Select(row_it);
+    }
+
     if (!this->Empty()) {
         // Add an option for random selection
-        Insert(new SpeciesRow("RANDOM", UserString("GSETUP_RANDOM"), UserString("GSETUP_SPECIES_RANDOM_DESC"), w, h - 4,
-                              ClientUI::GetTexture(ClientUI::ArtDir() / "icons/unknown.png")));
-        Select(this->begin());
+        auto rand_species_it = Insert(GG::Wnd::Create<SpeciesRow>(
+            "RANDOM", UserString("GSETUP_RANDOM"), UserString("GSETUP_SPECIES_RANDOM_DESC"), w, h - 4,
+            ClientUI::GetTexture(ClientUI::ArtDir() / "icons/unknown.png")));
+
+        if (preselect_species == "RANDOM")
+            Select(rand_species_it);
     }
-    GG::Connect(SelChangedSignal, &SpeciesSelector::SelectionChanged, this);
+
+    if (!Empty() && CurrentItem() == end()) {
+        ErrorLogger() << "SpeciesSelector::SpeciesSelector was unable to find a species in the list with name " << preselect_species;
+        Select(begin());
+    }
 }
 
 const std::string& SpeciesSelector::CurrentSpeciesName() const {
-    CUIDropDownList::iterator row_it = this->CurrentItem();
+    auto row_it = this->CurrentItem();
     if (row_it == this->end())
         return EMPTY_STRING;
-    const CUIDropDownList::Row* row = *row_it;
+    const auto& row = *row_it;
     if (!row) {
         ErrorLogger() << "SpeciesSelector::CurrentSpeciesName couldn't get current item due to invalid Row pointer";
         return EMPTY_STRING;
     }
     return row->Name();
-}
-
-std::vector<std::string> SpeciesSelector::AvailableSpeciesNames() const {
-    std::vector<std::string> retval;
-    for (CUIDropDownList::Row* row : *this)
-        if (const SpeciesRow* species_row = dynamic_cast<const SpeciesRow*>(row))
-            retval.push_back(species_row->Name());
-    return retval;
-}
-
-void SpeciesSelector::SelectSpecies(const std::string& species_name) {
-    for (CUIDropDownList::iterator row_it = this->begin(); row_it != this->end(); ++row_it) {
-        CUIDropDownList::Row* row = *row_it;
-        if (const SpeciesRow* species_row = dynamic_cast<const SpeciesRow*>(row)) {
-            if (species_row->Name() == species_name) {
-                Select(row_it);
-                return;
-            }
-        }
-    }
-    ErrorLogger() << "SpeciesSelector::SelectSpecies was unable to find a species in the list with name " << species_name;
-}
-
-void SpeciesSelector::SelectionChanged(GG::DropDownList::iterator it) {
-    const GG::ListBox::Row* row = nullptr;
-    if (it != this->end())
-        row = *it;
-    if (row)
-        SpeciesChangedSignal(row->Name());
-    else
-        SpeciesChangedSignal(EMPTY_STRING);
 }
 
 
@@ -1568,15 +1661,21 @@ namespace {
         };
 
         ColorRow(const GG::Clr& color, GG::Y h) :
-            GG::ListBox::Row(GG::X(Value(h)), h, "")
-        {
-            push_back(new ColorSquare(color, h));
+            GG::ListBox::Row(GG::X(Value(h)), h, ""),
+            m_color_square(GG::Wnd::Create<ColorSquare>(color, h))
+        {}
+
+        void CompleteConstruction() override {
+            GG::ListBox::Row::CompleteConstruction();
+            push_back(m_color_square);
         }
 
         void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override {
             // Prevent the width from changing
             GG::Control::SizeMove(ul, GG::Pt(ul.x + Width(), lr.y));
         }
+    private:
+        std::shared_ptr<ColorSquare> m_color_square;
 
     };
 }
@@ -1585,10 +1684,14 @@ EmpireColorSelector::EmpireColorSelector(GG::Y h) :
     CUIDropDownList(6)
 {
     Resize(GG::Pt(COLOR_SELECTOR_WIDTH, h - 8));
+
     for (const GG::Clr& color : EmpireColors()) {
-        Insert(new ColorRow(color, h - 4));
+        Insert(GG::Wnd::Create<ColorRow>(color, h - 4));
     }
-    GG::Connect(SelChangedSignal, &EmpireColorSelector::SelectionChanged, this);
+
+    SelChangedSignal.connect(
+        [this](GG::DropDownList::iterator it) {
+            ColorChangedSignal(!(it == end() || !*it || (*it)->empty()) ? (*it)->at(0)->Color() : GG::CLR_RED); });
 }
 
 GG::Clr EmpireColorSelector::CurrentColor() const
@@ -1596,22 +1699,13 @@ GG::Clr EmpireColorSelector::CurrentColor() const
 
 void EmpireColorSelector::SelectColor(const GG::Clr& clr) {
     for (iterator list_it = begin(); list_it != end(); ++list_it) {
-        const GG::ListBox::Row* row = *list_it;
+        const auto& row = *list_it;
         if (row && !row->empty() && row->at(0)->Color() == clr) {
             Select(list_it);
             return;
         }
     }
     ErrorLogger() << "EmpireColorSelector::SelectColor was unable to find a requested color!";
-}
-
-void EmpireColorSelector::SelectionChanged(GG::DropDownList::iterator it) {
-    const GG::ListBox::Row* row = *it;
-    bool error(it == end() || !row || row->empty());
-    if (error)
-        ErrorLogger() << "EmpireColorSelector::SelectionChanged had trouble getting colour from row.  Using CLR_RED";
-
-    ColorChangedSignal(!error ? row->at(0)->Color() : GG::CLR_RED);
 }
 
 
@@ -1669,30 +1763,24 @@ void ColorSelector::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
 void ColorSelector::LClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
     GG::X x = std::min(pt.x, GG::GUI::GetGUI()->AppWidth() - 315);    // 315 is width of ColorDlg from GG::ColorDlg:::ColorDlg
     GG::Y y = std::min(pt.y, GG::GUI::GetGUI()->AppHeight() - 300);   // 300 is height of ColorDlg from GG::ColorDlg:::ColorDlg
-    GG::ColorDlg dlg(x, y, Color(), ClientUI::GetFont(), ClientUI::CtrlColor(), ClientUI::CtrlBorderColor(), ClientUI::TextColor());
-    dlg.Run();
-    if (dlg.ColorWasSelected()) {
-        GG::Clr clr = dlg.Result();
+    auto dlg = GG::Wnd::Create<GG::ColorDlg>(x, y, Color(), ClientUI::GetFont(), ClientUI::CtrlColor(), ClientUI::CtrlBorderColor(), ClientUI::TextColor());
+    dlg->Run();
+    if (dlg->ColorWasSelected()) {
+        GG::Clr clr = dlg->Result();
         SetColor(clr);
         ColorChangedSignal(clr);
     }
 }
 
 void ColorSelector::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
-    GG::MenuItem menu_contents;
-    menu_contents.next_level.push_back(GG::MenuItem(UserString("RESET"), 1, false, false));
+    auto reset_color_action = [this]() {
+        SetColor(m_default_color);
+        ColorChangedSignal(m_default_color);
+    };
 
-    CUIPopupMenu popup(pt.x, pt.y, menu_contents);
-
-    if (popup.Run()) {
-        switch (popup.MenuID()) {
-        case 1: // reset colour option to default value
-            SetColor(m_default_color);
-            ColorChangedSignal(m_default_color);
-        default:
-            break;
-        }
-    }
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
+    popup->AddMenuItem(GG::MenuItem(UserString("RESET"), false, false, reset_color_action));
+    popup->Run();
 }
 
 
@@ -1700,50 +1788,85 @@ void ColorSelector::RClick(const GG::Pt& pt, GG::Flags<GG::ModKey> mod_keys) {
 // class FileDlg
 ///////////////////////////////////////
 FileDlg::FileDlg(const std::string& directory, const std::string& filename, bool save, bool multi,
-                 const std::vector<std::pair<std::string, std::string>>& types) :
+                 std::vector<std::pair<std::string, std::string>> types) :
     GG::FileDlg(directory, filename, save, multi, ClientUI::GetFont(),
-                ClientUI::CtrlColor(), ClientUI::CtrlBorderColor(), ClientUI::TextColor())
-{
-    SetFileFilters(types);
+                ClientUI::CtrlColor(), ClientUI::CtrlBorderColor(), ClientUI::TextColor()),
+    m_init_file_filters(std::forward<std::vector<std::pair<std::string, std::string>>>(types))
+{}
+
+void FileDlg::CompleteConstruction() {
+    GG::FileDlg::CompleteConstruction();
+
+    SetFileFilters(m_init_file_filters);
     AppendMissingSaveExtension(true);
 }
 
 
 //////////////////////////////////////////////////
-// ProductionInfoPanel
+// ResourceInfoPanel
 //////////////////////////////////////////////////
 namespace {
     GG::Y VERTICAL_SECTION_GAP(4);
 }
 
-ProductionInfoPanel::ProductionInfoPanel(const std::string& title, const std::string& point_units_str,
-                                         const GG::X x, const GG::Y y, const GG::X w, const GG::Y h,
-                                         const std::string& config_name) :
-    CUIWnd(title, x, y, w, h, GG::INTERACTIVE | GG::RESIZABLE | GG::DRAGABLE | GG::ONTOP | PINABLE, config_name),
+ResourceInfoPanel::ResourceInfoPanel(const std::string& title, const std::string& point_units_str,
+                                     const GG::X x, const GG::Y y, const GG::X w, const GG::Y h,
+                                     const std::string& config_name) :
+    CUIWnd(title, x, y, w, h,
+           GG::INTERACTIVE | GG::RESIZABLE | GG::DRAGABLE | GG::ONTOP | PINABLE,
+           config_name, false),
     m_units_str(point_units_str),
     m_title_str(title),
     m_empire_id(ALL_EMPIRES),
-    m_total_points_label(nullptr),
-    m_total_points(nullptr),
-    m_total_points_P_label(nullptr),
-    m_wasted_points_label(nullptr),
-    m_wasted_points(nullptr),
-    m_wasted_points_P_label(nullptr),
-    m_local_points_label(nullptr),
-    m_local_points(nullptr),
-    m_local_points_P_label(nullptr),
-    m_local_wasted_points_label(nullptr),
-    m_local_wasted_points(nullptr),
-    m_local_wasted_points_P_label(nullptr)
+    m_empire_column_label(GG::Wnd::Create<CUILabel>(UserString("EMPIRE"), GG::FORMAT_LEFT)),
+    m_local_column_label(GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT)),
+    m_total_points_label(GG::Wnd::Create<CUILabel>(UserString("PRODUCTION_INFO_TOTAL_PS_LABEL"), GG::FORMAT_RIGHT)),
+    m_total_points(GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT)),
+    m_total_points_P_label(GG::Wnd::Create<CUILabel>(m_units_str, GG::FORMAT_LEFT)),
+    m_stockpile_points_label(GG::Wnd::Create<CUILabel>(UserString("PRODUCTION_INFO_STOCKPILE_PS_LABEL"), GG::FORMAT_RIGHT)),
+    m_stockpile_points(GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT)),
+    m_stockpile_points_P_label(GG::Wnd::Create<CUILabel>(m_units_str, GG::FORMAT_LEFT)),
+    m_stockpile_use_label(GG::Wnd::Create<CUILabel>(UserString("PRODUCTION_INFO_STOCKPILE_USE_PS_LABEL"), GG::FORMAT_RIGHT)),
+    m_stockpile_use(GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT)),
+    m_stockpile_use_P_label(GG::Wnd::Create<CUILabel>(m_units_str, GG::FORMAT_LEFT)),
+    m_local_stockpile_use(GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT)),
+    m_local_stockpile_use_P_label(GG::Wnd::Create<CUILabel>(m_units_str, GG::FORMAT_LEFT)),
+    m_stockpile_max_use_label(GG::Wnd::Create<CUILabel>(UserString("PRODUCTION_INFO_STOCKPILE_USE_MAX_LABEL"), GG::FORMAT_RIGHT)),
+    m_stockpile_max_use(GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT)),
+    m_stockpile_max_use_P_label(GG::Wnd::Create<CUILabel>(m_units_str, GG::FORMAT_LEFT)),
+    m_wasted_points_label(GG::Wnd::Create<CUILabel>(UserString("PRODUCTION_INFO_WASTED_PS_LABEL"), GG::FORMAT_RIGHT)),
+    m_wasted_points(GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT)),
+    m_wasted_points_P_label(GG::Wnd::Create<CUILabel>(m_units_str, GG::FORMAT_LEFT)),
+    m_local_points(GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT)),
+    m_local_points_P_label(GG::Wnd::Create<CUILabel>(m_units_str, GG::FORMAT_LEFT)),
+    m_local_wasted_points(GG::Wnd::Create<CUILabel>("", GG::FORMAT_LEFT)),
+    m_local_wasted_points_P_label(GG::Wnd::Create<CUILabel>(m_units_str, GG::FORMAT_LEFT))
 {}
 
-GG::Pt ProductionInfoPanel::MinUsableSize() const {
+void ResourceInfoPanel::CompleteConstruction() {
+    CUIWnd::CompleteConstruction();
+
+    AttachChild(m_empire_column_label);
+    AttachChild(m_local_column_label);
+
+    AttachChild(m_total_points_label);
+    AttachChild(m_total_points);
+    AttachChild(m_total_points_P_label);
+
+    AttachChild(m_wasted_points_label);
+    AttachChild(m_wasted_points);
+    AttachChild(m_wasted_points_P_label);
+
+    DoLayout();
+}
+
+GG::Pt ResourceInfoPanel::MinUsableSize() const {
     GG::X min_x = this->LeftBorder() + this->RightBorder() + 20*ClientUI::Pts();
-    GG::Y min_y = this->TopBorder() + this->BottomBorder() + 6*ClientUI::Pts();
+    GG::Y min_y = this->TopBorder() + this->BottomBorder() + 4*ClientUI::Pts();
     return GG::Pt(min_x, min_y);
 }
 
-void ProductionInfoPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
+void ResourceInfoPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
     GG::Pt old_size = GG::Wnd::Size();
 
     CUIWnd::SizeMove(ul, lr);
@@ -1752,26 +1875,14 @@ void ProductionInfoPanel::SizeMove(const GG::Pt& ul, const GG::Pt& lr) {
         DoLayout();
 }
 
-void ProductionInfoPanel::SetTotalPointsCost(float total_points, float total_cost) {
-    if (!m_total_points_label) {
-        m_total_points_label = new CUILabel(UserString("PRODUCTION_INFO_TOTAL_PS_LABEL"), GG::FORMAT_RIGHT);
-        m_total_points = new CUILabel("", GG::FORMAT_LEFT);
-        m_total_points_P_label = new CUILabel(m_units_str, GG::FORMAT_LEFT);
+void ResourceInfoPanel::SetTotalPointsCost(float total_points, float total_cost) {
+    AttachChild(m_total_points_label);
+    AttachChild(m_total_points);
+    AttachChild(m_total_points_P_label);
 
-        m_wasted_points_label = new CUILabel(UserString("PRODUCTION_INFO_WASTED_PS_LABEL"), GG::FORMAT_RIGHT);
-        m_wasted_points = new CUILabel("", GG::FORMAT_LEFT);
-        m_wasted_points_P_label = new CUILabel(m_units_str, GG::FORMAT_LEFT);
-
-        AttachChild(m_total_points_label);
-        AttachChild(m_total_points);
-        AttachChild(m_total_points_P_label);
-
-        AttachChild(m_wasted_points_label);
-        AttachChild(m_wasted_points);
-        AttachChild(m_wasted_points_P_label);
-
-        DoLayout();
-    }
+    AttachChild(m_wasted_points_label);
+    AttachChild(m_wasted_points);
+    AttachChild(m_wasted_points_P_label);
 
     float wasted_points = std::max(0.0f, total_points - total_cost);
     *m_total_points << DoubleToString(total_points, 3, false);
@@ -1789,30 +1900,54 @@ void ProductionInfoPanel::SetTotalPointsCost(float total_points, float total_cos
     SetName(boost::io::str(FlexibleFormat(UserString("PRODUCTION_INFO_EMPIRE")) % m_title_str % empire_name));
 }
 
-void ProductionInfoPanel::SetLocalPointsCost(float local_points, float local_cost, const std::string& location_name) {
-    if (!m_local_points_label) {
-        m_local_points_label = new CUILabel(UserString("PRODUCTION_INFO_LOCAL_PS_LABEL"), GG::FORMAT_RIGHT);
-        m_local_points = new CUILabel("", GG::FORMAT_LEFT);
-        m_local_points_P_label = new CUILabel(m_units_str, GG::FORMAT_LEFT);
+void ResourceInfoPanel::SetStockpileCost(float stockpile, float stockpile_use,
+                                         float stockpile_use_max)
+{
+    AttachChild(m_stockpile_points_label);
+    AttachChild(m_stockpile_points);
+    AttachChild(m_stockpile_points_P_label);
 
-        m_local_wasted_points_label = new CUILabel(UserString("PRODUCTION_INFO_WASTED_PS_LABEL"), GG::FORMAT_RIGHT);
-        m_local_wasted_points = new CUILabel("", GG::FORMAT_LEFT);
-        m_local_wasted_points_P_label = new CUILabel(m_units_str, GG::FORMAT_LEFT);
+    AttachChild(m_stockpile_use_label);
+    AttachChild(m_stockpile_use);
+    AttachChild(m_stockpile_use_P_label);
 
-        AttachChild(m_local_points_label);
-        AttachChild(m_local_points);
-        AttachChild(m_local_points_P_label);
+    AttachChild(m_stockpile_max_use_label);
+    AttachChild(m_stockpile_max_use);
+    AttachChild(m_stockpile_max_use_P_label);
 
-        AttachChild(m_local_wasted_points_label);
-        AttachChild(m_local_wasted_points);
-        AttachChild(m_local_wasted_points_P_label);
+    TraceLogger() << "SetStockpileCost:  update values";
+    *m_stockpile_points << DoubleToString(stockpile, 3, false);
 
-        DoLayout();
-    }
+    *m_stockpile_use << DoubleToString(stockpile_use, 3, false);
+
+    *m_stockpile_max_use << DoubleToString(stockpile_use_max, 3, false);
+
+    TraceLogger() << "SetStockpileCost:  set name";
+    const Empire* empire = GetEmpire(m_empire_id);
+    std::string empire_name;
+    if (empire)
+        empire_name = empire->Name();
+
+    SetName(boost::io::str(FlexibleFormat(UserString("STOCKPILE_INFO_EMPIRE")) % m_title_str % empire_name));
+    TraceLogger() << "SetStockpileCost:  done.";
+}
+
+void ResourceInfoPanel::SetLocalPointsCost(float local_points, float local_cost, float local_stockpile_use,
+                                           float local_stockpile_use_max, const std::string& location_name)
+{
+    AttachChild(m_local_points);
+    AttachChild(m_local_points_P_label);
+
+    AttachChild(m_local_wasted_points);
+    AttachChild(m_local_wasted_points_P_label);
+
+    AttachChild(m_local_stockpile_use);
+    AttachChild(m_local_stockpile_use_P_label);
 
     float wasted_points = std::max(0.0f, local_points - local_cost);
     *m_local_points << DoubleToString(local_points, 3, false);
     *m_local_wasted_points << DoubleToString(wasted_points, 3, false);
+    *m_local_stockpile_use << DoubleToString(local_stockpile_use, 3, false);
     if (wasted_points > 0.01f)
         m_local_wasted_points->SetTextColor(ClientUI::StatDecrColor());
     else
@@ -1823,10 +1958,14 @@ void ProductionInfoPanel::SetLocalPointsCost(float local_points, float local_cos
     if (empire)
         empire_name = empire->Name();
 
-    SetName(boost::io::str(FlexibleFormat(UserString("PRODUCTION_INFO_AT_LOCATION_TITLE")) % m_title_str % location_name % empire_name));
+    SetName(boost::io::str(FlexibleFormat(
+        UserString("PRODUCTION_INFO_AT_LOCATION_TITLE")) % m_title_str % location_name % empire_name));
+
+    m_local_column_label->SetText(boost::io::str(FlexibleFormat(
+        UserString("PRODUCTION_QUEUE_ITEM_LOCATION")) % location_name));
 }
 
-void ProductionInfoPanel::SetEmpireID(int empire_id) {
+void ResourceInfoPanel::SetEmpireID(int empire_id) {
     int old_empire_id = m_empire_id;
     m_empire_id = empire_id;
     if (old_empire_id != m_empire_id) {
@@ -1840,19 +1979,13 @@ void ProductionInfoPanel::SetEmpireID(int empire_id) {
     }
 }
 
-void ProductionInfoPanel::ClearLocalInfo() {
-    delete m_local_points_label;
-    m_local_points_label = nullptr;
-    delete m_local_points;
-    m_local_points = nullptr;
-    delete m_local_points_P_label;
-    m_local_points_P_label = nullptr;
-    delete m_local_wasted_points_label;
-    m_local_wasted_points_label = nullptr;
-    delete m_local_wasted_points;
-    m_local_wasted_points = nullptr;
-    delete m_local_wasted_points_P_label;
-    m_local_wasted_points_P_label = nullptr;
+void ResourceInfoPanel::ClearLocalInfo() {
+    DetachChild(m_local_points);
+    DetachChild(m_local_points_P_label);
+    DetachChild(m_local_wasted_points);
+    DetachChild(m_local_wasted_points_P_label);
+    DetachChild(m_local_stockpile_use);
+    DetachChild(m_local_stockpile_use_P_label);
 
     const Empire* empire = GetEmpire(m_empire_id);
     std::string empire_name;
@@ -1860,85 +1993,129 @@ void ProductionInfoPanel::ClearLocalInfo() {
         empire_name = empire->Name();
 
     SetName(boost::io::str(FlexibleFormat(UserString("PRODUCTION_INFO_EMPIRE")) % m_title_str % empire_name));
+
+    m_local_column_label->SetText("");
 }
 
-void ProductionInfoPanel::Clear() {
-    delete m_total_points_label;
-    m_total_points_label = nullptr;
-    delete m_total_points;
-    m_total_points = nullptr;
-    delete m_total_points_P_label;
-    m_total_points_P_label = nullptr;
-    delete m_wasted_points_label;
-    m_wasted_points_label = nullptr;
-    delete m_wasted_points;
-    m_wasted_points = nullptr;
-    delete m_wasted_points_P_label;
-    m_wasted_points_P_label = nullptr;
+void ResourceInfoPanel::Clear() {
+    DetachChild(m_total_points_label);
+    DetachChild(m_total_points);
+    DetachChild(m_total_points_P_label);
+    DetachChild(m_stockpile_points_label);
+    DetachChild(m_stockpile_points);
+    DetachChild(m_stockpile_points_P_label);
+    DetachChild(m_stockpile_use_label);
+    DetachChild(m_stockpile_use);
+    DetachChild(m_stockpile_use_P_label);
+    DetachChild(m_stockpile_max_use_label);
+    DetachChild(m_stockpile_max_use);
+    DetachChild(m_stockpile_max_use_P_label);
+    DetachChild(m_wasted_points_label);
+    DetachChild(m_wasted_points);
+    DetachChild(m_wasted_points_P_label);
     m_empire_id = ALL_EMPIRES;
 
     ClearLocalInfo();
     SetName(boost::io::str(FlexibleFormat(UserString("PRODUCTION_INFO_EMPIRE")) % m_title_str % ""));
 }
 
-void ProductionInfoPanel::DoLayout() {
+void ResourceInfoPanel::DoLayout() {
     const int STAT_TEXT_PTS = ClientUI::Pts();
     const int CENTERLINE_GAP = 4;
-    const GG::X LABEL_TEXT_WIDTH = (Width() - 4 - CENTERLINE_GAP) * 2 / 3;
-    const GG::X VALUE_TEXT_WIDTH = Width() - 4 - CENTERLINE_GAP - LABEL_TEXT_WIDTH;
+    const GG::X LABEL_TEXT_WIDTH = (Width() - 4 - CENTERLINE_GAP) * 7 / 16 ;
+    const GG::X VALUE_TEXT_WIDTH = ((Width() - 4 - CENTERLINE_GAP) - LABEL_TEXT_WIDTH) / 2;
+
     const GG::X LEFT_TEXT_X(0);
     const GG::X RIGHT_TEXT_X = LEFT_TEXT_X + LABEL_TEXT_WIDTH + 8 + CENTERLINE_GAP;
     const GG::X P_LABEL_X = RIGHT_TEXT_X + 40;
+    const GG::X DOUBLE_LEFT_TEXT_X = P_LABEL_X + 30 + 4;
+    const GG::X DOUBLE_P_LABEL_X = DOUBLE_LEFT_TEXT_X + 40;
 
     std::pair<int, int> m_center_gap(Value(LABEL_TEXT_WIDTH + 2), Value(LABEL_TEXT_WIDTH + 2 + CENTERLINE_GAP));
 
     const GG::Pt LABEL_TEXT_SIZE(LABEL_TEXT_WIDTH, GG::Y(STAT_TEXT_PTS + 4));
     const GG::Pt VALUE_TEXT_SIZE(VALUE_TEXT_WIDTH, GG::Y(STAT_TEXT_PTS + 4));
-    const GG::Pt P_LABEL_SIZE(Width() - 2 - 5 - P_LABEL_X, GG::Y(STAT_TEXT_PTS + 4));
+    const GG::Pt P_LABEL_SIZE(Width() - 7 - DOUBLE_P_LABEL_X, GG::Y(STAT_TEXT_PTS + 4));
 
     GG::Y row_offset(4);
 
-    if (m_total_points_label) {
-        m_total_points_label->MoveTo(GG::Pt(LEFT_TEXT_X, row_offset));
-        m_total_points_label->Resize(LABEL_TEXT_SIZE);
-        m_total_points->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
-        m_total_points->Resize(VALUE_TEXT_SIZE);
-        m_total_points_P_label->MoveTo(GG::Pt(P_LABEL_X, row_offset));
-        m_total_points_P_label->Resize(P_LABEL_SIZE);
+    // first row: column labels
+    m_empire_column_label->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
+    m_empire_column_label->Resize(VALUE_TEXT_SIZE);
+    m_local_column_label->MoveTo(GG::Pt(DOUBLE_LEFT_TEXT_X, row_offset));
+    m_local_column_label->Resize(VALUE_TEXT_SIZE);
 
-        row_offset += m_total_points_label->Height();
-    }
+    row_offset += m_empire_column_label->Height();
 
-    if (m_wasted_points_label) {
-        m_wasted_points_label->MoveTo(GG::Pt(LEFT_TEXT_X, row_offset));
-        m_wasted_points_label->Resize(LABEL_TEXT_SIZE);
-        m_wasted_points->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
-        m_wasted_points->Resize(VALUE_TEXT_SIZE);
-        m_wasted_points_P_label->MoveTo(GG::Pt(P_LABEL_X, row_offset));
-        m_wasted_points_P_label->Resize(P_LABEL_SIZE);
 
-        row_offset += m_wasted_points_label->Height();
-    }
+    // second row: total / local points
+    // total points to left
+    m_total_points_label->MoveTo(GG::Pt(LEFT_TEXT_X, row_offset));
+    m_total_points_label->Resize(LABEL_TEXT_SIZE);
+    m_total_points->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
+    m_total_points->Resize(VALUE_TEXT_SIZE);
+    m_total_points_P_label->MoveTo(GG::Pt(P_LABEL_X, row_offset));
+    m_total_points_P_label->Resize(P_LABEL_SIZE);
 
-    if (m_local_points_label) {
-        m_local_points_label->MoveTo(GG::Pt(LEFT_TEXT_X, row_offset));
-        m_local_points_label->Resize(LABEL_TEXT_SIZE);
-        m_local_points->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
-        m_local_points->Resize(VALUE_TEXT_SIZE);
-        m_local_points_P_label->MoveTo(GG::Pt(P_LABEL_X, row_offset));
-        m_local_points_P_label->Resize(P_LABEL_SIZE);
+    // local points to right of total points
+    m_local_points->MoveTo(GG::Pt(DOUBLE_LEFT_TEXT_X, row_offset));
+    m_local_points->Resize(VALUE_TEXT_SIZE);
+    m_local_points_P_label->MoveTo(GG::Pt(DOUBLE_P_LABEL_X, row_offset));
+    m_local_points_P_label->Resize(P_LABEL_SIZE);
 
-        row_offset += m_local_points_label->Height();
-    }
+    row_offset += m_total_points_label->Height();
 
-    if (m_local_wasted_points_label) {
-        m_local_wasted_points_label->MoveTo(GG::Pt(LEFT_TEXT_X, row_offset));
-        m_local_wasted_points_label->Resize(LABEL_TEXT_SIZE);
-        m_local_wasted_points->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
-        m_local_wasted_points->Resize(VALUE_TEXT_SIZE);
-        m_local_wasted_points_P_label->MoveTo(GG::Pt(P_LABEL_X, row_offset));
-        m_local_wasted_points_P_label->Resize(P_LABEL_SIZE);
-    }
+
+    // third row: wasted points
+    m_wasted_points_label->MoveTo(GG::Pt(LEFT_TEXT_X, row_offset));
+    m_wasted_points_label->Resize(LABEL_TEXT_SIZE);
+    m_wasted_points->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
+    m_wasted_points->Resize(VALUE_TEXT_SIZE);
+    m_wasted_points_P_label->MoveTo(GG::Pt(P_LABEL_X, row_offset));
+    m_wasted_points_P_label->Resize(P_LABEL_SIZE);
+
+    m_local_wasted_points->MoveTo(GG::Pt(DOUBLE_LEFT_TEXT_X, row_offset));
+    m_local_wasted_points->Resize(VALUE_TEXT_SIZE);
+    m_local_wasted_points_P_label->MoveTo(GG::Pt(DOUBLE_P_LABEL_X, row_offset));
+    m_local_wasted_points_P_label->Resize(P_LABEL_SIZE);
+
+    row_offset += m_wasted_points_label->Height();
+
+
+    // fourth row: stockpile points contents
+    m_stockpile_points_label->MoveTo(GG::Pt(LEFT_TEXT_X, row_offset));
+    m_stockpile_points_label->Resize(LABEL_TEXT_SIZE);
+    m_stockpile_points->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
+    m_stockpile_points->Resize(VALUE_TEXT_SIZE);
+    m_stockpile_points_P_label->MoveTo(GG::Pt(P_LABEL_X, row_offset));
+    m_stockpile_points_P_label->Resize(P_LABEL_SIZE);
+
+    row_offset += m_stockpile_points_label->Height();
+
+
+    // fifth row: stockpile max use
+    m_stockpile_max_use_label->MoveTo(GG::Pt(LEFT_TEXT_X, row_offset));
+    m_stockpile_max_use_label->Resize(LABEL_TEXT_SIZE);
+    m_stockpile_max_use->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
+    m_stockpile_max_use->Resize(VALUE_TEXT_SIZE);
+    m_stockpile_max_use_P_label->MoveTo(GG::Pt(P_LABEL_X, row_offset));
+    m_stockpile_max_use_P_label->Resize(P_LABEL_SIZE);
+
+    row_offset += m_stockpile_points_label->Height();
+
+
+    // sixth row: stockpile use
+    m_stockpile_use_label->MoveTo(GG::Pt(LEFT_TEXT_X, row_offset));
+    m_stockpile_use_label->Resize(LABEL_TEXT_SIZE);
+    m_stockpile_use->MoveTo(GG::Pt(RIGHT_TEXT_X, row_offset));
+    m_stockpile_use->Resize(VALUE_TEXT_SIZE);
+    m_stockpile_use_P_label->MoveTo(GG::Pt(P_LABEL_X, row_offset));
+    m_stockpile_use_P_label->Resize(P_LABEL_SIZE);
+
+    m_local_stockpile_use->MoveTo(GG::Pt(DOUBLE_LEFT_TEXT_X, row_offset));
+    m_local_stockpile_use->Resize(VALUE_TEXT_SIZE);
+    m_local_stockpile_use_P_label->MoveTo(GG::Pt(DOUBLE_P_LABEL_X, row_offset));
+    m_local_stockpile_use_P_label->Resize(P_LABEL_SIZE);
 }
 
 
@@ -2076,7 +2253,8 @@ FPSIndicator::FPSIndicator(void) :
     m_enabled(false),
     m_displayed_FPS(0)
 {
-    GG::Connect(GetOptionsDB().OptionChangedSignal("show-fps"), &FPSIndicator::UpdateEnabled, this);
+    GetOptionsDB().OptionChangedSignal("video.fps.shown").connect(
+        boost::bind(&FPSIndicator::UpdateEnabled, this));
     UpdateEnabled();
     RequirePreRender();
 }
@@ -2104,7 +2282,7 @@ void FPSIndicator::Render() {
 }
 
 void FPSIndicator::UpdateEnabled()
-{ m_enabled = GetOptionsDB().Get<bool>("show-fps"); }
+{ m_enabled = GetOptionsDB().Get<bool>("video.fps.shown"); }
 
 
 //////////////////////////////////////////////////
@@ -2116,7 +2294,7 @@ MultiTextureStaticGraphic::MultiTextureStaticGraphic(const std::vector<std::shar
     m_graphics(),
     m_styles(styles)
 {
-    for (std::shared_ptr<GG::Texture> texture : textures)
+    for (auto& texture : textures)
         m_graphics.push_back(GG::SubTexture(texture, GG::X0, GG::Y0, texture->DefaultWidth(), texture->DefaultHeight()));
     Init();
 }
@@ -2316,11 +2494,14 @@ void RotatingGraphic::Render() {
     glPopMatrix();
 }
 
-CUIPopupMenu::CUIPopupMenu(GG::X x, GG::Y y, const GG::MenuItem& menu) :
-    GG::PopupMenu(x, y, ClientUI::GetFont(), menu, ClientUI::TextColor(), ClientUI::WndOuterBorderColor(),
+////////////////////////////////////////////////
+// CUIPopupMenu
+////////////////////////////////////////////////
+
+CUIPopupMenu::CUIPopupMenu(GG::X x, GG::Y y) :
+    GG::PopupMenu(x, y, ClientUI::GetFont(), ClientUI::TextColor(), ClientUI::WndOuterBorderColor(),
                   ClientUI::WndColor(), ClientUI::EditHiliteColor())
 {}
-
 
 ////////////////////////////////////////////////
 // ScanlineControl

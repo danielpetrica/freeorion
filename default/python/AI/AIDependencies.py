@@ -46,6 +46,7 @@ TROOPS_PER_POP = 0.2
 
 PROT_FOCUS_MULTIPLIER = 2.0
 TECH_COST_MULTIPLIER = 2.0
+FOCUS_CHANGE_PENALTY = 1
 
 # Colonization details
 COLONY_POD_COST = 120  # TODO Query directly from part
@@ -67,6 +68,7 @@ DRYDOCK_HAPPINESS_THRESHOLD = 5
 
 # Constants defined by the C++ game engine
 INVALID_ID = -1
+ALL_EMPIRES = -1
 
 # </editor-fold>
 
@@ -74,27 +76,80 @@ INVALID_ID = -1
 # <editor-fold desc="Environmental population modifiers">
 #  Population modifiers that are based on environment
 
-# boni that scale with planet size
-POP_SIZE_MOD_MAP = {
+# Population modifiers scaling with planet size
+#  - [[EARLY_PRIORITY]]: Affected by species modifiers
+POP_SIZE_MOD_MAP_MODIFIED_BY_SPECIES = {
     # "Effect": [uninhab, hostile, poor, adequate, good]
-    "environment_bonus": [0,-4,-2, 0, 3],
-    "GRO_SUBTER_HAB":    [0, 1, 1, 1, 1],
-    "GRO_SYMBIOTIC_BIO": [0, 0, 1, 1, 1],
-    "GRO_XENO_GENETICS": [0, 1, 2, 2, 0],
-    "GRO_XENO_HYBRID":   [0, 2, 1, 0, 0],
-    "GRO_CYBORG":        [0, 2, 0, 0, 0],
-    "CON_NDIM_STRUC":    [0, 2, 2, 2, 2],
-    "CON_ORBITAL_HAB":   [0, 1, 1, 1, 1],
+    "environment_bonus": [0, -4, -2, 0, 3],
+    "GRO_SYMBIOTIC_BIO": [0,  0,  1, 1, 1],
+    "GRO_XENO_GENETICS": [0,  1,  2, 2, 0],
+    "GRO_XENO_HYBRIDS":   [0,  2,  1, 0, 0],
+    "GRO_CYBORG":        [0,  2,  0, 0, 0],
+}
+
+# Population modifiers scaling with planet size
+#  - [[LATE_PRIORITY]] or later:
+POP_SIZE_MOD_MAP_NOT_MODIFIED_BY_SPECIES = {
+    "GRO_SUBTER_HAB":  [0, 1, 1, 1, 1],
+    "CON_NDIM_STRC":  [0, 2, 2, 2, 2],
+    "CON_ORBITAL_HAB": [0, 1, 1, 1, 1],
 }
 
 # flat boni not dependent on size
 POP_CONST_MOD_MAP = {
     # "Source": [uninhab, hostile, poor, adequate, good]
-    "GRO_PLANET_ECOL":   [0, 0, 0, 1, 1],
-    "GRO_SYMBIOTIC_BIO": [0, 0, 0,-1,-1],
+    "GRO_PLANET_ECOL":   [0, 0, 0,  1,  1],
+    "GRO_SYMBIOTIC_BIO": [0, 0, 0, -1, -1],
+}
+
+# phototrophic star coefficients
+POP_MOD_PHOTOTROPHIC_STAR_MAP = {fo.starType.blue: 3, fo.starType.white: 1.5, fo.starType.red: -1,
+                                 fo.starType.neutron: -1, fo.starType.blackHole: -10, fo.starType.noStar: -10}
+
+# lightsensitive star coefficients
+TAG_LIGHT_SENSITIVE = "LIGHT_SENSITIVE"
+POP_MOD_LIGHTSENSITIVE_STAR_MAP = {fo.starType.blue: -2, fo.starType.white: -1}
+
+# the percentage of normal population that a species with Gaseous tag has
+GASEOUS_POP_FACTOR = 0.50
+
+# </editor-fold>
+
+# <editor-fold desc="Detection Strengths">
+DETECTION_TECH_STRENGTHS = {
+    "SPY_DETECT_1": 10,
+    "SPY_DETECT_2": 30,
+    "SPY_DETECT_3": 50,
+    "SPY_DETECT_4": 70,
+    "SPY_DETECT_5": 200,
 }
 # </editor-fold>
 
+# <editor-fold desc="Stealth Strengths">
+PRIMARY_FOCS_STEALTH_LEVELS = {
+    "LOW_STEALTH": 20,
+    "MEDIUM_STEALTH": 40,
+    "HIGH_STEALTH": 60,
+    "VERY_HIGH_STEALTH": 80,
+}
+
+STEALTH_SPECIAL_STRENGTHS = {
+    "CLOUD_COVER_SLAVE_SPECIAL": PRIMARY_FOCS_STEALTH_LEVELS["LOW_STEALTH"],
+    "VOLCANIC_ASH_SLAVE_SPECIAL": PRIMARY_FOCS_STEALTH_LEVELS["MEDIUM_STEALTH"],
+    "DIM_RIFT_SLAVE_SPECIAL": PRIMARY_FOCS_STEALTH_LEVELS["HIGH_STEALTH"],
+    "VOID_SLAVE_SPECIAL": PRIMARY_FOCS_STEALTH_LEVELS["VERY_HIGH_STEALTH"],
+}
+
+BASE_PLANET_STEALTH = 5
+
+STEALTH_STRENGTHS_BY_SPECIES_TAG = {
+    "BAD_STEALTH": -PRIMARY_FOCS_STEALTH_LEVELS["LOW_STEALTH"],
+    "GOOD_STEALTH": PRIMARY_FOCS_STEALTH_LEVELS["LOW_STEALTH"],
+    "GREAT_STEALTH": PRIMARY_FOCS_STEALTH_LEVELS["MEDIUM_STEALTH"],
+    "ULTIMATE_STEALTH": PRIMARY_FOCS_STEALTH_LEVELS["HIGH_STEALTH"],
+    "INFINITE_STEALTH": 500,  # used by super testers
+}
+# </editor-fold>
 
 # <editor-fold desc="Specials">
 # <editor-fold desc="Growth Focus specials">
@@ -159,7 +214,10 @@ HONEYCOMB_IND_MULTIPLIER = 2.5
 # </editor-fold>
 
 # <editor-fold desc="Research related specials">
+COMPUTRONIUM_SPECIAL = "COMPUTRONIUM_SPECIAL"
 COMPUTRONIUM_RES_MULTIPLIER = 1.0
+
+ANCIENT_RUINS_SPECIAL = "ANCIENT_RUINS_SPECIAL"
 # </editor-fold>
 
 # <editor-fold desc="Supply related specials">
@@ -174,6 +232,11 @@ SUPPLY_MOD_SPECIALS = {
         -1: -1,
     },
 }
+# </editor-fold>
+
+# <editor-fold desc="Detection related specials">
+PANOPTICON_SPECIAL = "PANOPTICON_SPECIAL"
+PANOPTICON_DETECTION_BONUS = 10
 # </editor-fold>
 
 
@@ -207,6 +270,9 @@ CON_CONC_CAMP = "CON_CONC_CAMP"
 
 SPY_STEALTH_1 = "SPY_STEALTH_1"
 SPY_STEALTH_2 = "SPY_STEALTH_2"
+
+EXOBOT_TECH_NAME = "PRO_EXOBOTS"
+
 # </editor-fold>
 
 
@@ -536,7 +602,7 @@ SP_LAMBALALAM = "SP_LEMBALALAM"
 SPECIES_RESEARCH_MODIFIER = {'NO': 0.0, 'BAD': 0.75, 'GOOD': 1.5, 'GREAT': 2.0, 'ULTIMATE': 3.0}
 SPECIES_INDUSTRY_MODIFIER = {'NO': 0.0, 'BAD': 0.75, 'GOOD': 1.5, 'GREAT': 2.0, 'ULTIMATE': 3.0}
 SPECIES_POPULATION_MODIFIER = {'BAD': 0.75, 'GOOD': 1.25}
-SPECIES_SUPPLY_MODIFIER = {'BAD': 0, 'AVERAGE': 1, 'GREAT': 2, 'ULTIMATE': 3}
+SPECIES_SUPPLY_MODIFIER = {'VERY_BAD': -1, 'BAD': 0, 'AVERAGE': 1, 'GREAT': 2, 'ULTIMATE': 3}
 
 # <editor-fold desc="XenoResurrectionSpecies">
 EXTINCT_SPECIES = [
@@ -583,6 +649,11 @@ PILOT_FIGHTER_CAPACITY_MODIFIER_DICT = {
     "GREAT":    {},
     "ULTIMATE": {},
 }
+
+HANGAR_LAUNCH_CAPACITY_MODIFIER_DICT = {
+    # hangar_name: {bay_name: effect, bay_name2: effect, ...}
+    "FT_HANGAR_1": {"FT_BAY_1": 2},
+}
 # </editor-fold>
 
 # <editor-fold desc="Extraordinary Species Rules">
@@ -622,12 +693,13 @@ building_supply = {
         fo.planetSize.medium: 3,
         fo.planetSize.large: 4,
         fo.planetSize.huge: 5,
-        fo.planetSize.gasGiant: 4,
+        fo.planetSize.gasGiant: 3,
     },
 }
 # </editor-fold>
 
 # <editor-fold desc="Shipyards">
+BLD_SHIPYARD_ORBITAL_DRYDOCK = "BLD_SHIPYARD_ORBITAL_DRYDOCK"
 # ship facilities info, dict keyed by building name, value is (min_aggression, prereq_bldg, base_cost, time)
 # not currently determined dynamically because it is initially used in a location-independent fashion
 # note that BLD_SHIPYARD_BASE is not an absolute prereq for BLD_NEUTRONIUM_FORGE, but is a practical one
@@ -817,5 +889,3 @@ PART_EFFECTS = {
 # </editor-fold>
 
 # </editor-fold>
-
-

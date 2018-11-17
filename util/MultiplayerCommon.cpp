@@ -2,7 +2,7 @@
 
 #include "Directories.h"
 #include "i18n.h"
-#include "Logger.h"
+#include "LoggerWithOptionsDB.h"
 #include "OptionsDB.h"
 #include "Random.h"
 #include "../universe/Fleet.h"
@@ -22,21 +22,28 @@ const std::string SP_SAVE_FILE_EXTENSION = ".sav";
 namespace {
     // command-line options
     void AddOptions(OptionsDB& db) {
-        db.Add<std::string>("resource-dir",         UserStringNop("OPTIONS_DB_RESOURCE_DIR"),          PathString(GetRootDataDir() / "default"));
-        db.Add<std::string>('S', "save-dir",        UserStringNop("OPTIONS_DB_SAVE_DIR"),              PathString(GetUserDataDir() / "save"));
-        db.Add<std::string>("log-level",            UserStringNop("OPTIONS_DB_LOG_LEVEL"),             "DEBUG");
-        db.Add<std::string>("stringtable-filename", UserStringNop("OPTIONS_DB_STRINGTABLE_FILENAME"),  PathString(GetRootDataDir() / "default" / "stringtables" / "en.txt"));
-        db.Add("binary-serialization",              UserStringNop("OPTIONS_DB_BINARY_SERIALIZATION"),  false);
-        db.Add("xml-zlib-serialization",            UserStringNop("OPTIONS_DB_XML_ZLIB_SERIALIZATION"),true);
+        db.Add<std::string>("resource.path",                UserStringNop("OPTIONS_DB_RESOURCE_DIR"),           PathToString(GetRootDataDir() / "default"));
+        db.Add<std::string>('S', "save.path",               UserStringNop("OPTIONS_DB_SAVE_DIR"),               PathToString(GetUserDataDir() / "save"));
+        db.Add<std::string>("save.server.path",             UserStringNop("OPTIONS_DB_SERVER_SAVE_DIR"),        PathToString(GetUserDataDir() / "save"));
+        db.Add<std::string>("log-level",                    UserStringNop("OPTIONS_DB_LOG_LEVEL"),              "",
+                            OrValidator<std::string>(LogLevelValidator(), DiscreteValidator<std::string>("")),  false);
+        db.Add<std::string>("log-file",                     UserStringNop("OPTIONS_DB_LOG_FILE"),               "",
+                            Validator<std::string>() ,                                                          false);
+        // Default stringtable filename is deferred to i18n.cpp::InitStringtableFileName to determine if user specified
+        db.Add<std::string>("resource.stringtable.path",    UserStringNop("OPTIONS_DB_STRINGTABLE_FILENAME"),   "");
+        db.Add("save.format.binary.enabled",                UserStringNop("OPTIONS_DB_BINARY_SERIALIZATION"),   false);
+        db.Add("save.format.xml.zlib.enabled",              UserStringNop("OPTIONS_DB_XML_ZLIB_SERIALIZATION"), true);
+        db.Add("save.auto.hostless.enabled",                UserStringNop("OPTIONS_DB_AUTOSAVE_HOSTLESS"),      true);
 
-        // AI Testing options-- the following options are to facilitate AI testing and do not currently have an options page widget; 
+        // AI Testing options-- the following options are to facilitate AI testing and do not currently have an options page widget;
         // they are intended to be changed via the command line and are not currently storable in the configuration file.
-        db.Add<std::string>("ai-path",              UserStringNop("OPTIONS_DB_AI_FOLDER_PATH"),        "python/AI",     Validator<std::string>(), false);
-        db.Add<std::string>("ai-config",            UserStringNop("OPTIONS_DB_AI_CONFIG"),             "",       Validator<std::string>(), false);
+        db.Add<std::string>("ai-path",                      UserStringNop("OPTIONS_DB_AI_FOLDER_PATH"),         "python/AI",
+                            Validator<std::string>(),                                                           false);
+        db.Add<std::string>("ai-config",                    UserStringNop("OPTIONS_DB_AI_CONFIG"),              "",
+                            Validator<std::string>(),                                                           false);
     }
     bool temp_bool = RegisterOptions(&AddOptions);
 }
-
 
 /////////////////////////////////////////////////////
 // GalaxySetupData
@@ -60,6 +67,8 @@ namespace {
                       << " from 0 to " << static_cast<int>(enum_vals_count) - 1;
         return hash_value % static_cast<int>(enum_vals_count);
     }
+
+    static char alphanum[] = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 }
 
 GalaxySetupData::GalaxySetupData() :
@@ -74,6 +83,21 @@ GalaxySetupData::GalaxySetupData() :
     m_native_freq(GALAXY_SETUP_MEDIUM),
     m_ai_aggr(MANIACAL)
 {}
+
+GalaxySetupData::GalaxySetupData(GalaxySetupData&& base) :
+    m_seed(std::move(base.m_seed)),
+    m_size(base.m_size),
+    m_shape(base.m_shape),
+    m_age(base.m_age),
+    m_starlane_freq(base.m_starlane_freq),
+    m_planet_density(base.m_planet_density),
+    m_specials_freq(base.m_specials_freq),
+    m_monster_freq(base.m_monster_freq),
+    m_native_freq(base.m_native_freq),
+    m_ai_aggr(base.m_ai_aggr),
+    m_game_rules(std::move(base.m_game_rules)),
+    m_game_uid(std::move(base.m_game_uid))
+{ SetSeed(m_seed); }
 
 const std::string& GalaxySetupData::GetSeed() const
 { return m_seed; }
@@ -127,6 +151,26 @@ GalaxySetupOption GalaxySetupData::GetNativeFreq() const {
 Aggression GalaxySetupData::GetAggression() const
 { return m_ai_aggr; }
 
+const std::vector<std::pair<std::string, std::string>>& GalaxySetupData::GetGameRules() const
+{ return m_game_rules; }
+
+const std::string& GalaxySetupData::GetGameUID() const
+{ return m_game_uid; }
+
+void GalaxySetupData::SetSeed(const std::string& seed) {
+    std::string new_seed = seed;
+    if (new_seed.empty() || new_seed == "RANDOM") {
+        ClockSeed();
+        new_seed.clear();
+        for (int i = 0; i < 8; ++i)
+            new_seed += alphanum[RandSmallInt(0, (sizeof(alphanum) - 2))];
+        DebugLogger() << "Set empty or requested random seed to " << new_seed;
+    }
+    m_seed = new_seed;
+}
+
+void GalaxySetupData::SetGameUID(const std::string& game_uid)
+{ m_game_uid = game_uid; }
 
 /////////////////////////////////////////////////////
 // PlayerSetupData

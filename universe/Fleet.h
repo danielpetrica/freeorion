@@ -30,9 +30,11 @@ struct MovePathNode {
 class FO_COMMON_API Fleet : public UniverseObject {
 public:
     /** \name Accessors */ //@{
+    bool HostileToEmpire(int empire_id) const override;
+
     UniverseObjectType ObjectType() const override;
 
-    std::string Dump() const override;
+    std::string Dump(unsigned short ntabs = 0) const override;
 
     int ContainerObjectID() const override;
 
@@ -47,6 +49,7 @@ public:
     std::shared_ptr<UniverseObject>Accept(const UniverseObjectVisitor& visitor) const override;
 
     const std::set<int>&                ShipIDs() const     { return m_ships; }         ///< returns set of IDs of ships in fleet.
+    int                                 MaxShipAgeInTurns() const;                      ///< Returns the age of the oldest ship in the fleet
 
     /** Returns the list of systems that this fleet will move through en route
       * to its destination (may be empty).  If this fleet is currently at a
@@ -72,6 +75,7 @@ public:
     int                                 FinalDestinationID() const;         ///< Returns ID of system that this fleet is moving to or INVALID_OBJECT_ID if staying still.
     int                                 PreviousSystemID() const            { return m_prev_system; }   ///< Returns ID of system that this fleet is moving away from as it moves to its destination.
     int                                 NextSystemID() const                { return m_next_system; }   ///< Returns ID of system that this fleet is moving to next as it moves to its destination.
+    bool                                Blockaded() const;                  ///< returns true iff either (i) fleet is stationary and at least one system exit is blocked for this fleet or (ii) fleet is attempting to depart a system along a blocked system exit
     bool                                BlockadedAtSystem(int start_system_id, int dest_system_id) const; ///< returns true iff this fleet's movement would be blockaded at system.
     float                               Speed() const;                      ///< Returns speed of fleet. (Should be equal to speed of slowest ship in fleet, unless in future the calculation of fleet speed changes.)
     bool                                CanChangeDirectionEnRoute() const   { return false; }           ///< Returns true iff this fleet can change its direction while in interstellar space.
@@ -115,9 +119,7 @@ public:
 
     void                    SetAggressive(bool aggressive = true);          ///< sets this fleet to be agressive (true) or passive (false)
 
-    void                    AddShip(int ship_id);                           ///< adds the ship to the fleet
     void                    AddShips(const std::vector<int>& ship_ids);     ///< adds the ships to the fleet
-    void                    RemoveShip(int ship_id);                        ///< removes the ship from the fleet.
     void                    RemoveShips(const std::vector<int>& ship_ids);  ///< removes the ships from the fleet.
 
     void                    SetNextAndPreviousSystems(int next, int prev);  ///< sets the previous and next systems for this fleet.  Useful after moving a moving fleet to a different location, so that it moves along its new local starlanes
@@ -140,20 +142,12 @@ protected:
     friend class ObjectMap;
 
     /** \name Structors */ //@{
-    Fleet() :
-        UniverseObject(),
-        m_prev_system(INVALID_OBJECT_ID),
-        m_next_system(INVALID_OBJECT_ID),
-        m_aggressive(true),
-        m_ordered_given_to_empire_id(ALL_EMPIRES),
-        m_travel_route(),
-        m_travel_distance(0.0),
-        m_arrived_this_turn(false),
-        m_arrival_starlane(INVALID_OBJECT_ID)
-    {}
+    Fleet() {}
+
+public:
     Fleet(const std::string& name, double x, double y, int owner);      ///< general ctor taking name, position and owner id
 
-    template <typename T> friend void UniverseObjectDeleter(T*);
+protected:
     template <class T> friend void boost::python::detail::value_destroyer<false>::execute(T const volatile* p);
 
 public:
@@ -165,18 +159,15 @@ protected:
     //@}
 
 private:
-    ///< removes any systems on the route after the specified system
-    void                    ShortenRouteToEndAtSystem(std::list<int>& travel_route, int last_system);
-
     std::set<int>               m_ships;
 
     // these two uniquely describe the starlane graph edge the fleet is on, if it it's on one
-    int                         m_prev_system;  ///< the previous system in the route, if any
-    int                         m_next_system;  ///< the next system in the route, if any
+    int                         m_prev_system = INVALID_OBJECT_ID;  ///< the previous system in the route, if any
+    int                         m_next_system = INVALID_OBJECT_ID;  ///< the next system in the route, if any
 
-    bool                        m_aggressive;    ///< should this fleet attack enemies in the same system?
+    bool                        m_aggressive = true;    ///< should this fleet attack enemies in the same system?
 
-    int                         m_ordered_given_to_empire_id;
+    int                         m_ordered_given_to_empire_id = ALL_EMPIRES;
 
     /** list of systems on travel route of fleet from current position to
       * destination.  If the fleet is currently in a system, that will be the
@@ -186,16 +177,13 @@ private:
       * unknown.  The list may also be empty, which indicates that the fleet
       * is not planning to move. */
     std::list<int>              m_travel_route;
-    mutable double              m_travel_distance;
 
-    bool                        m_arrived_this_turn;
-    int                         m_arrival_starlane; // see comment for ArrivalStarlane()
+    bool                        m_arrived_this_turn = false;
+    int                         m_arrival_starlane = INVALID_OBJECT_ID; // see comment for ArrivalStarlane()
 
     friend class boost::serialization::access;
     template <class Archive>
     void serialize(Archive& ar, const unsigned int version);
 };
-
-BOOST_CLASS_VERSION(Fleet, 2)
 
 #endif // _Fleet_h_

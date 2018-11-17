@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "../util/Export.h"
 
 class UniverseObject;
 
@@ -18,7 +19,7 @@ namespace Effect {
 
     /** Description of cause of an effect: the general cause type, and the
       * specific cause.  eg. Building and a particular BuildingType. */
-    struct EffectCause {
+    struct FO_COMMON_API EffectCause {
         EffectCause();
         EffectCause(EffectsCauseType cause_type_, const std::string& specific_cause_,
                     const std::string& custom_label_ = "");
@@ -29,8 +30,9 @@ namespace Effect {
 
     /** Accounting information about what the causes are and changes produced
       * by effects groups acting on meters of objects. */
-    struct AccountingInfo : public EffectCause {
+    struct FO_COMMON_API AccountingInfo : public EffectCause {
         AccountingInfo();
+        bool operator==(const AccountingInfo& rhs) const;
 
         int     source_id;          ///< source object of effect
         float   meter_change;       ///< net change on meter due to this effect, as best known by client's empire
@@ -45,7 +47,7 @@ namespace Effect {
     struct TargetsAndCause {
         TargetsAndCause();
         TargetsAndCause(const TargetSet& target_set_, const EffectCause& effect_cause_);
-        TargetSet   target_set;
+        TargetSet target_set;
         EffectCause effect_cause;
     };
 
@@ -53,10 +55,8 @@ namespace Effect {
     struct SourcedEffectsGroup {
         SourcedEffectsGroup();
         SourcedEffectsGroup(int source_object_id_, const std::shared_ptr<EffectsGroup>& effects_group_);
-        bool    operator<(const SourcedEffectsGroup& right) const;
-        void    Execute(const TargetSet& targets) const;
-        void    Execute(const TargetsAndCause& targets_and_cause, AccountingMap& accounting_map) const;
-        int                             source_object_id;
+        bool operator<(const SourcedEffectsGroup& right) const;
+        int source_object_id;
         std::shared_ptr<EffectsGroup> effects_group;
     };
 

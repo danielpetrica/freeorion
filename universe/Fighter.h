@@ -15,9 +15,11 @@ public:
     Fighter();
     ~Fighter();
 
+    bool HostileToEmpire(int empire_id) const override;
+
     UniverseObjectType ObjectType() const override;
 
-    std::string Dump() const override;
+    std::string Dump(unsigned short ntabs = 0) const override;
 
     std::shared_ptr<UniverseObject> Accept(const UniverseObjectVisitor& visitor) const override;
 
@@ -33,9 +35,9 @@ protected:
     Fighter* Clone(int empire_id = ALL_EMPIRES) const override;
 
 private:
-    float       m_damage;           // strength of fighter's attack
-    bool        m_destroyed;        // was attacked by anything -> destroyed
-    int         m_launched_from_id; // from what object (ship?) was this fighter launched
+    float       m_damage = 0.0f;                        // strength of fighter's attack
+    bool        m_destroyed = false;                    // was attacked by anything -> destroyed
+    int         m_launched_from_id = INVALID_OBJECT_ID; // from what object (ship?) was this fighter launched
     std::string m_species_name;
 };
 

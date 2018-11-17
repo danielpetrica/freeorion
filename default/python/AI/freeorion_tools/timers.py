@@ -8,9 +8,12 @@ import sys
 # setup module
 options = get_option_dict()
 
-USE_TIMERS = check_bool(options[TIMERS_USE_TIMERS])
-DUMP_TO_FILE = check_bool(options[TIMERS_TO_FILE])
-TIMERS_DIR = os.path.join(fo.getUserDataDir(), DEFAULT_SUB_DIR, options[TIMERS_DUMP_FOLDER])
+try:
+    USE_TIMERS = check_bool(options[TIMERS_USE_TIMERS])
+    DUMP_TO_FILE = check_bool(options[TIMERS_TO_FILE])
+    TIMERS_DIR = os.path.join(fo.getUserDataDir(), DEFAULT_SUB_DIR, options[TIMERS_DUMP_FOLDER])
+except KeyError:
+    USE_TIMERS = False
 
 
 def make_header(*args):
@@ -105,5 +108,6 @@ class AILogTimer(Timer):
             for header, val in zip(self.headers, [turn] + [x[1] for x in self.timers]):
                 row.append('%*s ' % (len(header) - 2, int(val)))
             self._write(''.join(row))
+
 
 AITimer = AILogTimer if USE_TIMERS else DummyTimer

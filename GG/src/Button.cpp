@@ -52,22 +52,27 @@ namespace {
 Button::Button(const std::string& str, const std::shared_ptr<Font>& font, Clr color,
                Clr text_color/* = CLR_BLACK*/, Flags<WndFlag> flags/* = INTERACTIVE*/) :
     Control(X0, Y0, X1, Y1, flags),
-    m_label(new TextControl(X0, Y0, X1, Y1, str, font, text_color, FORMAT_NONE, NO_WND_FLAGS)),
+    m_label(Wnd::Create<TextControl>(X0, Y0, X1, Y1, str, font, text_color, FORMAT_NONE, NO_WND_FLAGS)),
     m_state(BN_UNPRESSED)
 {
     m_color = color;
-    AttachChild(m_label);
     m_label->Hide();
 
     if (INSTRUMENT_ALL_SIGNALS)
-        Connect(LeftClickedSignal, &ClickedEcho);
+        LeftClickedSignal.connect(&ClickedEcho);
 }
+
+void Button::CompleteConstruction()
+{ AttachChild(m_label); }
 
 Pt Button::MinUsableSize() const
 { return m_label->MinUsableSize(); }
 
-void Button::Show(bool children/* = true*/)
-{ Wnd::Show(false); }
+void Button::Show()
+{
+    Wnd::Show();
+    m_label->Hide();
+}
 
 Button::ButtonState Button::State() const
 { return m_state; }
@@ -119,12 +124,15 @@ void Button::SetRolloverGraphic(const SubTexture& st)
 
 void Button::LButtonDown(const Pt& pt, Flags<ModKey> mod_keys)
 {
-    if (!Disabled()) {
-        ButtonState prev_state = m_state;
-        m_state = BN_PRESSED;
-        if (prev_state == BN_PRESSED && RepeatButtonDown())
-            LeftClickedSignal();
-    }
+    if (Disabled())
+        return;
+
+    ButtonState prev_state = m_state;
+    m_state = BN_PRESSED;
+    if (prev_state == BN_PRESSED && RepeatButtonDown())
+        LeftClickedSignal();
+    else if (prev_state != BN_PRESSED)
+        LeftPressedSignal();
 }
 
 void Button::LDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys)
@@ -150,12 +158,15 @@ void Button::LClick(const Pt& pt, Flags<ModKey> mod_keys)
 
 void Button::RButtonDown(const Pt& pt, Flags<ModKey> mod_keys)
 {
-    if (!Disabled()) {
-        ButtonState prev_state = m_state;
-        m_state = BN_PRESSED;
-        if (prev_state == BN_PRESSED && RepeatButtonDown())
-            RightClickedSignal();
-    }
+    if (Disabled())
+        return;
+
+    ButtonState prev_state = m_state;
+    m_state = BN_PRESSED;
+    if (prev_state == BN_PRESSED && RepeatButtonDown())
+        RightClickedSignal();
+    else if (prev_state != BN_PRESSED)
+        RightPressedSignal();
 }
 
 void Button::RDrag(const Pt& pt, const Pt& move, Flags<ModKey> mod_keys)
@@ -261,20 +272,26 @@ void Button::RenderDefault()
 ////////////////////////////////////////////////
 // GG::StateButton
 ////////////////////////////////////////////////
-StateButton::StateButton(const std::string& str, const std::shared_ptr<Font>& font, Flags<TextFormat> format,
-                         Clr color, std::shared_ptr<StateButtonRepresenter> representer, Clr text_color/* = CLR_BLACK*/) :
+StateButton::StateButton(const std::string& str, const std::shared_ptr<Font>& font,
+                         Flags<TextFormat> format, Clr color,
+                         std::shared_ptr<StateButtonRepresenter> representer,
+                         Clr text_color/* = CLR_BLACK*/) :
     Control(X0, Y0, X1, Y1, INTERACTIVE),
     m_representer(representer),
-    m_label(new TextControl(X0, Y0, X1, Y1, str, font, text_color, format, NO_WND_FLAGS)),
+    m_label(Wnd::Create<TextControl>(X0, Y0, X1, Y1, str, font, text_color, format, NO_WND_FLAGS)),
     m_state(BN_UNPRESSED),
     m_checked(false)
 {
     m_color = color;
+}
+
+void StateButton::CompleteConstruction()
+{
     AttachChild(m_label);
     m_label->Hide();
 
     if (INSTRUMENT_ALL_SIGNALS)
-        Connect(CheckedSignal, &CheckedEcho);
+        CheckedSignal.connect(&CheckedEcho);
 }
 
 Pt StateButton::MinUsableSize() const
@@ -300,8 +317,11 @@ void StateButton::Render()
         m_representer->Render(*this);
 }
 
-void StateButton::Show(bool children/* = true*/)
-{ Wnd::Show(false); }
+void StateButton::Show()
+{
+    Wnd::Show();
+    m_label->Hide();
+}
 
 void StateButton::LButtonDown(const Pt& pt, Flags<ModKey> mod_keys)
 { SetState(BN_PRESSED); }
@@ -356,7 +376,7 @@ void StateButton::SetTextColor(Clr c)
 { m_label->SetTextColor(c); }
 
 TextControl* StateButton::GetLabel() const
-{ return m_label; }
+{ return m_label.get(); }
 
 
 ////////////////////////////////////////////////
@@ -543,7 +563,7 @@ void BeveledTabRepresenter::Render(const StateButton& button) const
 // GG::RadioButtonGroup
 ////////////////////////////////////////////////
 // ButtonSlot
-RadioButtonGroup::ButtonSlot::ButtonSlot(StateButton* button_) :
+RadioButtonGroup::ButtonSlot::ButtonSlot(std::shared_ptr<StateButton>& button_) :
     button(button_)
 {}
 
@@ -562,7 +582,7 @@ RadioButtonGroup::RadioButtonGroup(Orientation orientation) :
     SetColor(CLR_YELLOW);
 
     if (INSTRUMENT_ALL_SIGNALS)
-        Connect(ButtonChangedSignal, &ButtonChangedEcho);
+        ButtonChangedSignal.connect(&ButtonChangedEcho);
 }
 
 Pt RadioButtonGroup::MinUsableSize() const
@@ -605,7 +625,7 @@ bool RadioButtonGroup::RenderOutline() const
 void RadioButtonGroup::RaiseCheckedButton()
 {
     if (m_checked_button != NO_BUTTON)
-        MoveChildUp(m_button_slots[m_checked_button].button);
+        MoveChildUp(m_button_slots[m_checked_button].button.get());
 }
 
 void RadioButtonGroup::Render()
@@ -634,10 +654,10 @@ void RadioButtonGroup::DisableButton(std::size_t index, bool b/* = true*/)
     }
 }
 
-void RadioButtonGroup::AddButton(StateButton* bn)
-{ InsertButton(m_button_slots.size(), bn); }
+void RadioButtonGroup::AddButton(std::shared_ptr<StateButton> bn)
+{ InsertButton(m_button_slots.size(), std::forward<std::shared_ptr<StateButton>>(bn)); }
 
-void RadioButtonGroup::InsertButton(std::size_t index, StateButton* bn)
+void RadioButtonGroup::InsertButton(std::size_t index, std::shared_ptr<StateButton> bn)
 {
     assert(index <= m_button_slots.size());
     if (!m_expand_buttons) {
@@ -645,9 +665,9 @@ void RadioButtonGroup::InsertButton(std::size_t index, StateButton* bn)
         bn->Resize(Pt(std::max(bn->Width(), min_usable_size.x), std::max(bn->Height(), min_usable_size.y)));
     }
     Pt bn_sz = bn->Size();
-    Layout* layout = GetLayout();
+    auto&& layout = GetLayout();
     if (!layout) {
-        layout = new Layout(X0, Y0, ClientWidth(), ClientHeight(), 1, 1);
+        layout = Wnd::Create<Layout>(X0, Y0, ClientWidth(), ClientHeight(), 1, 1);
         SetLayout(layout);
     }
     const int CELLS_PER_BUTTON = m_expand_buttons ? 1 : 2;
@@ -670,7 +690,7 @@ void RadioButtonGroup::InsertButton(std::size_t index, StateButton* bn)
             layout->SetColumnStretch(layout->Columns() - CELLS_PER_BUTTON, X_STRETCH);
         }
         for (std::size_t i = m_button_slots.size() - 1; index <= i; --i) {
-            layout->Remove(m_button_slots[i].button);
+            layout->Remove(m_button_slots[i].button.get());
             layout->Add(m_button_slots[i].button,
                         m_orientation == VERTICAL ? i * CELLS_PER_BUTTON + CELLS_PER_BUTTON : 0,
                         m_orientation == VERTICAL ? 0 : i * CELLS_PER_BUTTON + CELLS_PER_BUTTON);
@@ -696,7 +716,7 @@ void RadioButtonGroup::RemoveButton(StateButton* button)
 {
     std::size_t index = NO_BUTTON;
     for (std::size_t i = 0; i < m_button_slots.size(); ++i) {
-        if (m_button_slots[i].button == button) {
+        if (m_button_slots[i].button.get() == button) {
             index = i;
             break;
         }
@@ -704,10 +724,10 @@ void RadioButtonGroup::RemoveButton(StateButton* button)
     assert(index < m_button_slots.size());
 
     const int CELLS_PER_BUTTON = m_expand_buttons ? 1 : 2;
-    Layout* layout = GetLayout();
-    layout->Remove(m_button_slots[index].button);
+    auto&& layout = GetLayout();
+    layout->Remove(m_button_slots[index].button.get());
     for (std::size_t i = index + 1; i < m_button_slots.size(); ++i) {
-        layout->Remove(m_button_slots[i].button);
+        layout->Remove(m_button_slots[i].button.get());
         if (m_orientation == VERTICAL) {
             layout->Add(m_button_slots[i].button, i * CELLS_PER_BUTTON - CELLS_PER_BUTTON, 0);
             layout->SetRowStretch(i * CELLS_PER_BUTTON - CELLS_PER_BUTTON, layout->RowStretch(i * CELLS_PER_BUTTON));
@@ -740,14 +760,14 @@ void RadioButtonGroup::ExpandButtons(bool expand)
 {
     if (expand != m_expand_buttons) {
         std::size_t old_checked_button = m_checked_button;
-        std::vector<StateButton*> buttons(m_button_slots.size());
+        std::vector<std::shared_ptr<StateButton>> buttons(m_button_slots.size());
         while (!m_button_slots.empty()) {
-            StateButton* button = m_button_slots.back().button;
+            auto button = m_button_slots.back().button;
             buttons[m_button_slots.size() - 1] = button;
-            RemoveButton(button);
+            RemoveButton(button.get());
         }
         m_expand_buttons = expand;
-        for (StateButton* button : buttons) {
+        for (auto& button : buttons) {
             AddButton(button);
         }
         SetCheck(old_checked_button);
@@ -758,14 +778,14 @@ void RadioButtonGroup::ExpandButtonsProportionally(bool proportional)
 {
     if (proportional != m_expand_buttons_proportionally) {
         std::size_t old_checked_button = m_checked_button;
-        std::vector<StateButton*> buttons(m_button_slots.size());
+        std::vector<std::shared_ptr<StateButton>> buttons(m_button_slots.size());
         while (!m_button_slots.empty()) {
-            StateButton* button = m_button_slots.back().button;
+            auto& button = m_button_slots.back().button;
             buttons[m_button_slots.size() - 1] = button;
-            RemoveButton(button);
+            RemoveButton(button.get());
         }
         m_expand_buttons_proportionally = proportional;
-        for (StateButton* button : buttons) {
+        for (auto& button : buttons) {
             AddButton(button);
         }
         SetCheck(old_checked_button);
@@ -781,7 +801,7 @@ const std::vector<RadioButtonGroup::ButtonSlot>& RadioButtonGroup::ButtonSlots()
 void RadioButtonGroup::ConnectSignals()
 {
     for (std::size_t i = 0; i < m_button_slots.size(); ++i) {
-        m_button_slots[i].connection = Connect(m_button_slots[i].button->CheckedSignal, [this, i](bool checked) {
+        m_button_slots[i].connection = m_button_slots[i].button->CheckedSignal.connect([this, i](bool checked) {
             if (checked)
                 this->SetCheckImpl(i, true);
             else

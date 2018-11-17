@@ -54,6 +54,8 @@ namespace {
             return GG::Clr(255, 255, 0, 255);
         case METER_SUPPLY:
         case METER_MAX_SUPPLY:
+        case METER_STOCKPILE:
+        case METER_MAX_STOCKPILE:
         case METER_CONSTRUCTION:
         case METER_TARGET_CONSTRUCTION:
         case METER_POPULATION:
@@ -162,8 +164,6 @@ void MultiMeterStatusBar::Render() {
         const GG::Y INITIAL_TOP(BAR_TOP);
         if (SHOW_INITIAL) {
             // initial value
-            const GG::X INITIAL_RIGHT(BAR_LEFT + BAR_MAX_LENGTH * m_initial_values[i] / MULTI_METER_STATUS_BAR_DISPLAYED_METER_RANGE);
-            const GG::Y INITIAL_TOP(BAR_TOP);
             glColor(m_bar_colours[i]);
             m_bar_shading_texture->OrthoBlit(GG::Pt(BAR_LEFT, INITIAL_TOP), GG::Pt(INITIAL_RIGHT, BAR_BOTTOM));
             // black border
@@ -203,7 +203,7 @@ void MultiMeterStatusBar::Update() {
     m_projected_values.clear(); // projected current value of .first MeterTypes for the start of next turn
     m_target_max_values.clear();// current values of the .second MeterTypes in m_meter_types
 
-    std::shared_ptr<const UniverseObject> obj = GetUniverseObject(m_object_id);
+    auto obj = GetUniverseObject(m_object_id);
     if (!obj) {
         ErrorLogger() << "MultiMeterStatusBar couldn't get object with id " << m_object_id;
         return;
@@ -211,18 +211,20 @@ void MultiMeterStatusBar::Update() {
 
     int num_bars = 0;   // count number of valid bars' data added
 
-    for (const std::pair<MeterType, MeterType>& meter_types_pair : m_meter_types) {
+    for (auto& meter_types_pair : m_meter_types) {
         const Meter* actual_meter = obj->GetMeter(meter_types_pair.first);
         const Meter* target_max_meter = obj->GetMeter(meter_types_pair.second);
 
-        std::tuple<float, float, float> current_projected_target = DualMeter::CurrentProjectedTarget(
-            *obj, meter_types_pair.first, meter_types_pair.second);
-
         if (actual_meter || target_max_meter) {
+            float initial = actual_meter ? actual_meter->Initial() : Meter::INVALID_VALUE;
+            float projected = actual_meter ? actual_meter->Current() : Meter::INVALID_VALUE;
+            float target = target_max_meter ? target_max_meter->Current() : Meter::INVALID_VALUE;
+
             ++num_bars;
-            m_initial_values.push_back(std::get<0>(current_projected_target));
-            m_projected_values.push_back(std::get<1>(current_projected_target));
-            m_target_max_values.push_back(std::get<2>(current_projected_target));
+
+            m_initial_values.push_back(initial);
+            m_projected_values.push_back(projected);
+            m_target_max_values.push_back(target);
             m_bar_colours.push_back(MeterColor(meter_types_pair.first));
         }
     }

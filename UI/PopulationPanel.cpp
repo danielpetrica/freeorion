@@ -32,14 +32,18 @@ PopulationPanel::PopulationPanel(GG::X w, int object_id) :
     m_meter_stats(),
     m_multi_icon_value_indicator(nullptr),
     m_multi_meter_status_bar(nullptr)
-{
+{}
+
+void PopulationPanel::CompleteConstruction() {
+    AccordionPanel::CompleteConstruction();
     SetName("PopulationPanel");
 
-    std::shared_ptr<const PopCenter> pop = GetPopCenter();
+    auto pop = GetPopCenter();
     if (!pop)
         throw std::invalid_argument("Attempted to construct a PopulationPanel with an object id is not a PopCenter");
 
-    GG::Connect(m_expand_button->LeftClickedSignal, &PopulationPanel::ExpandCollapseButtonPressed, this);
+    m_expand_button->LeftPressedSignal.connect(
+        boost::bind(&PopulationPanel::ExpandCollapseButtonPressed, this));
 
     const auto obj = GetUniverseObject(m_popcenter_id);
     if (!obj) {
@@ -48,31 +52,34 @@ PopulationPanel::PopulationPanel(GG::X w, int object_id) :
     }
 
     // small meter indicators - for use when panel is collapsed
-    m_meter_stats.push_back(
-        std::make_pair(METER_POPULATION, new StatisticIcon(ClientUI::SpeciesIcon(pop->SpeciesName()),
-                                                           obj->InitialMeterValue(METER_POPULATION), 3, false,
-                                                           GG::X0, GG::Y0, MeterIconSize().x, MeterIconSize().y)));
-    m_meter_stats.push_back(
-        std::make_pair(METER_HAPPINESS, new StatisticIcon(ClientUI::MeterIcon(METER_HAPPINESS),
-                                                          obj->InitialMeterValue(METER_HAPPINESS), 3, false,
-                                                          GG::X0, GG::Y0, MeterIconSize().x, MeterIconSize().y)));
-    m_meter_stats.push_back(
-        std::make_pair(METER_CONSTRUCTION, new StatisticIcon(ClientUI::MeterIcon(METER_CONSTRUCTION),
-                                                             obj->InitialMeterValue(METER_CONSTRUCTION), 3, false,
-                                                             GG::X0, GG::Y0, MeterIconSize().x, MeterIconSize().y)));
+    m_meter_stats.push_back({
+        METER_POPULATION,
+        GG::Wnd::Create<StatisticIcon>(ClientUI::SpeciesIcon(pop->SpeciesName()),
+                                       obj->InitialMeterValue(METER_POPULATION), 3, false,
+                                       MeterIconSize().x, MeterIconSize().y)});
+    m_meter_stats.push_back({
+        METER_HAPPINESS,
+        GG::Wnd::Create<StatisticIcon>(ClientUI::MeterIcon(METER_HAPPINESS),
+                                       obj->InitialMeterValue(METER_HAPPINESS), 3, false,
+                                       MeterIconSize().x, MeterIconSize().y)});
+    m_meter_stats.push_back({
+        METER_CONSTRUCTION,
+        GG::Wnd::Create<StatisticIcon>(ClientUI::MeterIcon(METER_CONSTRUCTION),
+                                       obj->InitialMeterValue(METER_CONSTRUCTION), 3, false,
+                                       MeterIconSize().x, MeterIconSize().y)});
 
     // meter and production indicators
     std::vector<std::pair<MeterType, MeterType>> meters;
 
-    for (std::pair<MeterType, StatisticIcon*>& meter_stat : m_meter_stats) {
-        meter_stat.second->InstallEventFilter(this);
+    for (auto& meter_stat : m_meter_stats) {
+        meter_stat.second->InstallEventFilter(shared_from_this());
         AttachChild(meter_stat.second);
-        meters.push_back(std::make_pair(meter_stat.first, AssociatedMeterType(meter_stat.first)));
+        meters.push_back({meter_stat.first, AssociatedMeterType(meter_stat.first)});
     }
 
     // attach and show meter bars and large resource indicators
-    m_multi_icon_value_indicator =  new MultiIconValueIndicator(Width() - 2*EDGE_PAD,   m_popcenter_id, meters);
-    m_multi_meter_status_bar =      new MultiMeterStatusBar(Width() - 2*EDGE_PAD,       m_popcenter_id, meters);
+    m_multi_icon_value_indicator =  GG::Wnd::Create<MultiIconValueIndicator>(Width() - 2*EDGE_PAD,   m_popcenter_id, meters);
+    m_multi_meter_status_bar =      GG::Wnd::Create<MultiMeterStatusBar>(Width() - 2*EDGE_PAD,       m_popcenter_id, meters);
 
     // determine if this panel has been created yet.
     std::map<int, bool>::iterator it = s_expanded_map.find(m_popcenter_id);
@@ -82,15 +89,8 @@ PopulationPanel::PopulationPanel(GG::X w, int object_id) :
     Refresh();
 }
 
-PopulationPanel::~PopulationPanel() {
-    // manually delete all pointed-to controls that may or may not be attached as a child window at time of deletion
-    delete m_multi_icon_value_indicator;
-    delete m_multi_meter_status_bar;
-
-    for (std::pair<MeterType, StatisticIcon*>& meter_stat : m_meter_stats) {
-        delete meter_stat.second;
-    }
-}
+PopulationPanel::~PopulationPanel()
+{}
 
 void PopulationPanel::ExpandCollapse(bool expanded) {
     if (expanded == s_expanded_map[m_popcenter_id]) return; // nothing to do
@@ -105,8 +105,8 @@ bool PopulationPanel::EventFilter(GG::Wnd* w, const GG::WndEvent& event) {
     const GG::Pt& pt = event.Point();
 
     MeterType meter_type = INVALID_METER_TYPE;
-    for (const std::pair<MeterType, StatisticIcon*>& meter_stat : m_meter_stats) {
-        if (meter_stat.second == w) {
+    for (const auto& meter_stat : m_meter_stats) {
+        if (meter_stat.second.get() == w) {
             meter_type = meter_stat.first;
             break;
         }
@@ -119,53 +119,38 @@ bool PopulationPanel::EventFilter(GG::Wnd* w, const GG::WndEvent& event) {
     if (UserStringExists(meter_string))
         meter_title = UserString(meter_string);
 
-    GG::MenuItem menu_contents;
     std::string species_name;
+    bool retval = false;
 
-    std::shared_ptr<const PopCenter> pc = GetPopCenter();
+    auto popup = GG::Wnd::Create<CUIPopupMenu>(pt.x, pt.y);
+    auto pc = GetPopCenter();
     if (meter_type == METER_POPULATION && pc) {
         species_name = pc->SpeciesName();
         if (!species_name.empty()) {
+            auto zoom_species_action = [&retval, &species_name]() { retval = ClientUI::GetClientUI()->ZoomToSpecies(species_name); };
             std::string species_label = boost::io::str(FlexibleFormat(UserString("ENC_LOOKUP")) % UserString(species_name));
-            menu_contents.next_level.push_back(GG::MenuItem(species_label, 1, false, false));
+            popup->AddMenuItem(GG::MenuItem(species_label, false, false, zoom_species_action));
         }
     }
 
     if (!meter_title.empty()) {
+        auto pedia_meter_type_action = [&retval, &meter_string]() { retval = ClientUI::GetClientUI()->ZoomToMeterTypeArticle(meter_string); };
         std::string popup_label = boost::io::str(FlexibleFormat(UserString("ENC_LOOKUP")) % meter_title);
-        menu_contents.next_level.push_back(GG::MenuItem(popup_label, 2, false, false));
+        popup->AddMenuItem(GG::MenuItem(popup_label, false, false, pedia_meter_type_action));
     }
 
-    CUIPopupMenu popup(pt.x, pt.y, menu_contents);
-
-    bool retval = false;
-
-    if (popup.Run()) {
-        switch (popup.MenuID()) {
-            case 1: {
-                retval = ClientUI::GetClientUI()->ZoomToSpecies(species_name);
-                break;
-            }
-            case 2: {
-                retval = ClientUI::GetClientUI()->ZoomToMeterTypeArticle(meter_string);
-                break;
-            }
-            default:
-                break;
-        }
-    }
-
+    popup->Run();
     return retval;
 }
 
 void PopulationPanel::Update() {
     // remove any old browse wnds
-    for (std::pair<MeterType, StatisticIcon*>& meter_stat : m_meter_stats) {
+    for (auto& meter_stat : m_meter_stats) {
         meter_stat.second->ClearBrowseInfoWnd();
         m_multi_icon_value_indicator->ClearToolTip(meter_stat.first);
     }
 
-    std::shared_ptr<const PopCenter> pop = GetPopCenter();
+    auto pop = GetPopCenter();
     if (!pop) {
         ErrorLogger() << "PopulationPanel::Update couldn't get PopCenter or couldn't get UniverseObject";
         return;
@@ -176,12 +161,10 @@ void PopulationPanel::Update() {
     m_multi_icon_value_indicator->Update();
 
     // tooltips
-    std::shared_ptr<GG::BrowseInfoWnd> browse_wnd;
-
-    for (std::pair<MeterType, StatisticIcon*>& meter_stat : m_meter_stats) {
+    for (auto& meter_stat : m_meter_stats) {
         meter_stat.second->SetValue(pop->InitialMeterValue(meter_stat.first));
 
-        browse_wnd = std::make_shared<MeterBrowseWnd>(m_popcenter_id, meter_stat.first, AssociatedMeterType(meter_stat.first));
+        auto browse_wnd = GG::Wnd::Create<MeterBrowseWnd>(m_popcenter_id, meter_stat.first, AssociatedMeterType(meter_stat.first));
         meter_stat.second->SetBrowseInfoWnd(browse_wnd);
         m_multi_icon_value_indicator->SetToolTip(meter_stat.first, browse_wnd);
     }
@@ -206,7 +189,7 @@ void PopulationPanel::ExpandCollapseButtonPressed()
 void PopulationPanel::DoLayout() {
     AccordionPanel::DoLayout();
 
-    for (const std::pair<MeterType, StatisticIcon*>& meter_stat : m_meter_stats) {
+    for (const auto& meter_stat : m_meter_stats) {
         DetachChild(meter_stat.second);
     }
 
@@ -219,10 +202,10 @@ void PopulationPanel::DoLayout() {
         // position and reattach icons to be shown
         int n = 0;
         GG::X stride = MeterIconSize().x * 7/2;
-        for (const std::pair<MeterType, StatisticIcon*>& meter_stat : m_meter_stats) {
+        for (const auto& meter_stat : m_meter_stats) {
             GG::X x = n * stride;
 
-            StatisticIcon* icon = meter_stat.second;
+            auto& icon = meter_stat.second;
             GG::Pt icon_ul(x, GG::Y0);
             GG::Pt icon_lr = icon_ul + MeterIconSize();
             icon->SizeMove(icon_ul, icon_lr);
@@ -258,7 +241,7 @@ void PopulationPanel::DoLayout() {
 }
 
 std::shared_ptr<const PopCenter> PopulationPanel::GetPopCenter() const {
-    std::shared_ptr<const PopCenter> pop = ::GetPopCenter(m_popcenter_id);
+    auto pop = ::GetPopCenter(m_popcenter_id);
     if (!pop) {
         ErrorLogger() << "PopulationPanel tried to get an object with an invalid m_popcenter_id";
         return nullptr;

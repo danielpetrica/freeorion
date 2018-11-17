@@ -48,7 +48,6 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(BUILD_SHARED_LIBS "Build project as shared libraries." ON)
 option(ENABLE_PNG_TEXTURES "Enable PNG texture support." ON)
 option(ENABLE_TIFF_TEXTURES "Enable TIFF texture support." OFF)
 option(BUILD_SDL_DRIVER "Builds GG SDL support (the GiGiSDL library)." ON)
@@ -81,7 +80,7 @@ endif()
 ## Collect project dependencies.
 ##
 
-set(MINIMUM_BOOST_VERSION 1.56.0)
+set(MINIMUM_BOOST_VERSION 1.58.0)
 
 if(NOT USE_STATIC_LIBS)
     add_definitions(
@@ -92,7 +91,7 @@ if(NOT USE_STATIC_LIBS)
 endif()
 
 set(Boost_USE_STATIC_LIBS ${USE_STATIC_LIBS})
-find_package(Boost ${MINIMUM_BOOST_VERSION} COMPONENTS date_time filesystem regex signals system thread log REQUIRED)
+find_package(Boost ${MINIMUM_BOOST_VERSION} COMPONENTS date_time filesystem regex system thread log REQUIRED)
 
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
@@ -145,6 +144,16 @@ if(USE_STATIC_LIBS)
     )
 endif()
 
+target_compile_definitions(GiGi
+    PRIVATE
+
+        # Starting with boost 1.68 boost::gil integrates support for
+        # grayscale-alpha png images, so prefer their implementation
+        # instead of our hacky gilext code.
+        $<$<VERSION_LESS:${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION},1.68>:GIGI_CONFIG_USE_OLD_IMPLEMENTATION_OF_GIL_PNG_IO>
+        $<$<VERSION_GREATER:${Boost_MAJOR_VERSION}.${Boost_MINOR_VERSION},1.67>:BOOST_GIL_IO_ENABLE_GRAY_ALPHA>
+)
+
 target_include_directories(GiGi SYSTEM
     PRIVATE
         ${Boost_INCLUDE_DIRS}
@@ -185,7 +194,7 @@ target_include_directories(GiGiSDL SYSTEM
         ${Boost_INCLUDE_DIRS}
         ${OPENGL_INCLUDE_DIR}
         ${GLEW_INCLUDE_DIRS}
-        ${SDL_INCLUDE_DIRS}
+        ${SDL_INCLUDE_DIR}
 )
 
 target_link_libraries(GiGiSDL
@@ -234,15 +243,17 @@ if(BUILD_DEVEL_PACKAGE)
     )
 endif()
 
-install(
-    TARGETS GiGi
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    COMPONENT COMPONENT_GIGI
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    COMPONENT COMPONENT_GIGI
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    COMPONENT COMPONENT_GIGI_DEVEL
-)
+if(UNIX AND NOT APPLE)
+    install(
+        TARGETS GiGi
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT COMPONENT_GIGI
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT COMPONENT_GIGI
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT COMPONENT_GIGI_DEVEL
+    )
+endif()
 
 if(UNIX AND BUILD_DEVEL_PACKAGE)
     get_pkg_config_libs(pkg_config_libs ${GiGi_LINK_LIBS})
@@ -262,15 +273,17 @@ if(UNIX AND BUILD_DEVEL_PACKAGE)
 endif()
 
 
-install(
-    TARGETS GiGiSDL
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    COMPONENT COMPONENT_GIGISDL
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    COMPONENT COMPONENT_GIGISDL
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    COMPONENT COMPONENT_GIGISDL_DEVEL
-)
+if(UNIX AND NOT APPLE)
+    install(
+        TARGETS GiGiSDL
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT COMPONENT_GIGISDL
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT COMPONENT_GIGISDL
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        COMPONENT COMPONENT_GIGISDL_DEVEL
+    )
+endif()
 
 if(UNIX AND BUILD_DEVEL_PACKAGE)
     get_pkg_config_libs(pkg_config_libs ${GiGiSDL_LINK_LIBS})

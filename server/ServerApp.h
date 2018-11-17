@@ -13,80 +13,35 @@
 #include <set>
 #include <vector>
 
+#include <boost/circular_buffer.hpp>
+
 class OrderSet;
 struct GalaxySetupData;
 struct SaveGameUIData;
 struct ServerFSM;
 
-/** Contains basic data about a player in a game. */
-struct PlayerSaveHeaderData {
-    PlayerSaveHeaderData();
-
-    PlayerSaveHeaderData(const std::string& name, int empire_id, Networking::ClientType client_type);
-
-    std::string                         m_name;
-    int                                 m_empire_id;
-    Networking::ClientType              m_client_type;
-
-private:
-    friend class boost::serialization::access;
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned int version);
-};
-
-/** Contains data that must be saved for a single player. */
-struct PlayerSaveGameData : public PlayerSaveHeaderData {
-    PlayerSaveGameData();
-
-    PlayerSaveGameData(const std::string& name, int empire_id, const std::shared_ptr<OrderSet>& orders,
-                       const std::shared_ptr<SaveGameUIData>& ui_data, const std::string& save_state_string,
-                       Networking::ClientType client_type);
-
-    std::shared_ptr<OrderSet> m_orders;
-    std::shared_ptr<SaveGameUIData> m_ui_data;
-    std::string                         m_save_state_string;
-
-private:
-    friend class boost::serialization::access;
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned int version);
-};
-
-/** contains data that must be retained by the server when saving and loading a
-  * game that isn't player data or the universe */
-struct ServerSaveGameData {
-    ServerSaveGameData();
-
-    ServerSaveGameData(int current_turn);
-
-    int                                     m_current_turn;
-
-private:
-    friend class boost::serialization::access;
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned int version);
-};
-
 /** the application framework class for the FreeOrion server. */
 class ServerApp : public IApp {
 public:
-    /** \name Structors */ //@{
     ServerApp();
 
-    ~ServerApp();
-    //@}
+    ServerApp(const ServerApp&) = delete;
+
+    ServerApp(ServerApp&&) = delete;
+
+    ~ServerApp() override;
+
+    const ServerApp& operator=(const ServerApp&) = delete;
+
+    ServerApp& operator=(IApp&&) = delete;
 
     /** \name Accessors */ //@{
 
     /** Returns a ClientApp pointer to the singleton instance of the app. */
     static ServerApp* GetApp();
-
     Universe& GetUniverse() override;
-
     EmpireManager& Empires() override;
-
     Empire* GetEmpire(int id) override;
-
     SupplyManager& GetSupplyManager() override;
 
     std::shared_ptr<UniverseObject> GetUniverseObject(int object_id) override;
@@ -97,10 +52,6 @@ public:
     std::shared_ptr<UniverseObject> EmpireKnownObject(int object_id, int empire_id) override;
 
     std::string GetVisibleObjectName(std::shared_ptr<const UniverseObject> object) override;
-
-    int GetNewObjectID() override;
-
-    int GetNewDesignID() override;
 
     int CurrentTurn() const override
     { return m_current_turn; }
@@ -129,11 +80,19 @@ public:
 
     /** Checks if \a player_name are not used by other players. */
     bool IsAvailableName(const std::string& player_name) const;
+
+    /** Checks if server runs in a hostless mode. */
+    bool IsHostless() const;
+
+    /** Returns chat history buffer. */
+    const boost::circular_buffer<ChatHistoryEntity>& GetChatHistory() const;
     //@}
 
 
     /** \name Mutators */ //@{
     void    operator()();               ///< external interface to Run()
+
+    void StartBackgroundParsing() override;
 
     /** Returns the galaxy setup data used for the current game */
     GalaxySetupData&    GetGalaxySetupData() { return m_galaxy_setup_data; }
@@ -151,7 +110,10 @@ public:
 
     /** Adds turn orders for the given empire for the current turn. order_set
       * will be freed when all processing is done for the turn */
-    void    SetEmpireTurnOrders(int empire_id, OrderSet* order_set);
+    void    SetEmpireTurnOrders(int empire_id, std::unique_ptr<OrderSet>&& order_set);
+
+    /** Revokes turn order's ready state for the given empire. */
+    void    RevokeEmpireTurnReadyness(int empire_id);
 
     /** Sets all empire turn orders to an empty set. */
     void    ClearEmpireTurnOrders();
@@ -206,6 +168,27 @@ public:
     void    LoadMPGameInit(const MultiplayerLobbyData& lobby_data,
                            const std::vector<PlayerSaveGameData>& player_save_game_data,
                            std::shared_ptr<ServerSaveGameData> server_save_game_data);
+
+    /** Checks if \a player_name requires auth to login and fill \a roles if not. */
+    bool IsAuthRequiredOrFillRoles(const std::string& player_name, Networking::AuthRoles& roles);
+
+    /** Checks if \a auth match \a player_name and fill \a roles if successed. */
+    bool IsAuthSuccessAndFillRoles(const std::string& player_name, const std::string& auth, Networking::AuthRoles& roles);
+
+    /** Adds new observing player to running game.
+      * Simply sends GAME_START message so established player knows he is in the game. */
+    void AddObserverPlayerIntoGame(const PlayerConnectionPtr& player_connection);
+
+    /** Eliminate player's empire by \a player_connection. Return true if player was eliminated. */
+    bool EliminatePlayer(const PlayerConnectionPtr& player_connection);
+
+    /** Drop link between player with \a player_id and his empire. */
+    void DropPlayerEmpireLink(int planet_id);
+
+    /** Adds new player to running game.
+      * Search empire by player's name and return true if success and false if no empire found.
+      * Simply sends GAME_START message so established player knows he is in the game. */
+    bool AddPlayerIntoGame(const PlayerConnectionPtr& player_connection);
     //@}
 
     void UpdateSavePreviews(const Message& msg, PlayerConnectionPtr player_connection);
@@ -213,15 +196,20 @@ public:
     /** Send the requested combat logs to the client.*/
     void UpdateCombatLogs(const Message& msg, PlayerConnectionPtr player_connection);
 
+    /** Loads chat history via python script. */
+    void LoadChatHistory();
+
+    void PushChatMessage(const std::string& text,
+                         const std::string& player_name,
+                         GG::Clr text_color,
+                         const boost::posix_time::ptime& timestamp);
+
     ServerNetworking&           Networking();     ///< returns the networking object for the server
 
 private:
-    const ServerApp& operator=(const ServerApp&); // disabled
-    ServerApp(const ServerApp&); // disabled
-
     void    Run();          ///< initializes app state, then executes main event handler/render loop (Poll())
 
-    /** Initialize the python engine or exit. */
+    /** Initialize the python engine if not already running. Return true on success. */
     void InitializePython();
 
     /** Called when server process receive termination signal */
@@ -235,8 +223,7 @@ private:
                                              const std::vector<PlayerSetupData>& player_setup_data);
 
     /** Return true if player data is consistent with starting a new game. */
-    bool    NewGameInitVerifyJoiners(const GalaxySetupData& galaxy_setup_data,
-                                     const std::vector<PlayerSetupData>& player_setup_data);
+    bool    NewGameInitVerifyJoiners(const std::vector<PlayerSetupData>& player_setup_data);
 
     /** Sends out initial new game state to clients, and signals clients to start first turn. */
     void SendNewGameStartMessages();
@@ -277,6 +264,9 @@ private:
       * cleanly shut down this server process. */
     void    HandleShutdownMessage(const Message& msg, PlayerConnectionPtr player_connection);
 
+    /** Checks validity of logger config message and then update logger and loggers of all AIs. */
+    void    HandleLoggerConfig(const Message& msg, PlayerConnectionPtr player_connection);
+
     /** When Messages arrive from connections that are not established players,
       * they arrive via a call to this function*/
     void    HandleNonPlayerMessage(const Message& msg, PlayerConnectionPtr player_connection);
@@ -312,11 +302,15 @@ private:
     std::vector<Process>    m_ai_client_processes;  ///< AI client child processes
     bool                    m_single_player_game;   ///< true when the game being played is single-player
     GalaxySetupData         m_galaxy_setup_data;    ///< stored setup data for the game currently being played
+    boost::circular_buffer<ChatHistoryEntity> m_chat_history; ///< Stored last chat messages.
 
     /** Turn sequence map is used for turn processing. Each empire is added at
       * the start of a game or reload and then the map maintains OrderSets for
-      * that turn. */
-    std::map<int, OrderSet*>                m_turn_sequence;
+      * that turn.
+      * The map contains ready state which should be true to advance turn and
+      * pointer to orders from empire.
+      * */
+    std::map<int, std::pair<bool, std::unique_ptr<OrderSet>>>      m_turn_sequence;
 
     // Give FSM and its states direct access.  We are using the FSM code as a
     // control-flow mechanism; it is all notionally part of this class.
@@ -332,31 +326,5 @@ private:
     friend struct ProcessingTurn;
     friend struct ShuttingDownServer;
 };
-
-// template implementations
-template <class Archive>
-void PlayerSaveHeaderData::serialize(Archive& ar, const unsigned int version)
-{
-    ar  & BOOST_SERIALIZATION_NVP(m_name)
-        & BOOST_SERIALIZATION_NVP(m_empire_id)
-        & BOOST_SERIALIZATION_NVP(m_client_type);
-}
-
-template <class Archive>
-void PlayerSaveGameData::serialize(Archive& ar, const unsigned int version)
-{
-    ar  & BOOST_SERIALIZATION_NVP(m_name)
-        & BOOST_SERIALIZATION_NVP(m_empire_id)
-        & BOOST_SERIALIZATION_NVP(m_orders)
-        & BOOST_SERIALIZATION_NVP(m_ui_data)
-        & BOOST_SERIALIZATION_NVP(m_save_state_string)
-        & BOOST_SERIALIZATION_NVP(m_client_type);
-}
-
-template <class Archive>
-void ServerSaveGameData::serialize(Archive& ar, const unsigned int version)
-{
-    ar  & BOOST_SERIALIZATION_NVP(m_current_turn);
-}
 
 #endif // _ServerApp_h_

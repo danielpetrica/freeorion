@@ -50,7 +50,7 @@ Moderator::SetOwner::SetOwner(int object_id, int new_owner_empire_id) :
 {}
 
 void Moderator::SetOwner::Execute() const {
-    std::shared_ptr<UniverseObject> obj = GetUniverseObject(m_object_id);
+    auto obj = GetUniverseObject(m_object_id);
     if (!obj) {
         ErrorLogger() << "Moderator::SetOwner::Execute couldn't get object with id: " << m_object_id;
         return;
@@ -164,7 +164,7 @@ namespace {
         for (const std::string& star_name : star_names) {
             // does an existing system have this name?
             bool dupe = false;
-            for (std::shared_ptr<const System> system : systems) {
+            for (auto& system : systems) {
                 if (system->Name() == star_name) {
                     dupe = true;
                     break;  // another system has this name. skip to next potential name.
@@ -178,7 +178,7 @@ namespace {
 }
 
 void Moderator::CreateSystem::Execute() const {
-    std::shared_ptr<System> system = GetUniverse().CreateSystem(m_star_type, GenerateSystemName(), m_x, m_y);
+    auto system = GetUniverse().InsertNew<System>(m_star_type, GenerateSystemName(), m_x, m_y);
     if (!system) {
         ErrorLogger() << "CreateSystem::Execute couldn't create system!";
         return;
@@ -224,7 +224,7 @@ void Moderator::CreatePlanet::Execute() const {
         return;
     }
 
-    std::shared_ptr<Planet> planet = GetUniverse().CreatePlanet(m_planet_type, m_planet_size);
+    auto planet = GetUniverse().InsertNew<Planet>(m_planet_type, m_planet_size);
     if (!planet) {
         ErrorLogger() << "CreatePlanet::Execute unable to create new Planet object";
         return;

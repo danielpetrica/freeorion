@@ -9,7 +9,6 @@
 #include "../universe/System.h"
 
 #include <GG/DynamicGraphic.h>
-#include <GG/SignalsAndSlots.h>
 #include <GG/Texture.h>
 
 #include <vector>
@@ -23,6 +22,7 @@ public:
 
     /** \name Structors */ //@{
     SidePanel(const std::string& config_name);
+    void CompleteConstruction() override;
     ~SidePanel();
     //@}
 
@@ -46,8 +46,6 @@ public:
 
     /** \name Mutators */ //@{
     void PreRender() override;
-
-    void Render() override;
 
     void SizeMove(const GG::Pt& ul, const GG::Pt& lr) override;
 
@@ -138,21 +136,19 @@ private:
         colonize buttons. */
     static void FleetsRemoved(const std::vector<std::shared_ptr<Fleet>>& fleets);
 
-    static void         FleetStateChanged();            ///< responds to fleet state changes during a turn, which may include issueing or cancelling move orders.  may update colonize buttons
-
     class SystemNameDropDownList;
-    SystemNameDropDownList*     m_system_name;
-    GG::TextControl*            m_star_type_text;
-    GG::Button*                 m_button_prev;
-    GG::Button*                 m_button_next;
-    GG::DynamicGraphic*         m_star_graphic;
+    std::shared_ptr<SystemNameDropDownList>     m_system_name = nullptr;
+    std::shared_ptr<GG::TextControl>            m_star_type_text = nullptr;
+    std::shared_ptr<GG::Button>                 m_button_prev = nullptr;
+    std::shared_ptr<GG::Button>                 m_button_next = nullptr;
+    std::shared_ptr<GG::DynamicGraphic>         m_star_graphic = nullptr;
 
     std::vector<GG::SubTexture> m_fleet_icons;
 
-    PlanetPanelContainer*       m_planet_panel_container;
-    MultiIconValueIndicator*    m_system_resource_summary;
+    std::shared_ptr<PlanetPanelContainer>       m_planet_panel_container = nullptr;
+    std::shared_ptr<MultiIconValueIndicator>    m_system_resource_summary = nullptr;
 
-    bool                        m_selection_enabled;
+    bool                        m_selection_enabled = false;
 
     static bool                 s_needs_update;
     static bool                 s_needs_refresh;
@@ -162,7 +158,7 @@ private:
     /** The id of the currently-selected planet, or INVALID_OBJECT_ID if no planet is selected. */
     static int                  s_planet_id;
 
-    static std::set<SidePanel*> s_side_panels;
+    static std::set<std::weak_ptr<SidePanel>, std::owner_less<std::weak_ptr<SidePanel>>> s_side_panels;
 
     static std::set<boost::signals2::connection>      s_system_connections;
     static std::map<int, boost::signals2::connection> s_fleet_state_change_signals;

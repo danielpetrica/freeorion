@@ -15,6 +15,7 @@ Species
     effectsgroups = [
         [[NO_INDUSTRY]]
         [[NO_RESEARCH]]
+        [[NO_STOCKPILE]]
 
         [[AVERAGE_POPULATION]]
         [[AVERAGE_HAPPINESS]]
@@ -51,12 +52,17 @@ Species
                 Planet
             ]
             activation = Turn high = 1
+            priority = [[EARLY_POPULATION_OVERRIDE_PRIORITY]]
             effects = SetPopulation value = Target.TargetPopulation
 
         // self-destruct when captured
         EffectsGroup
             scope = Source
-            activation = OwnedBy affiliation = AnyEmpire
+            activation = And [
+                Planet
+                OwnedBy affiliation = AnyEmpire
+            ]
+            priority = [[EARLY_POPULATION_OVERRIDE_PRIORITY]]
             effects = [
                 SetPopulation value = 0
                 GenerateSitRepMessage

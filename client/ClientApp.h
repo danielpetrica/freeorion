@@ -20,10 +20,19 @@ class ClientNetworking;
  * being run in.
  */
 class ClientApp : public IApp {
-public:
+protected:
     ClientApp();
 
-    virtual ~ClientApp();
+public:
+    ClientApp(const ClientApp&) = delete;
+
+    ClientApp(ClientApp&&) = delete;
+
+    ~ClientApp() override = default;
+
+    const ClientApp& operator=(const ClientApp&) = delete;
+
+    ClientApp& operator=(ClientApp&&) = delete;
 
     /** @brief Return the player identifier of this client
      *
@@ -155,6 +164,10 @@ public:
     /** @brief Send the OrderSet to the server and start a new turn */
     virtual void StartTurn();
 
+    /** \brief Handle server acknowledgement of receipt of orders and clear
+        the orders. */
+    virtual void HandleTurnPhaseUpdate(Message::TurnProgressPhase phase_id);
+
     /** @brief Return the set of known Empire s for this client
      *
      * @return The EmpireManager instance in charge of maintaining the Empire
@@ -227,31 +240,17 @@ public:
      */
     void SetPlayerStatus(int player_id, Message::PlayerStatus status);
 
-    /** @brief Return a new universe object identifier
-     *
-     * The returned universe object identifier can be used for new objects
-     * created by this client.
-     *
-     * @return A new, unique universe object identifier.  If no new idenfifier
-     *      can be create INVALID_OBJECT_ID is returned.
-     */
-    int GetNewObjectID() override;
-
-    /** @brief Return a new ship design identifier
-     *
-     * The returned ship design identifier can be used for new ship designs
-     * created by this client.
-     *
-     * @return A new, unique ship design identifier.  If no new idenfifier
-     *      can be create INVALID_OBJECT_ID is returned.
-     */
-    int GetNewDesignID() override;
-
     /** @brief Return the singleton instance of this Application
      *
      * @return A pointer to the single ClientApp instance of this client.
      */
     static ClientApp* GetApp();
+
+    /** @brief Compare content checksum from server with client content checksum.
+     *
+     * @return true if verify successed.
+     */
+    bool VerifyCheckSum(const Message& msg);
 
 protected:
     Universe                    m_universe;
@@ -270,10 +269,6 @@ protected:
      */
     std::map<int, Message::PlayerStatus>
                                 m_player_status;
-
-private:
-    const ClientApp& operator=(const ClientApp&); // disabled
-    ClientApp(const ClientApp&); // disabled
 };
 
 #endif // _ClientApp_h_

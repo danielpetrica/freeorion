@@ -190,6 +190,7 @@ public:
     ColorDlg(X x, Y y, Clr original_color, const std::shared_ptr<Font>& font,
              Clr dialog_color, Clr border_color, Clr text_color = CLR_BLACK);
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ ///@{
     /** Returns true iff the user selected a color and then clicked the "Ok"
@@ -210,8 +211,6 @@ public:
 private:
     enum {R, G, B, A, H, S, V};
 
-    void Init(const std::shared_ptr<Font>& font);
-    void ConnectSignals();
     void ColorChanged(HSVClr color);
     void HueSaturationPickerChanged(double hue, double saturation);
     void ValuePickerChanged(double value);
@@ -229,32 +228,32 @@ private:
     void OkClicked();
     void CancelClicked();
 
-    HSVClr                    m_current_color;
-    Clr                       m_original_color;
-    bool                      m_original_color_specified;
-    bool                      m_color_was_picked;
+    HSVClr  m_current_color;
+    Clr     m_original_color;
+    bool    m_original_color_specified;
+    bool    m_color_was_picked;
 
-    HueSaturationPicker*      m_hue_saturation_picker;
-    ValuePicker*              m_value_picker;
-    Layout*                   m_pickers_layout;
-    ColorDisplay*             m_new_color_square;
-    ColorDisplay*             m_old_color_square;
-    TextControl*              m_new_color_square_text;
-    TextControl*              m_old_color_square_text;
-    Layout*                   m_color_squares_layout;
-    std::vector<ColorButton*> m_color_buttons;
-    Layout*                   m_color_buttons_layout;
-    std::size_t               m_current_color_button;
-    std::vector<TextControl*> m_slider_labels;
-    std::vector<TextControl*> m_slider_values;
-    std::vector<Slider<int>*> m_sliders;
-    Button*                   m_ok;
-    Button*                   m_cancel;
-    Layout*                   m_sliders_ok_cancel_layout;
+    std::shared_ptr<HueSaturationPicker>      m_hue_saturation_picker;
+    std::shared_ptr<ValuePicker>              m_value_picker;
+    std::shared_ptr<Layout>                   m_pickers_layout;
+    std::shared_ptr<ColorDisplay>             m_new_color_square;
+    std::shared_ptr<ColorDisplay>             m_old_color_square;
+    std::shared_ptr<TextControl>              m_new_color_square_text;
+    std::shared_ptr<TextControl>              m_old_color_square_text;
+    std::shared_ptr<Layout>                   m_color_squares_layout;
+    std::vector<std::shared_ptr<ColorButton>> m_color_buttons;
+    std::shared_ptr<Layout>                   m_color_buttons_layout;
+    std::size_t                               m_current_color_button;
+    std::vector<std::shared_ptr<TextControl>> m_slider_labels;
+    std::vector<std::shared_ptr<TextControl>> m_slider_values;
+    std::vector<std::shared_ptr<Slider<int>>> m_sliders;
+    std::shared_ptr<Button>                   m_ok;
+    std::shared_ptr<Button>                   m_cancel;
+    std::shared_ptr<Layout>                   m_sliders_ok_cancel_layout;
 
-    Clr                       m_color;
-    Clr                       m_border_color;
-    Clr                       m_text_color;
+    Clr m_color;
+    Clr m_border_color;
+    Clr m_text_color;
 
     static std::vector<Clr>   s_custom_colors;
 };

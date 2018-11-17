@@ -11,6 +11,7 @@ class PlayerListWnd : public CUIWnd {
 public:
     //! \name Structors //@{
     PlayerListWnd(const std::string& config_name);
+    void CompleteConstruction() override;
     //@}
 
     //! \name Accessors //@{
@@ -42,7 +43,7 @@ private:
     void            PlayerRightClicked(GG::ListBox::iterator it, const GG::Pt& pt, const GG::Flags<GG::ModKey>& modkeys);
     int             PlayerInRow(GG::ListBox::iterator it) const;
 
-    PlayerListBox*  m_player_list;
+    std::shared_ptr<PlayerListBox>  m_player_list;
 };
 
 #endif

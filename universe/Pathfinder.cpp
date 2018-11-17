@@ -3,12 +3,14 @@
 #include "../util/Logger.h"
 #include "../util/ScopedTimer.h"
 #include "../Empire/EmpireManager.h"
+#include "Field.h"
 #include "Fleet.h"
 #include "Ship.h"
 #include "System.h"
 #include "UniverseObject.h"
 #include "ValueRef.h"
 #include "Universe.h"
+#include "Predicates.h"
 
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/breadth_first_search.hpp>
@@ -461,9 +463,11 @@ namespace SystemPathing {
         std::multimap<double, int> retval;
         ConstEdgeWeightPropertyMap edge_weight_map = boost::get(boost::edge_weight, graph);
         ConstSystemIDPropertyMap sys_id_property_map = boost::get(vertex_system_id_t(), graph);
-        std::pair<OutEdgeIterator, OutEdgeIterator> edges = boost::out_edges(id_to_graph_index.at(system_id), graph);
-        for (OutEdgeIterator it = edges.first; it != edges.second; ++it)
-        { retval.insert(std::make_pair(edge_weight_map[*it], sys_id_property_map[boost::target(*it, graph)])); }
+        auto edges = boost::out_edges(id_to_graph_index.at(system_id), graph);
+        for (OutEdgeIterator it = edges.first; it != edges.second; ++it) {
+            retval.insert({edge_weight_map[*it],
+                           sys_id_property_map[boost::target(*it, graph)]});
+        }
         return retval;
     }
 
@@ -534,6 +538,99 @@ namespace {
         typedef boost::filtered_graph<SystemGraph, EdgeVisibilityFilter> EmpireViewSystemGraph;
         typedef std::map<int, std::shared_ptr<EmpireViewSystemGraph>> EmpireViewSystemGraphMap;
 
+
+        void AddSystemPredicate(const Pathfinder::SystemExclusionPredicateType& pred) {
+            for (auto empire : Empires()) {
+                auto empire_id = empire.first;
+                SystemPredicateFilter sys_pred_filter(&system_graph, empire_id, pred);
+                auto sys_pred_filtered_graph_ptr = std::make_shared<SystemPredicateGraph>(system_graph, sys_pred_filter);
+
+                auto pred_it = system_pred_graph_views.find(pred);
+                if (pred_it == system_pred_graph_views.end()) {
+                    EmpireSystemPredicateMap empire_graph_map;
+                    empire_graph_map.emplace(empire_id, std::move(sys_pred_filtered_graph_ptr));
+                    system_pred_graph_views.emplace(pred, std::move(empire_graph_map));
+                } else if (pred_it->second.count(empire_id)) {
+                    pred_it->second.at(empire_id) = std::move(sys_pred_filtered_graph_ptr);
+                } else {
+                    pred_it->second.emplace(empire_id, std::move(sys_pred_filtered_graph_ptr));
+                }
+            }
+        }
+
+        struct SystemPredicateFilter {
+            SystemPredicateFilter() :
+                m_graph(nullptr),
+                m_empire_id(ALL_EMPIRES),
+                m_pred(nullptr)
+            {}
+
+            SystemPredicateFilter(const SystemGraph* graph, int empire_id,
+                                  const Pathfinder::SystemExclusionPredicateType& pred) :
+                m_graph(graph),
+                m_empire_id(empire_id),
+                m_pred(pred)
+            {
+                if (!graph)
+                    ErrorLogger() << "ExcludeObjectFilter passed null graph pointer";
+            }
+
+            template <typename EdgeDescriptor>
+            bool operator()(const EdgeDescriptor& edge) const {
+                if (!m_graph)
+                    return true;
+
+                // get system ids from graph indices
+
+                // for reverse-lookup System universe ID from graph index
+                ConstSystemIDPropertyMap sys_id_property_map = boost::get(vertex_system_id_t(), *m_graph);
+                int sys_graph_index_1 = boost::source(edge, *m_graph);
+                int sys_id_1 = sys_id_property_map[sys_graph_index_1];
+                int sys_graph_index_2 = boost::target(edge, *m_graph);
+                int sys_id_2 = sys_id_property_map[sys_graph_index_2];
+
+                // look up objects in system
+                auto system1 = GetEmpireKnownSystem(sys_id_1, m_empire_id);
+                if (!system1) {
+                    ErrorLogger() << "Invalid source system " << sys_id_1;
+                    return true;
+                }
+                auto system2 = GetEmpireKnownSystem(sys_id_2, m_empire_id);
+                if (!system2) {
+                    ErrorLogger() << "Invalid target system " << sys_id_2;
+                    return true;
+                }
+
+                if (!system1->HasStarlaneTo(system2->ID())) {
+                    DebugLogger() << "No starlane from " << system1->ID() << " to " << system2->ID();
+                    return false;
+                }
+
+                // Discard edge if it finds a contained object or matches either system for visitor
+                for (auto object : EmpireKnownObjects(m_empire_id).FindObjects(*m_pred.get())) {
+                    if (!object)
+                        continue;
+                    // object is destination system
+                    if (object->ID() == system2->ID())
+                        return false;
+
+                    // object contained by destination system
+                    if (object->ContainedBy(system2->ID()))
+                        return false;
+                }
+
+                return true;
+            }
+
+        private:
+            const SystemGraph* m_graph;
+            int m_empire_id;
+            Pathfinder::SystemExclusionPredicateType m_pred;
+        };
+        typedef boost::filtered_graph<SystemGraph, SystemPredicateFilter> SystemPredicateGraph;
+        typedef std::map<int, std::shared_ptr<SystemPredicateGraph>> EmpireSystemPredicateMap;
+        typedef std::map<Pathfinder::SystemExclusionPredicateType, EmpireSystemPredicateMap> SystemPredicateGraphMap;
+
         // declare property map types for properties declared above
         typedef boost::property_map<SystemGraph, vertex_system_id_t>::const_type        ConstSystemIDPropertyMap;
         typedef boost::property_map<SystemGraph, vertex_system_id_t>::type              SystemIDPropertyMap;
@@ -544,7 +641,11 @@ namespace {
 
         SystemGraph                 system_graph;                 ///< a graph in which the systems are vertices and the starlanes are edges
         EmpireViewSystemGraphMap    empire_system_graph_views;    ///< a map of empire IDs to the views of the system graph by those empires
+        /** Empire system graphs indexed by object predicate */
+        SystemPredicateGraphMap     system_pred_graph_views;
+        std::unordered_set<Pathfinder::SystemExclusionPredicateType> system_predicates;
     };
+
 }
 
 /////////////////////////////////////////////
@@ -560,6 +661,8 @@ class Pathfinder::PathfinderImpl {
     int JumpDistanceBetweenObjects(int object1_id, int object2_id) const;
 
     std::pair<std::list<int>, double> ShortestPath(int system1_id, int system2_id, int empire_id = ALL_EMPIRES) const;
+    std::pair<std::list<int>, double> ShortestPath(int system1_id, int system2_id, int empire_id,
+                                                   const Pathfinder::SystemExclusionPredicateType& sys_pred) const;
     double ShortestPathDistance(int object1_id, int object2_id) const;
     std::pair<std::list<int>, int> LeastJumpsPath(
         int system1_id, int system2_id, int empire_id = ALL_EMPIRES, int max_jumps = INT_MAX) const;
@@ -574,12 +677,12 @@ class Pathfinder::PathfinderImpl {
         multimap for Neighbors.*/
      void NeighborsCacheHit(
          boost::unordered_multimap<int, int>& result, size_t _n_outer, size_t _n_inner,
-         size_t ii, const distance_matrix_storage<short>::row_ref row) const;
+         size_t ii, distance_matrix_storage<short>::row_ref row) const;
 
     std::unordered_set<int> WithinJumps(size_t jumps, const std::vector<int>& candidates) const;
     void WithinJumpsCacheHit(
         std::unordered_set<int>* result, size_t jump_limit,
-        size_t ii, const distance_matrix_storage<short>::row_ref row) const;
+        size_t ii, distance_matrix_storage<short>::row_ref row) const;
 
     std::pair<std::vector<std::shared_ptr<const UniverseObject>>, std::vector<std::shared_ptr<const UniverseObject>>>
     WithinJumpsOfOthers(
@@ -600,7 +703,7 @@ class Pathfinder::PathfinderImpl {
     void WithinJumpsOfOthersCacheHit(
         bool& answer, int jumps,
         const std::vector<std::shared_ptr<const UniverseObject>>& others,
-        size_t ii, const distance_matrix_storage<short>::row_ref row) const;
+        size_t ii, distance_matrix_storage<short>::row_ref row) const;
 
     int NearestSystemTo(double x, double y) const;
     void InitializeSystemGraph(const std::vector<int> system_ids, int for_empire_id = ALL_EMPIRES);
@@ -627,10 +730,10 @@ Pathfinder::~Pathfinder()
 {}
 
 namespace {
-    std::shared_ptr<const Fleet> FleetFromObject(std::shared_ptr<const UniverseObject> obj) {
+    std::shared_ptr<const Fleet> FleetFromObject(const std::shared_ptr<const UniverseObject>& obj) {
         std::shared_ptr<const Fleet> retval = std::dynamic_pointer_cast<const Fleet>(obj);
         if (!retval) {
-            if (std::shared_ptr<const Ship> ship = std::dynamic_pointer_cast<const Ship>(obj))
+            if (auto ship = std::dynamic_pointer_cast<const Ship>(obj))
                 retval = GetFleet(ship->FleetID());
         }
         return retval;
@@ -641,7 +744,8 @@ namespace {
  */
 void Pathfinder::PathfinderImpl::HandleCacheMiss(size_t ii, distance_matrix_storage<short>::row_ref row) const {
 
-    typedef boost::iterator_property_map<std::vector<short>::iterator, boost::identity_property_map> DistancePropertyMap;
+    typedef boost::iterator_property_map<std::vector<short>::iterator,
+                                         boost::identity_property_map> DistancePropertyMap;
 
     distance_matrix_storage<short>::row_ref distance_buffer = row;
     distance_buffer.assign(m_system_jumps.size(), SHRT_MAX);
@@ -722,18 +826,25 @@ namespace {
     typedef boost::variant<std::nullptr_t, int, std::pair<int, int>> GeneralizedLocationType;
 
     /** Return the location of \p obj.*/
-    GeneralizedLocationType GeneralizedLocation(std::shared_ptr<const UniverseObject> obj) {
+    GeneralizedLocationType GeneralizedLocation(const std::shared_ptr<const UniverseObject>& obj) {
         if (!obj)
             return nullptr;
 
         int system_id = obj->SystemID();
-        std::shared_ptr<const System> system = GetSystem(system_id);
+        auto system = GetSystem(system_id);
         if (system)
             return system_id;
 
-        std::shared_ptr<const Fleet> fleet = FleetFromObject(obj);
+        auto fleet = FleetFromObject(obj);
         if (fleet)
             return std::make_pair(fleet->PreviousSystemID(), fleet->NextSystemID());
+
+        if (std::dynamic_pointer_cast<const Field>(obj))
+            return nullptr;
+
+        // Don't generate an error message for temporary objects.
+        if (obj->ID() == TEMPORARY_OBJECT_ID)
+            return nullptr;
 
         ErrorLogger() << "GeneralizedLocationType unable to locate " << obj->Name() << "(" << obj->ID() << ")";
         return nullptr;
@@ -741,7 +852,7 @@ namespace {
 
     /** Return the location of the object with id \p object_id.*/
     GeneralizedLocationType GeneralizedLocation(int object_id) {
-        std::shared_ptr<const UniverseObject> obj = GetUniverseObject(object_id);
+        auto obj = GetUniverseObject(object_id);
         return GeneralizedLocation(obj);
     }
 
@@ -851,11 +962,13 @@ int Pathfinder::PathfinderImpl::JumpDistanceBetweenObjects(int object1_id, int o
     return boost::apply_visitor(visitor, obj1);
 }
 
-std::pair<std::list<int>, double> Pathfinder::ShortestPath(int system1_id, int system2_id, int empire_id/* = ALL_EMPIRES*/) const {
-    return pimpl->ShortestPath(system1_id, system2_id, empire_id);
-}
+std::pair<std::list<int>, double> Pathfinder::ShortestPath(int system1_id, int system2_id,
+                                                           int empire_id/* = ALL_EMPIRES*/) const
+{ return pimpl->ShortestPath(system1_id, system2_id, empire_id); }
 
-std::pair<std::list<int>, double> Pathfinder::PathfinderImpl::ShortestPath(int system1_id, int system2_id, int empire_id/* = ALL_EMPIRES*/) const {
+std::pair<std::list<int>, double> Pathfinder::PathfinderImpl::ShortestPath(int system1_id, int system2_id,
+                                                                           int empire_id/* = ALL_EMPIRES*/) const
+{
     if (empire_id == ALL_EMPIRES) {
         // find path on full / complete system graph
         try {
@@ -870,8 +983,7 @@ std::pair<std::list<int>, double> Pathfinder::PathfinderImpl::ShortestPath(int s
     }
 
     // find path on single empire's view of system graph
-    GraphImpl::EmpireViewSystemGraphMap::const_iterator graph_it =
-        m_graph_impl->empire_system_graph_views.find(empire_id);
+    auto graph_it = m_graph_impl->empire_system_graph_views.find(empire_id);
     if (graph_it == m_graph_impl->empire_system_graph_views.end()) {
         ErrorLogger() << "PathfinderImpl::ShortestPath passed unknown empire id: " << empire_id;
         throw std::out_of_range("PathfinderImpl::ShortestPath passed unknown empire id");
@@ -883,6 +995,43 @@ std::pair<std::list<int>, double> Pathfinder::PathfinderImpl::ShortestPath(int s
     } catch (const std::out_of_range&) {
         ErrorLogger() << "PathfinderImpl::ShortestPath passed invalid system id(s): "
                       << system1_id << " & " << system2_id;
+        throw;
+    }
+}
+
+std::pair<std::list<int>, double> Pathfinder::ShortestPath(int system1_id, int system2_id, int empire_id,
+                                                           const SystemExclusionPredicateType& system_predicate) const
+{ return pimpl->ShortestPath(system1_id, system2_id, empire_id, system_predicate); }
+
+std::pair<std::list<int>, double> Pathfinder::PathfinderImpl::ShortestPath(
+    int system1_id, int system2_id, int empire_id, const Pathfinder::SystemExclusionPredicateType& sys_pred) const
+{
+    if (empire_id == ALL_EMPIRES) {
+        ErrorLogger() << "Invalid empire " << empire_id;
+        throw std::out_of_range("PathfinderImpl::ShortestPath passed invalid empire id");
+    }
+
+    auto func_it = m_graph_impl->system_pred_graph_views.find(sys_pred);
+    if (func_it == m_graph_impl->system_pred_graph_views.end()) {
+        m_graph_impl->AddSystemPredicate(sys_pred);
+        func_it = m_graph_impl->system_pred_graph_views.find(sys_pred);
+        if (func_it == m_graph_impl->system_pred_graph_views.end()) {
+            ErrorLogger() << "No graph views found for predicate";
+            throw std::out_of_range("PathfinderImpl::ShortestPath No graph views found for predicate");
+        }
+    }
+    auto graph_it = func_it->second.find(empire_id);
+    if (graph_it == func_it->second.end()) {
+        ErrorLogger() << "No graph view found for empire " << empire_id;
+        throw std::out_of_range("PathfinderImpl::ShortestPath No graph view for empire");
+    }
+
+    try {
+        auto linear_distance = LinearDistance(system1_id, system2_id);
+        return ShortestPathImpl(*graph_it->second, system1_id, system2_id,
+                                linear_distance, m_system_id_to_graph_index);
+    } catch (const std::out_of_range&) {
+        ErrorLogger() << "Invalid system id(s): " << system1_id << ", " << system2_id;
         throw;
     }
 }
@@ -959,8 +1108,7 @@ std::pair<std::list<int>, int> Pathfinder::PathfinderImpl::LeastJumpsPath(
     }
 
     // find path on single empire's view of system graph
-    GraphImpl::EmpireViewSystemGraphMap::const_iterator graph_it =
-        m_graph_impl->empire_system_graph_views.find(empire_id);
+    auto graph_it = m_graph_impl->empire_system_graph_views.find(empire_id);
     if (graph_it == m_graph_impl->empire_system_graph_views.end()) {
         ErrorLogger() << "PathfinderImpl::LeastJumpsPath passed unknown empire id: " << empire_id;
         throw std::out_of_range("PathfinderImpl::LeastJumpsPath passed unknown empire id");
@@ -975,41 +1123,42 @@ std::pair<std::list<int>, int> Pathfinder::PathfinderImpl::LeastJumpsPath(
     }
 }
 
-bool Pathfinder::SystemsConnected(int system1_id, int system2_id, int empire_id) const {
-    return pimpl->SystemsConnected(system1_id, system2_id, empire_id);
-}
+bool Pathfinder::SystemsConnected(int system1_id, int system2_id, int empire_id) const
+{ return pimpl->SystemsConnected(system1_id, system2_id, empire_id); }
 
 bool Pathfinder::PathfinderImpl::SystemsConnected(int system1_id, int system2_id, int empire_id) const {
-    //DebugLogger() << "SystemsConnected(" << system1_id << ", " << system2_id << ", " << empire_id << ")";
-    std::pair<std::list<int>, int> path = LeastJumpsPath(system1_id, system2_id, empire_id);
-    //DebugLogger() << "SystemsConnected returned path of size: " << path.first.size();
+    TraceLogger() << "SystemsConnected(" << system1_id << ", " << system2_id << ", " << empire_id << ")";
+    auto path = LeastJumpsPath(system1_id, system2_id, empire_id);
+    TraceLogger() << "SystemsConnected returned path of size: " << path.first.size();
     bool retval = !path.first.empty();
-    //DebugLogger() << "SystemsConnected retval: " << retval;
+    TraceLogger() << "SystemsConnected retval: " << retval;
     return retval;
 }
 
-bool Pathfinder::SystemHasVisibleStarlanes(int system_id, int empire_id) const {
-    return pimpl->SystemHasVisibleStarlanes(system_id, empire_id);
-}
+bool Pathfinder::SystemHasVisibleStarlanes(int system_id, int empire_id) const
+{ return pimpl->SystemHasVisibleStarlanes(system_id, empire_id); }
 
 bool Pathfinder::PathfinderImpl::SystemHasVisibleStarlanes(int system_id, int empire_id) const {
-    if (std::shared_ptr<const System> system = GetEmpireKnownSystem(system_id, empire_id))
+    if (auto system = GetEmpireKnownSystem(system_id, empire_id))
         if (!system->StarlanesWormholes().empty())
             return true;
     return false;
 }
 
-std::multimap<double, int> Pathfinder::ImmediateNeighbors(int system_id, int empire_id/* = ALL_EMPIRES*/) const {
-    return pimpl->ImmediateNeighbors(system_id, empire_id);
-}
+std::multimap<double, int> Pathfinder::ImmediateNeighbors(int system_id, int empire_id/* = ALL_EMPIRES*/) const
+{ return pimpl->ImmediateNeighbors(system_id, empire_id); }
 
-std::multimap<double, int> Pathfinder::PathfinderImpl::ImmediateNeighbors(int system_id, int empire_id/* = ALL_EMPIRES*/) const {
+std::multimap<double, int> Pathfinder::PathfinderImpl::ImmediateNeighbors(
+    int system_id, int empire_id/* = ALL_EMPIRES*/) const
+{
     if (empire_id == ALL_EMPIRES) {
-        return ImmediateNeighborsImpl(m_graph_impl->system_graph, system_id, m_system_id_to_graph_index);
+        return ImmediateNeighborsImpl(m_graph_impl->system_graph, system_id,
+                                      m_system_id_to_graph_index);
     } else {
-        GraphImpl::EmpireViewSystemGraphMap::const_iterator graph_it = m_graph_impl->empire_system_graph_views.find(empire_id);
+        auto graph_it = m_graph_impl->empire_system_graph_views.find(empire_id);
         if (graph_it != m_graph_impl->empire_system_graph_views.end())
-            return ImmediateNeighborsImpl(*graph_it->second, system_id, m_system_id_to_graph_index);
+            return ImmediateNeighborsImpl(*graph_it->second, system_id,
+                                          m_system_id_to_graph_index);
     }
     return std::multimap<double, int>();
 }
@@ -1017,8 +1166,8 @@ std::multimap<double, int> Pathfinder::PathfinderImpl::ImmediateNeighbors(int sy
 
 void Pathfinder::PathfinderImpl::WithinJumpsCacheHit(
     std::unordered_set<int>* result, size_t jump_limit,
-    size_t ii, const distance_matrix_storage<short>::row_ref row) const {
-
+    size_t ii, distance_matrix_storage<short>::row_ref row) const
+{
     // Scan the LUT of system ids and add any result from the row within
     // the neighborhood range to the results.
     for (auto system_id_and_ii : m_system_id_to_graph_index) {
@@ -1028,9 +1177,8 @@ void Pathfinder::PathfinderImpl::WithinJumpsCacheHit(
     }
 }
 
-std::unordered_set<int> Pathfinder::WithinJumps(size_t jumps, const std::vector<int>& candidates) const {
-    return pimpl->WithinJumps(jumps, candidates);
-}
+std::unordered_set<int> Pathfinder::WithinJumps(size_t jumps, const std::vector<int>& candidates) const
+{ return pimpl->WithinJumps(jumps, candidates); }
 
 std::unordered_set<int> Pathfinder::PathfinderImpl::WithinJumps(
     size_t jumps, const std::vector<int>& candidates) const
@@ -1088,7 +1236,7 @@ struct WithinJumpsOfOthersObjectVisitor : public boost::static_visitor<bool> {
 struct WithinJumpsOfOthersOtherVisitor : public boost::static_visitor<bool> {
     WithinJumpsOfOthersOtherVisitor(const Pathfinder::PathfinderImpl& _pf,
                                     int _jumps,
-                                    const distance_matrix_storage<short>::row_ref _row) :
+                                    distance_matrix_storage<short>::row_ref _row) :
         pf(_pf), jumps(_jumps), row(_row)
     {}
 
@@ -1114,14 +1262,14 @@ struct WithinJumpsOfOthersOtherVisitor : public boost::static_visitor<bool> {
     }
     const Pathfinder::PathfinderImpl& pf;
     int jumps;
-    const distance_matrix_storage<short>::row_ref row;
+    distance_matrix_storage<short>::row_ref row;
 };
 
 
 void Pathfinder::PathfinderImpl::WithinJumpsOfOthersCacheHit(
     bool& answer, int jumps,
     const std::vector<std::shared_ptr<const UniverseObject>>& others,
-    size_t ii, const distance_matrix_storage<short>::row_ref row) const
+    size_t ii, distance_matrix_storage<short>::row_ref row) const
 {
     // Check if any of the others are within jumps of candidate, by looping
     // through all of the others and applying the WithinJumpsOfOthersOtherVisitor.
@@ -1136,7 +1284,8 @@ void Pathfinder::PathfinderImpl::WithinJumpsOfOthersCacheHit(
     }
 }
 
-std::pair<std::vector<std::shared_ptr<const UniverseObject>>, std::vector<std::shared_ptr<const UniverseObject>>>
+std::pair<std::vector<std::shared_ptr<const UniverseObject>>,
+          std::vector<std::shared_ptr<const UniverseObject>>>
 Pathfinder::WithinJumpsOfOthers(
     int jumps,
     const std::vector<std::shared_ptr<const UniverseObject>>& candidates,
@@ -1145,7 +1294,8 @@ Pathfinder::WithinJumpsOfOthers(
     return pimpl->WithinJumpsOfOthers(jumps, candidates, stationary);
 }
 
-std::pair<std::vector<std::shared_ptr<const UniverseObject>>, std::vector<std::shared_ptr<const UniverseObject>>>
+std::pair<std::vector<std::shared_ptr<const UniverseObject>>,
+          std::vector<std::shared_ptr<const UniverseObject>>>
 Pathfinder::PathfinderImpl::WithinJumpsOfOthers(
     int jumps,
     const std::vector<std::shared_ptr<const UniverseObject>>& candidates,
@@ -1169,7 +1319,7 @@ Pathfinder::PathfinderImpl::WithinJumpsOfOthers(
             far.push_back(candidate);
     }
 
-    return {near, far};
+    return {near, far}; //, wherever you are...
 }
 
 bool Pathfinder::PathfinderImpl::WithinJumpsOfOthers(
@@ -1197,19 +1347,16 @@ bool Pathfinder::PathfinderImpl::WithinJumpsOfOthers(
     return within_jumps;
 }
 
-
-int Pathfinder::NearestSystemTo(double x, double y) const {
-    return pimpl->NearestSystemTo(x, y);
-}
+int Pathfinder::NearestSystemTo(double x, double y) const
+{ return pimpl->NearestSystemTo(x, y); }
 
 int Pathfinder::PathfinderImpl::NearestSystemTo(double x, double y) const {
     double min_dist2 = DBL_MAX;
     int min_dist2_sys_id = INVALID_OBJECT_ID;
 
-    std::vector<std::shared_ptr<System>> systems = Objects().FindObjects<System>();
+    auto systems = Objects().FindObjects<System>();
 
-    for (auto const& system : systems)
-    {
+    for (auto const& system : systems) {
         double xs = system->X();
         double ys = system->Y();
         double dist2 = (xs-x)*(xs-x) + (ys-y)*(ys-y);
@@ -1224,19 +1371,26 @@ int Pathfinder::PathfinderImpl::NearestSystemTo(double x, double y) const {
 }
 
 
-void Pathfinder::InitializeSystemGraph(const std::vector<int> system_ids, int for_empire_id) {
-    return pimpl->InitializeSystemGraph(system_ids, for_empire_id);
-}
+void Pathfinder::InitializeSystemGraph(const std::vector<int> system_ids, int for_empire_id)
+{ return pimpl->InitializeSystemGraph(system_ids, for_empire_id); }
 
-void Pathfinder::PathfinderImpl::InitializeSystemGraph(const std::vector<int> system_ids, int for_empire_id) {
-    typedef boost::graph_traits<GraphImpl::SystemGraph>::edge_descriptor EdgeDescriptor;
+void Pathfinder::PathfinderImpl::InitializeSystemGraph(
+    const std::vector<int> system_ids, int for_empire_id)
+{
     auto new_graph_impl = std::make_shared<GraphImpl>();
-    // std::vector<int> system_ids = ::EmpireKnownObjects(for_empire_id).FindObjectIDs<System>();
+    // auto system_ids = ::EmpireKnownObjects(for_empire_id).FindObjectIDs<System>();
     // NOTE: this initialization of graph_changed prevents testing for edges between nonexistant vertices
     bool graph_changed = system_ids.size() != boost::num_vertices(m_graph_impl->system_graph);
-    //DebugLogger() << "InitializeSystemGraph(" << for_empire_id << ") system_ids: (" << system_ids.size() << ")";
-    //for (int id : system_ids)
-    //    DebugLogger() << " ... " << *it;
+
+    auto ints_to_string = [](const std::vector<int>& ints_vec) {
+        std::stringstream o;
+        for (auto id : ints_vec)
+            o << id << " ";
+        return o.str();
+    };
+    TraceLogger() << "InitializeSystemGraph(" << for_empire_id
+                  << ") system_ids: (" << system_ids.size() << "): "
+                  << ints_to_string(system_ids);
 
     GraphImpl::SystemIDPropertyMap sys_id_property_map =
         boost::get(vertex_system_id_t(), new_graph_impl->system_graph);
@@ -1274,13 +1428,13 @@ void Pathfinder::PathfinderImpl::InitializeSystemGraph(const std::vector<int> sy
                 continue;
 
             // get new_graph_impl->system_graph index for this system
-            boost::unordered_map<int, size_t>::iterator reverse_lookup_map_it = m_system_id_to_graph_index.find(lane_dest_id);
+            auto reverse_lookup_map_it = m_system_id_to_graph_index.find(lane_dest_id);
             if (reverse_lookup_map_it == m_system_id_to_graph_index.end())
                 continue;   // couldn't find destination system id in vertex lookup map; don't add to graph
             size_t lane_dest_graph_index = reverse_lookup_map_it->second;
 
-            std::pair<EdgeDescriptor, bool> add_edge_result =
-                boost::add_edge(system1_index, lane_dest_graph_index, new_graph_impl->system_graph);
+            auto add_edge_result = boost::add_edge(system1_index, lane_dest_graph_index,
+                                                   new_graph_impl->system_graph);
 
             if (add_edge_result.second) {   // if this is a non-duplicate starlane or wormhole
                 if (lane_dest.second) {         // if this is a wormhole
@@ -1302,7 +1456,9 @@ void Pathfinder::PathfinderImpl::InitializeSystemGraph(const std::vector<int> sy
 
     // if all previous edges still exist in the new graph, and the number of vertices and edges hasn't changed,
     // then no vertices or edges can have been added either, so it is still the same graph
-    graph_changed = graph_changed || boost::num_edges(new_graph_impl->system_graph) != boost::num_edges(m_graph_impl->system_graph);
+    graph_changed = graph_changed ||
+        boost::num_edges(new_graph_impl->system_graph) !=
+            boost::num_edges(m_graph_impl->system_graph);
 
     if (graph_changed) {
         new_graph_impl.swap(m_graph_impl);
@@ -1313,12 +1469,12 @@ void Pathfinder::PathfinderImpl::InitializeSystemGraph(const std::vector<int> sy
     UpdateEmpireVisibilityFilteredSystemGraphs(for_empire_id);
 }
 
-void Pathfinder::UpdateEmpireVisibilityFilteredSystemGraphs(int for_empire_id) {
-    return pimpl->UpdateEmpireVisibilityFilteredSystemGraphs(for_empire_id);
-}
+void Pathfinder::UpdateEmpireVisibilityFilteredSystemGraphs(int for_empire_id)
+{ return pimpl->UpdateEmpireVisibilityFilteredSystemGraphs(for_empire_id); }
 
 void Pathfinder::PathfinderImpl::UpdateEmpireVisibilityFilteredSystemGraphs(int for_empire_id) {
     m_graph_impl->empire_system_graph_views.clear();
+    m_graph_impl->system_pred_graph_views.clear();
 
     // if building system graph views for all empires, then each empire's graph
     // should accurately filter for that empire's visibility.  if building
@@ -1348,4 +1504,6 @@ void Pathfinder::PathfinderImpl::UpdateEmpireVisibilityFilteredSystemGraphs(int 
             m_graph_impl->empire_system_graph_views[empire_id] = filtered_graph_ptr;
         }
     }
+    for (const auto& prev_pred : m_graph_impl->system_predicates)
+        m_graph_impl->AddSystemPredicate(prev_pred);
 }

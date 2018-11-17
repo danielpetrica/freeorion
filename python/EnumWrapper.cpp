@@ -1,5 +1,7 @@
 #include "../universe/Enums.h"
 #include "../Empire/Diplomacy.h"
+#include "../util/MultiplayerCommon.h"
+#include "../util/GameRules.h"
 
 #include <boost/python.hpp>
 
@@ -65,11 +67,13 @@ namespace FreeOrionPython {
         enum_<BuildType>("buildType")
             .value("building",          BT_BUILDING)
             .value("ship",              BT_SHIP)
+            .value("stockpile",         BT_STOCKPILE)
         ;
         enum_<ResourceType>("resourceType")
             .value("industry",      RE_INDUSTRY)
             .value("trade",         RE_TRADE)
             .value("research",      RE_RESEARCH)
+            .value("stockpile",     RE_STOCKPILE)
         ;
         enum_<MeterType>("meterType")
             .value("targetPopulation",  METER_TARGET_POPULATION)
@@ -88,6 +92,7 @@ namespace FreeOrionPython {
             .value("maxStructure",      METER_MAX_STRUCTURE)
             .value("maxDefense",        METER_MAX_DEFENSE)
             .value("maxSupply",         METER_MAX_SUPPLY)
+            .value("maxStockpile",      METER_MAX_STOCKPILE)
             .value("maxTroops",         METER_MAX_TROOPS)
 
             .value("population",        METER_POPULATION)
@@ -106,6 +111,7 @@ namespace FreeOrionPython {
             .value("structure",         METER_STRUCTURE)
             .value("defense",           METER_DEFENSE)
             .value("supply",            METER_SUPPLY)
+            .value("stockpile",         METER_STOCKPILE)
             .value("troops",            METER_TROOPS)
 
             .value("rebels",            METER_REBEL_TROOPS)
@@ -134,6 +140,18 @@ namespace FreeOrionPython {
             .value("capture",       CR_CAPTURE)
             .value("destroy",       CR_DESTROY)
             .value("retain",        CR_RETAIN)
+        ;
+        enum_<EffectsCauseType>("effectsCauseType")
+            .value("invalid",       INVALID_EFFECTS_GROUP_CAUSE_TYPE)
+            .value("unknown",       ECT_UNKNOWN_CAUSE)
+            .value("inherent",      ECT_INHERENT)
+            .value("tech",          ECT_TECH)
+            .value("building",      ECT_BUILDING)
+            .value("field",         ECT_FIELD)
+            .value("special",       ECT_SPECIAL)
+            .value("species",       ECT_SPECIES)
+            .value("shipPart",      ECT_SHIP_PART)
+            .value("shipHull",      ECT_SHIP_HULL)
         ;
         enum_<ShipSlotType>("shipSlotType")
             .value("external",      SL_EXTERNAL)
@@ -196,6 +214,20 @@ namespace FreeOrionPython {
             .value("irregular",     IRREGULAR)
             .value("ring",          RING)
             .value("random",        RANDOM)
+        ;
+        enum_<GameRules::Type>("ruleType")
+            .value("invalid",       GameRules::Type::INVALID)
+            .value("toggle",        GameRules::Type::TOGGLE)
+            .value("int",           GameRules::Type::INT)
+            .value("double",        GameRules::Type::DOUBLE)
+            .value("string",        GameRules::Type::STRING)
+        ;
+        enum_<Networking::RoleType>("roleType")
+            .value("host",                Networking::ROLE_HOST)
+            .value("clientTypeModerator", Networking::ROLE_CLIENT_TYPE_MODERATOR)
+            .value("clientTypePlayer",    Networking::ROLE_CLIENT_TYPE_PLAYER)
+            .value("clientTypeObserver",  Networking::ROLE_CLIENT_TYPE_OBSERVER)
+            .value("galaxySetup",         Networking::ROLE_GALAXY_SETUP)
         ;
     }
 }

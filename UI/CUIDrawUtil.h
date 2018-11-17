@@ -55,7 +55,7 @@ bool InAngledCornerRect(const GG::Pt& pt, const GG::Pt& ul, const GG::Pt& lr, in
 
 /** the orientations used to render some shapes used in the UI; the orientations
   * usually refer to the direction in which the shape is pointing */
-enum ShapeOrientation {SHAPE_UP, SHAPE_DOWN, SHAPE_LEFT, SHAPE_RIGHT};
+enum class ShapeOrientation {UP, DOWN, LEFT, RIGHT};
 
 /** renders a triangle of arbitrary size and shape, having an optional 1-pixel-thick border */
 void Triangle(const GG::Pt& pt1, const GG::Pt pt2, const GG::Pt pt3, GG::Clr color, bool border = true);
@@ -67,17 +67,21 @@ bool InTriangle(const GG::Pt& pt, const GG::Pt& pt1, const GG::Pt pt2, const GG:
   * direction.  The triangle will have a base length of one of
   * (<i>x2</i> - <i>x1</i>) and (<i>y2</i> - <i>y1</i>),
   * depending on \a orientation, and a height of the other. */
-void IsoscelesTriangle(const GG::Pt& ul, const GG::Pt& lr, ShapeOrientation orientation, GG::Clr color, bool border = true);
+void IsoscelesTriangle(const GG::Pt& ul, const GG::Pt& lr, ShapeOrientation orientation,
+                       GG::Clr color, bool border = true);
 
 /** Stores, in \a buffer, vertices in CCW order that outline an isosceles triangle. */
-void BufferStoreIsoscelesTriangle(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul, const GG::Pt& lr, ShapeOrientation orientation);
+void BufferStoreIsoscelesTriangle(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul,
+                                  const GG::Pt& lr, ShapeOrientation orientation);
 
 /** returns true iff \a pt falls within the isosceles triangle described by the other parameters */
-bool InIsoscelesTriangle(const GG::Pt& pt, const GG::Pt& ul, const GG::Pt& lr, ShapeOrientation orientation);
+bool InIsoscelesTriangle(const GG::Pt& pt, const GG::Pt& ul, const GG::Pt& lr,
+                         ShapeOrientation orientation);
 
 /** Draws a filled portion of a circle when \a filled_shape is true or an
   * unfilled portion when \a filled_shape is false. */
-void CircleArc(const GG::Pt& ul, const GG::Pt& lr, double theta1, double theta2, bool filled_shape);
+void CircleArc(const GG::Pt& ul, const GG::Pt& lr, double theta1, double theta2,
+               bool filled_shape);
 
 /** Stores, in \a buffer vertices in CCW order that outline a circular arc or
   * \a num_slices indicates how many triangles to use to compose the circle, or
@@ -86,8 +90,9 @@ void CircleArc(const GG::Pt& ul, const GG::Pt& lr, double theta1, double theta2,
   * list, while false indicates a triangle list (where each triangle has all
   * 3 vertices specified explicitly. \a filled_shape indicates that a vertex
   * at the centre of the circle should be present and shared with all triangles.*/
-void BufferStoreCircleArcVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul, const GG::Pt& lr,
-                                  double theta1, double theta2, bool filled_shape = false,
+void BufferStoreCircleArcVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul,
+                                  const GG::Pt& lr, double theta1, double theta2,
+                                  bool filled_shape = false,
                                   int num_slices = 0, bool fan = true);
 
 /** Draws a rectangle whose corners are rounded with radius \a radius as
@@ -99,8 +104,9 @@ void PartlyRoundedRect(const GG::Pt& ul, const GG::Pt& lr, int radius, bool ur_r
 /** Stores, in \a buffer verticies in CCW order that outline rectangle with
   * corners rounded with radius \a radrius as determined by the \a *_round
   * parameters. */
-void BufferStorePartlyRoundedRectVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul, const GG::Pt& lr,
-                                          int radius, bool ur_round, bool ul_round, bool ll_round, bool lr_round);
+void BufferStorePartlyRoundedRectVertices(GG::GL2DVertexBuffer& buffer, const GG::Pt& ul,
+                                          const GG::Pt& lr, int radius, bool ur_round,
+                                          bool ul_round, bool ll_round, bool lr_round);
 
 /** ScanlineRenderer renders scanlines in circular/square/arbitrary areas.
     It loads the scanline shader on first use.
@@ -132,7 +138,7 @@ public:
     void StopUsing();
 
 private:
-    struct Impl;
+    class Impl;
 
     std::unique_ptr<Impl> const m_impl;
 };

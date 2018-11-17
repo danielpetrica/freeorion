@@ -1,13 +1,14 @@
 #ifndef _EmpireManager_h_
 #define _EmpireManager_h_
 
-#include "../universe/EnumsFwd.h"
 #include "Diplomacy.h"
+#include "../universe/EnumsFwd.h"
 #include "../util/Export.h"
 #include "../util/Serialize.h"
 
 #include <GG/Clr.h>
 
+#include <boost/filesystem.hpp>
 #include <boost/serialization/access.hpp>
 #include <boost/signals2/signal.hpp>
 
@@ -18,14 +19,6 @@
 
 class Empire;
 class UniverseObject;
-
-struct FO_COMMON_API DiplomaticStatusUpdateInfo {
-    DiplomaticStatusUpdateInfo();
-    DiplomaticStatusUpdateInfo(int empire1_id_, int empire2_id_, DiplomaticStatus status);
-    int                 empire1_id;
-    int                 empire2_id;
-    DiplomaticStatus    diplo_status;
-};
 
 /** Maintains all of the Empire objects that exist in the application. */
 class FO_COMMON_API EmpireManager {
@@ -124,5 +117,8 @@ extern template FO_COMMON_API void EmpireManager::serialize<freeorion_xml_iarchi
 
 /** The colors that are available for use for empires in the game. */
 FO_COMMON_API const std::vector<GG::Clr>& EmpireColors();
+
+/** Initialize empire colors from \p path */
+FO_COMMON_API void InitEmpireColors(const boost::filesystem::path& path);
 
 #endif // _EmpireManager_h_

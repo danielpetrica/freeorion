@@ -47,6 +47,7 @@ public:
     GroupBox(X x, Y y, X w, Y h, const std::string& label, const std::shared_ptr<Font>& font, Clr color,
              Clr text_color = CLR_BLACK, Clr interior = CLR_ZERO, Flags<WndFlag> flags = NO_WND_FLAGS);
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ ///@{
     Pt ClientUpperLeft() const override;
@@ -92,7 +93,7 @@ private:
     Clr                     m_text_color; ///< Color of label text
     Clr                     m_int_color;  ///< Color of background inside box
     std::shared_ptr<Font> m_font;
-    TextControl*            m_label;
+    std::shared_ptr<TextControl>            m_label;
     bool                    m_set_client_corners_equal_to_box_corners;
 };
 

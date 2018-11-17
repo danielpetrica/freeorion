@@ -3,7 +3,8 @@
 #include "../util/OptionsDB.h"
 #include "../util/Logger.h"
 #include "../util/AppInterface.h"
-#include "../parse/Parse.h"
+#include "../util/GameRules.h"
+#include "../util/CheckSums.h"
 #include "../Empire/Empire.h"
 #include "../Empire/EmpireManager.h"
 #include "Condition.h"
@@ -17,56 +18,118 @@
 #include "Enums.h"
 
 #include <cfloat>
+#include <unordered_set>
+#include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/fstream.hpp>
+#include <boost/uuid/nil_generator.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <boost/lexical_cast.hpp>
+//TODO: replace with std::make_unique when transitioning to C++14
+#include <boost/smart_ptr/make_unique.hpp>
+
+extern FO_COMMON_API const int INVALID_DESIGN_ID = -1;
 
 using boost::io::str;
 
 namespace {
-    const bool CHEAP_AND_FAST_SHIP_PRODUCTION = false;    // makes all ships cost 1 PP and take 1 turn to build
+    void AddRules(GameRules& rules) {
+        // makes all ships cost 1 PP and take 1 turn to produce
+        rules.Add<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION",
+                        "RULE_CHEAP_AND_FAST_SHIP_PRODUCTION_DESC",
+                        "", false, true);
+        rules.Add<double>("RULE_SHIP_SPEED_FACTOR", "RULE_SHIP_SPEED_FACTOR_DESC",
+                          "BALANCE", 1.0, true, RangedValidator<double>(0.1, 10.0));
+        rules.Add<double>("RULE_SHIP_STRUCTURE_FACTOR", "RULE_SHIP_STRUCTURE_FACTOR_DESC",
+                          "BALANCE", 1.0, true, RangedValidator<double>(0.1, 10.0));
+    }
+    bool temp_bool = RegisterGameRules(&AddRules);
+
     const std::string EMPTY_STRING;
 
+    // create effectsgroup that increases the value of \a meter_type
+    // by the result of evalulating \a increase_vr
     std::shared_ptr<Effect::EffectsGroup>
-    IncreaseMeter(MeterType meter_type, float increase) {
-        typedef std::shared_ptr<Effect::EffectsGroup> EffectsGroupPtr;
-        typedef std::vector<Effect::EffectBase*> Effects;
-        Condition::Source* scope = new Condition::Source;
-        Condition::Source* activation = new Condition::Source;
-        ValueRef::ValueRefBase<double>* vr =
-            new ValueRef::Operation<double>(
+    IncreaseMeter(MeterType meter_type,
+                  std::unique_ptr<ValueRef::ValueRefBase<double>>&& increase_vr)
+    {
+        typedef std::vector<std::unique_ptr<Effect::EffectBase>> Effects;
+        auto scope = boost::make_unique<Condition::Source>();
+        auto activation = boost::make_unique<Condition::Source>();
+
+        auto vr =
+            boost::make_unique<ValueRef::Operation<double>>(
                 ValueRef::PLUS,
-                new ValueRef::Variable<double>(ValueRef::EFFECT_TARGET_VALUE_REFERENCE, std::vector<std::string>()),
-                new ValueRef::Constant<double>(increase)
+                boost::make_unique<ValueRef::Variable<double>>(
+                    ValueRef::EFFECT_TARGET_VALUE_REFERENCE, std::vector<std::string>()),
+                std::move(increase_vr)
             );
-        return EffectsGroupPtr(
-            new Effect::EffectsGroup(
-                scope, activation, Effects(1, new Effect::SetMeter(meter_type, vr))));
+        auto effects = Effects();
+        effects.push_back(boost::make_unique<Effect::SetMeter>(meter_type, std::move(vr)));
+        return std::make_shared<Effect::EffectsGroup>(std::move(scope), std::move(activation), std::move(effects));
     }
 
+    // create effectsgroup that increases the value of \a meter_type
+    // by the specified amount \a fixed_increase
     std::shared_ptr<Effect::EffectsGroup>
-    IncreaseMeter(MeterType meter_type, const std::string& part_name, float increase, bool allow_stacking = true) {
-        typedef std::shared_ptr<Effect::EffectsGroup> EffectsGroupPtr;
-        typedef std::vector<Effect::EffectBase*> Effects;
-        Condition::Source* scope = new Condition::Source;
-        Condition::Source* activation = new Condition::Source;
+    IncreaseMeter(MeterType meter_type, float fixed_increase) {
+        auto increase_vr = boost::make_unique<ValueRef::Constant<double>>(fixed_increase);
+        return IncreaseMeter(meter_type, std::move(increase_vr));
+    }
 
-        ValueRef::ValueRefBase<double>* value_vr =
-            new ValueRef::Operation<double>(
-                ValueRef::PLUS,
-                new ValueRef::Variable<double>(ValueRef::EFFECT_TARGET_VALUE_REFERENCE, std::vector<std::string>()),
-                new ValueRef::Constant<double>(increase)
-            );
+    // create effectsgroup that increases the value of \a meter_type
+    // by the product of \a base_increase and the value of the game
+    // rule of type double with the name \a scaling_factor_rule_name
+    std::shared_ptr<Effect::EffectsGroup>
+    IncreaseMeter(MeterType meter_type, float base_increase,
+                  const std::string& scaling_factor_rule_name)
+    {
+        // if no rule specified, revert to fixed constant increase
+        if (scaling_factor_rule_name.empty())
+            return IncreaseMeter(meter_type, base_increase);
 
-        ValueRef::ValueRefBase<std::string>* part_name_vr =
-            new ValueRef::Constant<std::string>(part_name);
+        auto increase_vr = boost::make_unique<ValueRef::Operation<double>>(
+            ValueRef::TIMES,
+            boost::make_unique<ValueRef::Constant<double>>(base_increase),
+            boost::make_unique<ValueRef::ComplexVariable<double>>(
+                "GameRule", nullptr, nullptr, nullptr,
+                boost::make_unique<ValueRef::Constant<std::string>>(scaling_factor_rule_name)
+            )
+        );
+
+        return IncreaseMeter(meter_type, std::move(increase_vr));
+    }
+
+    // create effectsgroup that increases the value of the part meter
+    // of type \a meter_type for part name \a part_name by the fixed
+    // amount \a increase
+    std::shared_ptr<Effect::EffectsGroup>
+    IncreaseMeter(MeterType meter_type, const std::string& part_name,
+                  float increase, bool allow_stacking = true)
+    {
+        typedef std::vector<std::unique_ptr<Effect::EffectBase>> Effects;
+        auto scope = boost::make_unique<Condition::Source>();
+        auto activation = boost::make_unique<Condition::Source>();
+
+        auto value_vr = boost::make_unique<ValueRef::Operation<double>>(
+            ValueRef::PLUS,
+            boost::make_unique<ValueRef::Variable<double>>(
+                ValueRef::EFFECT_TARGET_VALUE_REFERENCE, std::vector<std::string>()),
+            boost::make_unique<ValueRef::Constant<double>>(increase)
+        );
+
+        auto part_name_vr =
+            boost::make_unique<ValueRef::Constant<std::string>>(part_name);
 
         std::string stacking_group = (allow_stacking ? "" :
             (part_name + "_" + boost::lexical_cast<std::string>(meter_type) + "_PartMeter"));
 
-        return EffectsGroupPtr(
-            new Effect::EffectsGroup(
-                scope, activation,
-                Effects(1, new Effect::SetShipPartMeter(meter_type, part_name_vr, value_vr)),
-                part_name, stacking_group));
+        auto effects = Effects();
+        effects.push_back(boost::make_unique<Effect::SetShipPartMeter>(
+                              meter_type, std::move(part_name_vr), std::move(value_vr)));
+
+        return std::make_shared<Effect::EffectsGroup>(
+            std::move(scope), std::move(activation), std::move(effects), part_name, stacking_group);
     }
 
     bool DesignsTheSame(const ShipDesign& one, const ShipDesign& two) {
@@ -86,16 +149,25 @@ namespace {
     }
 }
 
+namespace CheckSums {
+    void CheckSumCombine(unsigned int& sum, const HullType::Slot& slot) {
+        TraceLogger() << "CheckSumCombine(Slot): " << typeid(slot).name();
+        CheckSumCombine(sum, slot.x);
+        CheckSumCombine(sum, slot.y);
+        CheckSumCombine(sum, slot.type);
+    }
+}
+
 ////////////////////////////////////////////////
 // Free Functions                             //
 ////////////////////////////////////////////////
-const PartTypeManager& GetPartTypeManager()
+PartTypeManager& GetPartTypeManager()
 { return PartTypeManager::GetPartTypeManager(); }
 
 const PartType* GetPartType(const std::string& name)
 { return GetPartTypeManager().GetPartType(name); }
 
-const HullTypeManager& GetHullTypeManager()
+HullTypeManager& GetHullTypeManager()
 { return HullTypeManager::GetHullTypeManager(); }
 
 const HullType* GetHullType(const std::string& name)
@@ -103,6 +175,48 @@ const HullType* GetHullType(const std::string& name)
 
 const ShipDesign* GetShipDesign(int ship_design_id)
 { return GetUniverse().GetShipDesign(ship_design_id); }
+
+
+////////////////////////////////////////////////
+// CommonParams
+////////////////////////////////////////////////
+CommonParams::CommonParams() :
+    production_cost(nullptr),
+    production_time(nullptr),
+    producible(false),
+    tags(),
+    production_meter_consumption(),
+    production_special_consumption(),
+    location(nullptr),
+    enqueue_location(nullptr),
+    effects()
+{}
+
+CommonParams::CommonParams(std::unique_ptr<ValueRef::ValueRefBase<double>>&& production_cost_,
+                           std::unique_ptr<ValueRef::ValueRefBase<int>>&& production_time_,
+                           bool producible_,
+                           const std::set<std::string>& tags_,
+                           std::unique_ptr<Condition::ConditionBase>&& location_,
+                           std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects_,
+                           ConsumptionMap<MeterType>&& production_meter_consumption_,
+                           ConsumptionMap<std::string>&& production_special_consumption_,
+                           std::unique_ptr<Condition::ConditionBase>&& enqueue_location_) :
+    production_cost(std::move(production_cost_)),
+    production_time(std::move(production_time_)),
+    producible(producible_),
+    tags(),
+    production_meter_consumption(std::move(production_meter_consumption_)),
+    production_special_consumption(std::move(production_special_consumption_)),
+    location(std::move(location_)),
+    enqueue_location(std::move(enqueue_location_)),
+    effects(std::move(effects_))
+{
+    for (const std::string& tag : tags_)
+        tags.insert(boost::to_upper_copy<std::string>(tag));
+}
+
+CommonParams::~CommonParams()
+{}
 
 
 /////////////////////////////////////
@@ -115,73 +229,81 @@ PartTypeManager::PartTypeManager() {
     if (s_instance)
         throw std::runtime_error("Attempted to create more than one PartTypeManager.");
 
+    // Only update the global pointer on sucessful construction.
     s_instance = this;
-
-    try {
-        parse::ship_parts(m_parts);
-    } catch (const std::exception& e) {
-        ErrorLogger() << "Failed parsing ship_parts.txt: error: " << e.what();
-        throw;
-    }
-
-    if (GetOptionsDB().Get<bool>("verbose-logging")) {
-        DebugLogger() << "Part Types:";
-        for (const std::map<std::string, PartType*>::value_type& entry : m_parts) {
-            const PartType* p = entry.second;
-            DebugLogger() << " ... " << p->Name() << " class: " << p->Class();
-        }
-    }
-}
-
-PartTypeManager::~PartTypeManager() {
-    for (std::map<std::string, PartType*>::value_type& entry : m_parts) {
-        delete entry.second;
-    }
 }
 
 const PartType* PartTypeManager::GetPartType(const std::string& name) const {
-    std::map<std::string, PartType*>::const_iterator it = m_parts.find(name);
-    return it != m_parts.end() ? it->second : nullptr;
+    CheckPendingPartTypes();
+    auto it = m_parts.find(name);
+    return it != m_parts.end() ? it->second.get() : nullptr;
 }
 
-const PartTypeManager& PartTypeManager::GetPartTypeManager() {
+PartTypeManager& PartTypeManager::GetPartTypeManager() {
     static PartTypeManager manager;
     return manager;
 }
 
-PartTypeManager::iterator PartTypeManager::begin() const
-{ return m_parts.begin(); }
+PartTypeManager::iterator PartTypeManager::begin() const {
+    CheckPendingPartTypes();
+    return m_parts.begin();
+}
 
-PartTypeManager::iterator PartTypeManager::end() const
-{ return m_parts.end(); }
+PartTypeManager::iterator PartTypeManager::end() const{
+    CheckPendingPartTypes();
+    return m_parts.end();
+}
+
+unsigned int PartTypeManager::GetCheckSum() const {
+    CheckPendingPartTypes();
+    unsigned int retval{0};
+    for (auto const& name_part_pair : m_parts)
+        CheckSums::CheckSumCombine(retval, name_part_pair);
+    CheckSums::CheckSumCombine(retval, m_parts.size());
+
+
+    DebugLogger() << "PartTypeManager checksum: " << retval;
+    return retval;
+}
+
+void PartTypeManager::SetPartTypes(Pending::Pending<PartTypeMap>&& pending_part_types)
+{ m_pending_part_types = std::move(pending_part_types); }
+
+void PartTypeManager::CheckPendingPartTypes() const {
+    if (!m_pending_part_types)
+        return;
+
+    Pending::SwapPending(m_pending_part_types, m_parts);
+
+    TraceLogger() << [this]() {
+            std::string retval("Part Types:");
+            for (const auto& pair : m_parts) {
+                const auto& part = pair.second;
+                retval.append("\n\t" + part->Name() + " class: " + boost::lexical_cast<std::string>(part->Class()));
+            }
+            return retval;
+        }();
+}
 
 
 ////////////////////////////////////////////////
 // PartType
 ////////////////////////////////////////////////
-
 PartType::PartType() :
-    m_name("invalid part type"),
-    m_description("indescribable"),
     m_class(INVALID_SHIP_PART_CLASS),
-    m_capacity(0.0f),
-    m_secondary_stat(1.0f),
-    m_production_cost(0),
-    m_production_time(0),
-    m_producible(false),
+    m_production_cost(),
+    m_production_time(),
     m_mountable_slot_types(),
     m_tags(),
     m_production_meter_consumption(),
     m_production_special_consumption(),
-    m_location(0),
+    m_location(),
     m_exclusions(),
-    m_effects(),
-    m_icon(),
-    m_add_standard_capacity_effect(false)
+    m_effects()
 {}
 
 PartType::PartType(ShipPartClass part_class, double capacity, double stat2,
-                   const CommonParams& common_params, const MoreCommonParams& more_common_params,
+                   CommonParams& common_params, const MoreCommonParams& more_common_params,
                    std::vector<ShipSlotType> mountable_slot_types,
                    const std::string& icon, bool add_standard_capacity_effect) :
     m_name(more_common_params.name),
@@ -189,26 +311,27 @@ PartType::PartType(ShipPartClass part_class, double capacity, double stat2,
     m_class(part_class),
     m_capacity(capacity),
     m_secondary_stat(stat2),
-    m_production_cost(common_params.production_cost),
-    m_production_time(common_params.production_time),
     m_producible(common_params.producible),
+    m_production_cost(std::move(common_params.production_cost)),
+    m_production_time(std::move(common_params.production_time)),
     m_mountable_slot_types(mountable_slot_types),
     m_tags(),
-    m_production_meter_consumption(common_params.production_meter_consumption),
-    m_production_special_consumption(common_params.production_special_consumption),
-    m_location(common_params.location),
+    m_production_meter_consumption(std::move(common_params.production_meter_consumption)),
+    m_production_special_consumption(std::move(common_params.production_special_consumption)),
+    m_location(std::move(common_params.location)),
     m_exclusions(more_common_params.exclusions),
     m_effects(),
     m_icon(icon),
     m_add_standard_capacity_effect(add_standard_capacity_effect)
 {
-    //std::cout << "part type: " << m_name << " producible: " << m_producible << std::endl;
-    Init(common_params.effects);
+    //TraceLogger() << "part type: " << m_name << " producible: " << m_producible << std::endl;
+    Init(std::move(common_params.effects));
+
     for (const std::string& tag : common_params.tags)
         m_tags.insert(boost::to_upper_copy<std::string>(tag));
 }
 
-void PartType::Init(const std::vector<std::shared_ptr<Effect::EffectsGroup>>& effects) {
+void PartType::Init(std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects) {
     if ((m_capacity != 0 || m_secondary_stat != 0) && m_add_standard_capacity_effect) {
         switch (m_class) {
         case PC_COLONY:
@@ -239,10 +362,10 @@ void PartType::Init(const std::vector<std::shared_ptr<Effect::EffectsGroup>>& ef
             m_effects.push_back(IncreaseMeter(METER_MAX_FUEL,       m_capacity));
             break;
         case PC_ARMOUR:
-            m_effects.push_back(IncreaseMeter(METER_MAX_STRUCTURE,  m_capacity));
+            m_effects.push_back(IncreaseMeter(METER_MAX_STRUCTURE,  m_capacity,     "RULE_SHIP_STRUCTURE_FACTOR"));
             break;
         case PC_SPEED:
-            m_effects.push_back(IncreaseMeter(METER_SPEED,          m_capacity));
+            m_effects.push_back(IncreaseMeter(METER_SPEED,          m_capacity,     "RULE_SHIP_SPEED_FACTOR"));
             break;
         case PC_RESEARCH:
             m_effects.push_back(IncreaseMeter(METER_TARGET_RESEARCH,m_capacity));
@@ -258,17 +381,33 @@ void PartType::Init(const std::vector<std::shared_ptr<Effect::EffectsGroup>>& ef
         }
     }
 
-    for (std::shared_ptr<Effect::EffectsGroup> effect : effects) {
+    if (m_production_cost)
+        m_production_cost->SetTopLevelContent(m_name);
+    if (m_production_time)
+        m_production_time->SetTopLevelContent(m_name);
+    if (m_location)
+        m_location->SetTopLevelContent(m_name);
+    for (auto&& effect : effects) {
         effect->SetTopLevelContent(m_name);
-        m_effects.push_back(effect);
+        m_effects.emplace_back(std::move(effect));
     }
 }
 
 PartType::~PartType()
-{ delete m_location; }
+{}
 
-float PartType::Capacity() const
-{ return m_capacity; }
+float PartType::Capacity() const {
+    switch (m_class) {
+    case PC_ARMOUR:
+        return m_capacity * GetGameRules().Get<double>("RULE_SHIP_STRUCTURE_FACTOR");
+        break;
+    case PC_SPEED:
+        return m_capacity * GetGameRules().Get<double>("RULE_SHIP_SPEED_FACTOR");
+        break;
+    default:
+        return m_capacity;
+    }
+}
 
 float PartType::SecondaryStat() const
 { return m_secondary_stat; }
@@ -314,7 +453,7 @@ bool PartType::CanMountInSlotType(ShipSlotType slot_type) const {
 }
 
 bool PartType::ProductionCostTimeLocationInvariant() const {
-    if (CHEAP_AND_FAST_SHIP_PRODUCTION)
+    if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION"))
         return true;
     if (m_production_cost && !m_production_cost->TargetInvariant())
         return false;
@@ -324,19 +463,21 @@ bool PartType::ProductionCostTimeLocationInvariant() const {
 }
 
 float PartType::ProductionCost(int empire_id, int location_id) const {
-    if (CHEAP_AND_FAST_SHIP_PRODUCTION || !m_production_cost) {
+    if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION") || !m_production_cost) {
         return 1.0f;
     } else {
         if (m_production_cost->ConstantExpr())
             return static_cast<float>(m_production_cost->Eval());
+        else if (m_production_cost->SourceInvariant() && m_production_cost->TargetInvariant())
+            return static_cast<float>(m_production_cost->Eval());
 
         const auto arbitrary_large_number = 999999.9f;
 
-        std::shared_ptr<UniverseObject> location = GetUniverseObject(location_id);
-        if (!location)
+        auto location = GetUniverseObject(location_id);
+        if (!location && !m_production_cost->TargetInvariant())
             return arbitrary_large_number;
 
-        std::shared_ptr<const UniverseObject> source = Empires().GetSource(empire_id);
+        auto source = Empires().GetSource(empire_id);
         if (!source && !m_production_cost->SourceInvariant())
             return arbitrary_large_number;
 
@@ -349,17 +490,19 @@ float PartType::ProductionCost(int empire_id, int location_id) const {
 int PartType::ProductionTime(int empire_id, int location_id) const {
     const auto arbitrary_large_number = 9999;
 
-    if (CHEAP_AND_FAST_SHIP_PRODUCTION || !m_production_time) {
+    if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION") || !m_production_time) {
         return 1;
     } else {
         if (m_production_time->ConstantExpr())
             return m_production_time->Eval();
+        else if (m_production_time->SourceInvariant() && m_production_time->TargetInvariant())
+            return m_production_time->Eval();
 
-        std::shared_ptr<UniverseObject> location = GetUniverseObject(location_id);
-        if (!location)
+        auto location = GetUniverseObject(location_id);
+        if (!location && !m_production_time->TargetInvariant())
             return arbitrary_large_number;
 
-        std::shared_ptr<const UniverseObject> source = Empires().GetSource(empire_id);
+        auto source = Empires().GetSource(empire_id);
         if (!source && !m_production_time->SourceInvariant())
             return arbitrary_large_number;
 
@@ -369,32 +512,112 @@ int PartType::ProductionTime(int empire_id, int location_id) const {
     }
 }
 
+unsigned int PartType::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, m_name);
+    CheckSums::CheckSumCombine(retval, m_description);
+    CheckSums::CheckSumCombine(retval, m_class);
+    CheckSums::CheckSumCombine(retval, m_capacity);
+    CheckSums::CheckSumCombine(retval, m_secondary_stat);
+    CheckSums::CheckSumCombine(retval, m_production_cost);
+    CheckSums::CheckSumCombine(retval, m_production_time);
+    CheckSums::CheckSumCombine(retval, m_producible);
+    CheckSums::CheckSumCombine(retval, m_mountable_slot_types);
+    CheckSums::CheckSumCombine(retval, m_tags);
+    CheckSums::CheckSumCombine(retval, m_production_meter_consumption);
+    CheckSums::CheckSumCombine(retval, m_production_special_consumption);
+    CheckSums::CheckSumCombine(retval, m_location);
+    CheckSums::CheckSumCombine(retval, m_exclusions);
+    CheckSums::CheckSumCombine(retval, m_effects);
+    CheckSums::CheckSumCombine(retval, m_icon);
+    CheckSums::CheckSumCombine(retval, m_add_standard_capacity_effect);
+
+    return retval;
+}
+
 
 ////////////////////////////////////////////////
 // HullType
 ////////////////////////////////////////////////
-HullType::Slot::Slot() :
-    type(INVALID_SHIP_SLOT_TYPE), x(0.5), y(0.5)
+HullType::HullType() :
+    m_production_cost(nullptr),
+    m_production_time(nullptr),
+    m_slots(),
+    m_tags(),
+    m_production_meter_consumption(),
+    m_production_special_consumption(),
+    m_location(nullptr),
+    m_effects(),
+    m_graphic(),
+    m_icon()
 {}
 
-void HullType::Init(const std::vector<std::shared_ptr<Effect::EffectsGroup>>& effects) {
+HullType::HullType(const HullTypeStats& stats,
+                   CommonParams&& common_params,
+                   const MoreCommonParams& more_common_params,
+                   const std::vector<Slot>& slots,
+                   const std::string& icon, const std::string& graphic) :
+    m_name(more_common_params.name),
+    m_description(more_common_params.description),
+    m_speed(stats.speed),
+    m_fuel(stats.fuel),
+    m_stealth(stats.stealth),
+    m_structure(stats.structure),
+    m_production_cost(std::move(common_params.production_cost)),
+    m_production_time(std::move(common_params.production_time)),
+    m_producible(common_params.producible),
+    m_slots(slots),
+    m_tags(),
+    m_production_meter_consumption(std::move(common_params.production_meter_consumption)),
+    m_production_special_consumption(std::move(common_params.production_special_consumption)),
+    m_location(std::move(common_params.location)),
+    m_exclusions(more_common_params.exclusions),
+    m_effects(),
+    m_graphic(graphic),
+    m_icon(icon)
+{
+    //TraceLogger() << "hull type: " << m_name << " producible: " << m_producible << std::endl;
+    Init(std::move(common_params.effects));
+
+    for (const std::string& tag : common_params.tags)
+        m_tags.insert(boost::to_upper_copy<std::string>(tag));
+}
+
+HullType::Slot::Slot() :
+    type(INVALID_SHIP_SLOT_TYPE)
+{}
+
+HullType::~HullType()
+{}
+
+void HullType::Init(std::vector<std::unique_ptr<Effect::EffectsGroup>>&& effects) {
     if (m_fuel != 0)
         m_effects.push_back(IncreaseMeter(METER_MAX_FUEL,       m_fuel));
     if (m_stealth != 0)
         m_effects.push_back(IncreaseMeter(METER_STEALTH,        m_stealth));
     if (m_structure != 0)
-        m_effects.push_back(IncreaseMeter(METER_MAX_STRUCTURE,  m_structure));
+        m_effects.push_back(IncreaseMeter(METER_MAX_STRUCTURE,  m_structure,    "RULE_SHIP_STRUCTURE_FACTOR"));
     if (m_speed != 0)
-        m_effects.push_back(IncreaseMeter(METER_SPEED,          m_speed));
+        m_effects.push_back(IncreaseMeter(METER_SPEED,          m_speed,        "RULE_SHIP_SPEED_FACTOR"));
 
-    for (std::shared_ptr<Effect::EffectsGroup> effect : effects) {
+    if (m_production_cost)
+        m_production_cost->SetTopLevelContent(m_name);
+    if (m_production_time)
+        m_production_time->SetTopLevelContent(m_name);
+    if (m_location)
+        m_location->SetTopLevelContent(m_name);
+    for (auto&& effect : effects) {
         effect->SetTopLevelContent(m_name);
-        m_effects.push_back(effect);
+        m_effects.emplace_back(std::move(effect));
     }
 }
 
-HullType::~HullType()
-{ delete m_location; }
+float HullType::Speed() const
+{ return m_speed * GetGameRules().Get<double>("RULE_SHIP_SPEED_FACTOR"); }
+
+float HullType::Structure() const
+{ return m_structure * GetGameRules().Get<double>("RULE_SHIP_STRUCTURE_FACTOR"); }
 
 unsigned int HullType::NumSlots(ShipSlotType slot_type) const {
     unsigned int count = 0;
@@ -404,12 +627,11 @@ unsigned int HullType::NumSlots(ShipSlotType slot_type) const {
     return count;
 }
 
-
 // HullType:: and PartType::ProductionCost and ProductionTime are almost identical.
 // Chances are, the same is true of buildings and techs as well.
 // TODO: Eliminate duplication
 bool HullType::ProductionCostTimeLocationInvariant() const {
-    if (CHEAP_AND_FAST_SHIP_PRODUCTION)
+    if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION"))
         return true;
     if (m_production_cost && !m_production_cost->LocalCandidateInvariant())
         return false;
@@ -419,19 +641,21 @@ bool HullType::ProductionCostTimeLocationInvariant() const {
 }
 
 float HullType::ProductionCost(int empire_id, int location_id) const {
-    if (CHEAP_AND_FAST_SHIP_PRODUCTION || !m_production_cost) {
+    if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION") || !m_production_cost) {
         return 1.0f;
     } else {
         if (m_production_cost->ConstantExpr())
             return static_cast<float>(m_production_cost->Eval());
+        else if (m_production_cost->SourceInvariant() && m_production_cost->TargetInvariant())
+            return static_cast<float>(m_production_cost->Eval());
 
         const auto arbitrary_large_number = 999999.9f;
 
-        std::shared_ptr<UniverseObject> location = GetUniverseObject(location_id);
-        if (!location)
+        auto location = GetUniverseObject(location_id);
+        if (!location && !m_production_cost->TargetInvariant())
             return arbitrary_large_number;
 
-        std::shared_ptr<const UniverseObject> source = Empires().GetSource(empire_id);
+        auto source = Empires().GetSource(empire_id);
         if (!source && !m_production_cost->SourceInvariant())
             return arbitrary_large_number;
 
@@ -442,19 +666,21 @@ float HullType::ProductionCost(int empire_id, int location_id) const {
 }
 
 int HullType::ProductionTime(int empire_id, int location_id) const {
-    if (CHEAP_AND_FAST_SHIP_PRODUCTION || !m_production_time) {
+    if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION") || !m_production_time) {
         return 1;
     } else {
         if (m_production_time->ConstantExpr())
             return m_production_time->Eval();
+        else if (m_production_time->SourceInvariant() && m_production_time->TargetInvariant())
+            return m_production_time->Eval();
 
         const auto arbitrary_large_number = 999999;
 
-        std::shared_ptr<UniverseObject> location = GetUniverseObject(location_id);
-        if (!location)
+        auto location = GetUniverseObject(location_id);
+        if (!location && !m_production_time->TargetInvariant())
             return arbitrary_large_number;
 
-        std::shared_ptr<const UniverseObject> source = Empires().GetSource(empire_id);
+        auto source = Empires().GetSource(empire_id);
         if (!source && !m_production_time->SourceInvariant())
             return arbitrary_large_number;
 
@@ -462,6 +688,31 @@ int HullType::ProductionTime(int empire_id, int location_id) const {
 
         return m_production_time->Eval(context);
     }
+}
+
+unsigned int HullType::GetCheckSum() const {
+    unsigned int retval{0};
+
+    CheckSums::CheckSumCombine(retval, m_name);
+    CheckSums::CheckSumCombine(retval, m_description);
+    CheckSums::CheckSumCombine(retval, m_speed);
+    CheckSums::CheckSumCombine(retval, m_fuel);
+    CheckSums::CheckSumCombine(retval, m_stealth);
+    CheckSums::CheckSumCombine(retval, m_structure);
+    CheckSums::CheckSumCombine(retval, m_production_cost);
+    CheckSums::CheckSumCombine(retval, m_production_time);
+    CheckSums::CheckSumCombine(retval, m_producible);
+    CheckSums::CheckSumCombine(retval, m_slots);
+    CheckSums::CheckSumCombine(retval, m_tags);
+    CheckSums::CheckSumCombine(retval, m_production_meter_consumption);
+    CheckSums::CheckSumCombine(retval, m_production_special_consumption);
+    CheckSums::CheckSumCombine(retval, m_location);
+    CheckSums::CheckSumCombine(retval, m_exclusions);
+    CheckSums::CheckSumCombine(retval, m_effects);
+    CheckSums::CheckSumCombine(retval, m_graphic);
+    CheckSums::CheckSumCombine(retval, m_icon);
+
+    return retval;
 }
 
 
@@ -475,92 +726,83 @@ HullTypeManager::HullTypeManager() {
     if (s_instance)
         throw std::runtime_error("Attempted to create more than one HullTypeManager.");
 
+    // Only update the global pointer on sucessful construction.
     s_instance = this;
-
-    try {
-        parse::ship_hulls(m_hulls);
-    } catch (const std::exception& e) {
-        ErrorLogger() << "Failed parsing ship_hulls.txt: error: " << e.what();
-        throw;
-    }
-
-    if (GetOptionsDB().Get<bool>("verbose-logging")) {
-        DebugLogger() << "Hull Types:";
-        for (const std::map<std::string, HullType*>::value_type& entry : m_hulls) {
-            const HullType* h = entry.second;
-            DebugLogger() << " ... " << h->Name();
-        }
-    }
-}
-
-HullTypeManager::~HullTypeManager() {
-    for (std::map<std::string, HullType*>::value_type& entry : m_hulls) {
-        delete entry.second;
-    }
 }
 
 const HullType* HullTypeManager::GetHullType(const std::string& name) const {
-    std::map<std::string, HullType*>::const_iterator it = m_hulls.find(name);
-    return it != m_hulls.end() ? it->second : nullptr;
+    CheckPendingHullTypes();
+    auto it = m_hulls.find(name);
+    return it != m_hulls.end() ? it->second.get() : nullptr;
 }
 
-const HullTypeManager& HullTypeManager::GetHullTypeManager() {
+HullTypeManager& HullTypeManager::GetHullTypeManager() {
     static HullTypeManager manager;
     return manager;
 }
 
-HullTypeManager::iterator HullTypeManager::begin() const
-{ return m_hulls.begin(); }
+HullTypeManager::iterator HullTypeManager::begin() const {
+    CheckPendingHullTypes();
+    return m_hulls.begin();
+}
 
-HullTypeManager::iterator HullTypeManager::end() const
-{ return m_hulls.end(); }
+HullTypeManager::iterator HullTypeManager::end() const {
+    CheckPendingHullTypes();
+    return m_hulls.end();
+}
 
+std::size_t HullTypeManager::size() const {
+    CheckPendingHullTypes();
+    return m_hulls.size();
+}
 
-////////////////////////////////////////////////
-// ShipDesign
-////////////////////////////////////////////////
-// static(s)
-const int       ShipDesign::INVALID_DESIGN_ID = -1;
-const int       ShipDesign::MAX_ID            = 2000000000;
+unsigned int HullTypeManager::GetCheckSum() const {
+    CheckPendingHullTypes();
+    unsigned int retval{0};
+    for (auto const& name_hull_pair : m_hulls)
+        CheckSums::CheckSumCombine(retval, name_hull_pair);
+    CheckSums::CheckSumCombine(retval, m_hulls.size());
 
-ShipDesign::ShipDesign() :
-    m_id(INVALID_OBJECT_ID),
-    m_name(),
-    m_description(),
-    m_designed_on_turn(UniverseObject::INVALID_OBJECT_AGE),
-    m_designed_by_empire(ALL_EMPIRES),
-    m_hull(),
-    m_parts(),
-    m_is_monster(false),
-    m_icon(),
-    m_3D_model(),
-    m_name_desc_in_stringtable(false),
-    m_is_armed(false),
-    m_has_fighters(false),
-    m_can_bombard(false),
-    m_detection(0.0),
-    m_colony_capacity(0.0),
-    m_troop_capacity(0.0),
-    m_stealth(0.0),
-    m_fuel(0.0),
-    m_shields(0.0),
-    m_structure(0.0),
-    m_speed(0.0),
-    m_research_generation(0.0),
-    m_industry_generation(0.0),
-    m_trade_generation(0.0),
-    m_is_production_location(false),
-    m_producible(false)
-{}
+    DebugLogger() << "HullTypeManager checksum: " << retval;
+    return retval;
+}
 
-ShipDesign::ShipDesign(const std::string& name, const std::string& description,
-                       int designed_on_turn, int designed_by_empire, const std::string& hull,
-                       const std::vector<std::string>& parts,
-                       const std::string& icon, const std::string& model,
-                       bool name_desc_in_stringtable, bool monster) :
-    m_id(INVALID_OBJECT_ID),
+void HullTypeManager::SetHullTypes(Pending::Pending<HullTypeMap>&& pending_hull_types)
+{ m_pending_hull_types = std::move(pending_hull_types); }
+
+void HullTypeManager::CheckPendingHullTypes() const {
+    if (!m_pending_hull_types)
+        return;
+
+    Pending::SwapPending(m_pending_hull_types, m_hulls);
+
+    TraceLogger() << [this]() {
+            std::string retval("Hull Types:");
+            for (const auto& entry : m_hulls) {
+                retval.append("\n\t" + entry.second->Name());
+            }
+            return retval;
+        }();
+
+    if (m_hulls.empty())
+        ErrorLogger() << "HullTypeManager expects at least one hull type.  All ship design construction will fail.";
+}
+
+/////////////////////////////////////
+// ParsedShipDesign     //
+/////////////////////////////////////
+ParsedShipDesign::ParsedShipDesign(
+    const std::string& name, const std::string& description,
+    int designed_on_turn, int designed_by_empire,
+    const std::string& hull,
+    const std::vector<std::string>& parts,
+    const std::string& icon, const std::string& model,
+    bool name_desc_in_stringtable, bool monster,
+    const boost::uuids::uuid& uuid /*= boost::uuids::nil_uuid()*/
+) :
     m_name(name),
     m_description(description),
+    m_uuid(uuid),
     m_designed_on_turn(designed_on_turn),
     m_designed_by_empire(designed_by_empire),
     m_hull(hull),
@@ -568,36 +810,57 @@ ShipDesign::ShipDesign(const std::string& name, const std::string& description,
     m_is_monster(monster),
     m_icon(icon),
     m_3D_model(model),
-    m_name_desc_in_stringtable(name_desc_in_stringtable),
-    m_is_armed(false),
-    m_has_fighters(false),
-    m_can_bombard(false),
-    m_detection(0.0),
-    m_colony_capacity(0.0),
-    m_troop_capacity(0.0),
-    m_stealth(0.0),
-    m_fuel(0.0),
-    m_shields(0.0),
-    m_structure(0.0),
-    m_speed(0.0),
-    m_research_generation(0.0),
-    m_industry_generation(0.0),
-    m_trade_generation(0.0),
-    m_is_production_location(false),
-    m_producible(false)
-{
-    // expand parts list to have empty values if fewer parts are given than hull has slots
-    if (const HullType* hull_type = GetHullType(m_hull)) {
-        if (m_parts.size() < hull_type->NumSlots())
-            m_parts.resize(hull_type->NumSlots(), "");
-    }
+    m_name_desc_in_stringtable(name_desc_in_stringtable)
+{}
 
-    if (!ValidDesign(m_hull, m_parts)) {
-        ErrorLogger() << "constructing an invalid ShipDesign!";
-        ErrorLogger() << Dump();
-    }
+////////////////////////////////////////////////
+// ShipDesign
+////////////////////////////////////////////////
+ShipDesign::ShipDesign() :
+    m_name(),
+    m_description(),
+    m_uuid(boost::uuids::nil_generator()()),
+    m_designed_on_turn(UniverseObject::INVALID_OBJECT_AGE),
+    m_designed_by_empire(ALL_EMPIRES),
+    m_hull(),
+    m_parts(),
+    m_is_monster(false),
+    m_icon(),
+    m_3D_model(),
+    m_name_desc_in_stringtable(false)
+{}
+
+ShipDesign::ShipDesign(const boost::optional<std::invalid_argument>& should_throw,
+                       const std::string& name, const std::string& description,
+                       int designed_on_turn, int designed_by_empire, const std::string& hull,
+                       const std::vector<std::string>& parts,
+                       const std::string& icon, const std::string& model,
+                       bool name_desc_in_stringtable, bool monster,
+                       const boost::uuids::uuid& uuid /*= boost::uuids::nil_uuid()*/) :
+    m_name(name),
+    m_description(description),
+    m_uuid(uuid),
+    m_designed_on_turn(designed_on_turn),
+    m_designed_by_empire(designed_by_empire),
+    m_hull(hull),
+    m_parts(parts),
+    m_is_monster(monster),
+    m_icon(icon),
+    m_3D_model(model),
+    m_name_desc_in_stringtable(name_desc_in_stringtable)
+{
+    // Either force a valid design and log about it or just throw std::invalid_argument
+    ForceValidDesignOrThrow(should_throw, !should_throw);
     BuildStatCaches();
 }
+
+ShipDesign::ShipDesign(const ParsedShipDesign& design) :
+    ShipDesign(boost::none, design.m_name, design.m_description,
+               design.m_designed_on_turn, design.m_designed_by_empire,
+               design.m_hull, design.m_parts,
+               design.m_icon, design.m_3D_model, design.m_name_desc_in_stringtable,
+               design.m_is_monster, design.m_uuid)
+{}
 
 const std::string& ShipDesign::Name(bool stringtable_lookup /* = true */) const {
     if (m_name_desc_in_stringtable && stringtable_lookup)
@@ -612,6 +875,9 @@ void ShipDesign::SetName(const std::string& name) {
     }
 }
 
+void ShipDesign::SetUUID(const boost::uuids::uuid& uuid)
+{ m_uuid = uuid; }
+
 const std::string& ShipDesign::Description(bool stringtable_lookup /* = true */) const {
     if (m_name_desc_in_stringtable && stringtable_lookup)
         return UserString(m_description);
@@ -619,14 +885,11 @@ const std::string& ShipDesign::Description(bool stringtable_lookup /* = true */)
         return m_description;
 }
 
-void ShipDesign::SetDescription(const std::string& description) {
-    if (m_description != "") {
-        m_description = description;
-    }
-}
+void ShipDesign::SetDescription(const std::string& description)
+{ m_description = description; }
 
 bool ShipDesign::ProductionCostTimeLocationInvariant() const {
-    if (CHEAP_AND_FAST_SHIP_PRODUCTION)
+    if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION"))
         return true;
     // as seen in ShipDesign::ProductionCost, the location is passed as the
     // local candidate in the ScriptingContext
@@ -645,7 +908,7 @@ bool ShipDesign::ProductionCostTimeLocationInvariant() const {
 }
 
 float ShipDesign::ProductionCost(int empire_id, int location_id) const {
-    if (CHEAP_AND_FAST_SHIP_PRODUCTION) {
+    if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION")) {
         return 1.0f;
     } else {
         float cost_accumulator = 0.0f;
@@ -662,7 +925,7 @@ float ShipDesign::PerTurnCost(int empire_id, int location_id) const
 { return ProductionCost(empire_id, location_id) / std::max(1, ProductionTime(empire_id, location_id)); }
 
 int ShipDesign::ProductionTime(int empire_id, int location_id) const {
-    if (CHEAP_AND_FAST_SHIP_PRODUCTION) {
+    if (GetGameRules().Get<bool>("RULE_CHEAP_AND_FAST_SHIP_PRODUCTION")) {
         return 1;
     } else {
         int time_accumulator = 1;
@@ -733,7 +996,7 @@ float ShipDesign::AdjustedAttack(float shield) const {
     int fighter_shots = std::min(available_fighters, fighter_launch_capacity);  // how many fighters launched in bout 1
     available_fighters -= fighter_shots;
     int launched_fighters = fighter_shots;
-    int num_bouts = GetUniverse().GetNumCombatRounds();
+    int num_bouts = GetGameRules().Get<int>("RULE_NUM_COMBAT_ROUNDS");
     int remaining_bouts = num_bouts - 2;  // no attack for first round, second round already added
     while (remaining_bouts > 0) {
         int fighters_launched_this_bout = std::min(available_fighters, fighter_launch_capacity);
@@ -792,11 +1055,15 @@ bool ShipDesign::ProductionLocation(int empire_id, int location_id) const {
     }
 
     // must own the production location...
-    std::shared_ptr<const UniverseObject> location = GetUniverseObject(location_id);
+    auto location = GetUniverseObject(location_id);
+    if (!location) {
+        WarnLogger() << "ShipDesign::ProductionLocation unable to get location object with id " << location_id;
+        return false;
+    }
     if (!location->OwnedBy(empire_id))
         return false;
 
-    std::shared_ptr<const Planet> planet = std::dynamic_pointer_cast<const Planet>(location);
+    auto planet = std::dynamic_pointer_cast<const Planet>(location);
     std::shared_ptr<const Ship> ship;
     if (!planet)
         ship = std::dynamic_pointer_cast<const Ship>(location);
@@ -848,67 +1115,162 @@ bool ShipDesign::ProductionLocation(int empire_id, int location_id) const {
 void ShipDesign::SetID(int id)
 { m_id = id; }
 
-bool ShipDesign::ValidDesign(const std::string& hull, const std::vector<std::string>& parts) {
-    // ensure hull type exists and has at least enough slots for passed parts
-    const HullType* hull_type = GetHullTypeManager().GetHullType(hull);
+bool ShipDesign::ValidDesign(const std::string& hull, const std::vector<std::string>& parts_in) {
+    auto parts = parts_in;
+    return !MaybeInvalidDesign(hull, parts, true);
+}
+
+boost::optional<std::pair<std::string, std::vector<std::string>>>
+ShipDesign::MaybeInvalidDesign(const std::string& hull_in,
+                               std::vector<std::string>& parts_in,
+                               bool produce_log)
+{
+    bool is_valid = true;
+
+    auto hull = hull_in;
+    auto parts = parts_in;
+
+    // ensure hull type exists
+    auto hull_type = GetHullTypeManager().GetHullType(hull);
     if (!hull_type) {
-        DebugLogger() << "ShipDesign::ValidDesign: hull not found: " << hull;
-        return false;
+        is_valid = false;
+        if (produce_log)
+            WarnLogger() << "Invalid ShipDesign hull not found: " << hull;
+
+        const auto hull_it = GetHullTypeManager().begin();
+        if (hull_it != GetHullTypeManager().end()) {
+            hull = hull_it->first;
+            hull_type = hull_it->second.get();
+            if (produce_log)
+                WarnLogger() << "Invalid ShipDesign hull falling back to: " << hull;
+        } else {
+            if (produce_log)
+                ErrorLogger() << "Invalid ShipDesign no available hulls ";
+            hull = "";
+            parts.clear();
+            return std::make_pair(hull, parts);
+        }
     }
 
-    unsigned int size = parts.size();
-    if (size > hull_type->NumSlots()) {
-        DebugLogger() << "ShipDesign::ValidDesign: given " << size << " parts for hull with " << hull_type->NumSlots() << " slots";
-        return false;
+    // ensure hull type has at least enough slots for passed parts
+    if (parts.size() > hull_type->NumSlots()) {
+        is_valid = false;
+        if (produce_log)
+            WarnLogger() << "Invalid ShipDesign given " << parts.size() << " parts for hull with "
+                         << hull_type->NumSlots() << " slots.  Truncating last "
+                         << (parts.size() - hull_type->NumSlots()) << " parts.";
     }
 
-    const std::vector<HullType::Slot>& slots = hull_type->Slots();
+    // If parts is smaller than the full hull size pad it and the incoming parts
+    if (parts.size() < hull_type->NumSlots())
+        parts_in.resize(hull_type->NumSlots(), "");
+
+    // Truncate or pad with "" parts.
+    parts.resize(hull_type->NumSlots(), "");
+
+    const auto& slots = hull_type->Slots();
 
     // check hull exclusions against all parts...
-    const std::set<std::string>& hull_exclusions = hull_type->Exclusions();
-    for (const std::string& part_name : parts) {
+    const auto& hull_exclusions = hull_type->Exclusions();
+    for (auto& part_name : parts) {
         if (part_name.empty())
             continue;
-        if (hull_exclusions.find(part_name) != hull_exclusions.end())
-            return false;
+        if (hull_exclusions.count(part_name)) {
+            is_valid = false;
+            if (produce_log)
+                WarnLogger() << "Invalid ShipDesign part \"" << part_name << "\" is excluded by \""
+                             << hull_type->Name() << "\". Removing \"" << part_name <<"\"";
+            part_name.clear();
+        }
     }
 
     // check part exclusions against other parts and hull
-    std::set<std::string> already_seen_component_names;
-    already_seen_component_names.insert(hull);
-    for (const std::string& part_name : parts) {
-        const PartType* part_type = GetPartType(part_name);
-        if (!part_type)
-            continue;
-        for (const std::string& excluded : part_type->Exclusions()) {
-            if (already_seen_component_names.find(excluded) != already_seen_component_names.end())
-                return false;
-        }
-        already_seen_component_names.insert(part_name);
-    }
+    std::unordered_map<std::string, unsigned int> component_name_counts;
+    component_name_counts[hull] = 1;
+    for (auto part_name : parts)
+        component_name_counts[part_name]++;
+    component_name_counts.erase("");
 
-
-    // ensure all passed parts can be mounted in slots of type they were passed for
-    for (unsigned int i = 0; i < size; ++i) {
-        const std::string& part_name = parts[i];
+    for (std::size_t ii = 0; ii < parts.size(); ++ii) {
+        const auto part_name = parts[ii];
+        // Ignore empty slots, which are valid.
         if (part_name.empty())
-            continue;   // if part slot is empty, ignore - doesn't invalidate design
+            continue;
 
-        const PartType* part = GetPartType(part_name);
-        if (!part) {
-            DebugLogger() << "ShipDesign::ValidDesign: part not found: " << part_name;
-            return false;
+        // Parts must exist...
+        const auto part_type = GetPartType(part_name);
+        if (!part_type) {
+            if (produce_log)
+                WarnLogger() << "Invalid ShipDesign part \"" << part_name << "\" not found"
+                             << ". Removing \"" << part_name <<"\"";
+            is_valid = false;
+            continue;
+        }
+
+        for (const auto& excluded : part_type->Exclusions()) {
+            // confict if a different excluded part is present, or if there are
+            // two or more of a part that excludes itself
+            if ((excluded == part_name && component_name_counts[excluded] > 1) ||
+                (excluded != part_name && component_name_counts[excluded] > 0))
+            {
+                is_valid = false;
+                if (produce_log)
+                    WarnLogger() << "Invalid ShipDesign part " << part_name << " conflicts with \""
+                                 << excluded << "\". Removing \"" << part_name <<"\"";
+                continue;
+            }
         }
 
         // verify part can mount in indicated slot
-        ShipSlotType slot_type = slots[i].type;
-        if (!(part->CanMountInSlotType(slot_type))) {
-            DebugLogger() << "ShipDesign::ValidDesign: part " << part_name << " can't be mounted in " << boost::lexical_cast<std::string>(slot_type) << " slot";
-            return false;
+        const ShipSlotType& slot_type = slots[ii].type;
+
+        if (!part_type->CanMountInSlotType(slot_type)) {
+            if (produce_log)
+                DebugLogger() << "Invalid ShipDesign part \"" << part_name << "\" can't be mounted in "
+                              << boost::lexical_cast<std::string>(slot_type) << " slot"
+                              << ". Removing \"" << part_name <<"\"";
+            is_valid = false;
+            continue;
         }
     }
 
-    return true;
+    if (is_valid)
+        return boost::none;
+    else
+        return std::make_pair(hull, parts);
+}
+
+void ShipDesign::ForceValidDesignOrThrow(const boost::optional<std::invalid_argument>& should_throw,
+                                         bool  produce_log)
+{
+    auto force_valid = MaybeInvalidDesign(m_hull, m_parts, produce_log);
+    if (!force_valid)
+        return;
+
+    if (!produce_log && should_throw)
+        throw std::invalid_argument("ShipDesign: Bad hull or parts");
+
+    std::stringstream ss;
+
+    bool no_hull_available = force_valid->first.empty();
+    if (no_hull_available)
+        ss << "ShipDesign has no valid hull and there are no other hulls available." << std::endl;
+
+    ss << "Invalid ShipDesign:" << std::endl;
+    ss << Dump() << std::endl;
+
+    std::tie(m_hull, m_parts) = *force_valid;
+
+    ss << "ShipDesign was made valid as:" << std::endl;
+    ss << Dump() << std::endl;
+
+    if (no_hull_available)
+        ErrorLogger() << ss.str();
+    else
+        WarnLogger() << ss.str();
+
+    if (should_throw)
+        throw std::invalid_argument("ShipDesign: Bad hull or parts");
 }
 
 void ShipDesign::BuildStatCaches() {
@@ -1000,34 +1362,49 @@ void ShipDesign::BuildStatCaches() {
     }
 }
 
-std::string ShipDesign::Dump() const {
-    std::string retval = DumpIndent() + "ShipDesign\n";
-    ++g_indent;
-    retval += DumpIndent() + "name = \"" + m_name + "\"\n";
-    retval += DumpIndent() + "description = \"" + m_description + "\"\n";
-    std::cout << "ShipDesign::Dump: m_name_desc_in_stringtable: " << m_name_desc_in_stringtable << std::endl;
+std::string ShipDesign::Dump(unsigned short ntabs) const {
+    std::string retval = DumpIndent(ntabs) + "ShipDesign\n";
+    retval += DumpIndent(ntabs+1) + "name = \"" + m_name + "\"\n";
+    retval += DumpIndent(ntabs+1) + "uuid = \"" + boost::uuids::to_string(m_uuid) + "\"\n";
+    retval += DumpIndent(ntabs+1) + "description = \"" + m_description + "\"\n";
+
     if (!m_name_desc_in_stringtable)
-        retval += DumpIndent() + "NoStringtableLookup\n";
-    retval += DumpIndent() + "hull = \"" + m_hull + "\"\n";
-    retval += DumpIndent() + "parts = ";
+        retval += DumpIndent(ntabs+1) + "NoStringtableLookup\n";
+    retval += DumpIndent(ntabs+1) + "hull = \"" + m_hull + "\"\n";
+    retval += DumpIndent(ntabs+1) + "parts = ";
     if (m_parts.empty()) {
         retval += "[]\n";
     } else if (m_parts.size() == 1) {
         retval += "\"" + *m_parts.begin() + "\"\n";
     } else {
         retval += "[\n";
-        ++g_indent;
         for (const std::string& part_name : m_parts) {
-            retval += DumpIndent() + "\"" + part_name + "\"\n";
+            retval += DumpIndent(ntabs+2) + "\"" + part_name + "\"\n";
         }
-        --g_indent;
-        retval += DumpIndent() + "]\n";
+        retval += DumpIndent(ntabs+1) + "]\n";
     }
     if (!m_icon.empty())
-        retval += DumpIndent() + "icon = \"" + m_icon + "\"\n";
-    retval += DumpIndent() + "model = \"" + m_3D_model + "\"\n";
-    --g_indent;
-    return retval; 
+        retval += DumpIndent(ntabs+1) + "icon = \"" + m_icon + "\"\n";
+    retval += DumpIndent(ntabs+1) + "model = \"" + m_3D_model + "\"\n";
+    return retval;
+}
+
+unsigned int ShipDesign::GetCheckSum() const {
+    unsigned int retval{0};
+    CheckSums::CheckSumCombine(retval, m_id);
+    CheckSums::CheckSumCombine(retval, m_uuid);
+    CheckSums::CheckSumCombine(retval, m_name);
+    CheckSums::CheckSumCombine(retval, m_description);
+    CheckSums::CheckSumCombine(retval, m_designed_on_turn);
+    CheckSums::CheckSumCombine(retval, m_designed_by_empire);
+    CheckSums::CheckSumCombine(retval, m_hull);
+    CheckSums::CheckSumCombine(retval, m_parts);
+    CheckSums::CheckSumCombine(retval, m_is_monster);
+    CheckSums::CheckSumCombine(retval, m_icon);
+    CheckSums::CheckSumCombine(retval, m_3D_model);
+    CheckSums::CheckSumCombine(retval, m_name_desc_in_stringtable);
+
+    return retval;
 }
 
 bool operator ==(const ShipDesign& first, const ShipDesign& second) {
@@ -1046,7 +1423,6 @@ bool operator ==(const ShipDesign& first, const ShipDesign& second) {
     return first_parts == second_parts;
 }
 
-
 /////////////////////////////////////
 // PredefinedShipDesignManager     //
 /////////////////////////////////////
@@ -1057,89 +1433,20 @@ PredefinedShipDesignManager::PredefinedShipDesignManager() {
     if (s_instance)
         throw std::runtime_error("Attempted to create more than one PredefinedShipDesignManager.");
 
+    // Only update the global pointer on sucessful construction.
     s_instance = this;
-
-    DebugLogger() << "Initializing PredefinedShipDesignManager";
-
-    try {
-        parse::ship_designs(m_ship_designs);
-    } catch (const std::exception& e) {
-        ErrorLogger() << "Failed parsing ship designs: error: " << e.what();
-        throw;
-    }
-
-    try {
-        parse::monster_designs(m_monster_designs);
-    } catch (const std::exception& e) {
-        ErrorLogger() << "Failed parsing monster designs: error: " << e.what();
-        throw;
-    }
-
-    if (GetOptionsDB().Get<bool>("verbose-logging")) {
-        DebugLogger() << "Predefined Ship Designs:";
-        for (const std::map<std::string, ShipDesign*>::value_type& entry : m_ship_designs) {
-            const ShipDesign* d = entry.second;
-            DebugLogger() << " ... " << d->Name();
-        }
-        DebugLogger() << "Monster Ship Designs:";
-        for (const std::map<std::string, ShipDesign*>::value_type& entry : m_monster_designs) {
-            const ShipDesign* d = entry.second;
-            DebugLogger() << " ... " << d->Name();
-        }
-    }
-}
-
-PredefinedShipDesignManager::~PredefinedShipDesignManager() {
-    for (std::map<std::string, ShipDesign*>::value_type& entry : m_ship_designs)
-        delete entry.second;
-}
-
-void PredefinedShipDesignManager::AddShipDesignsToEmpire(Empire* empire,
-                                                         const std::vector<std::string>& design_names) const
-{
-    if (!empire || design_names.empty())
-        return;
-    int empire_id = empire->EmpireID();
-    Universe& universe = GetUniverse();
-
-    for (const std::string& design_name : design_names) {
-        std::map<std::string, ShipDesign*>::const_iterator design_it = m_ship_designs.find(design_name);
-        if (design_it == m_ship_designs.end()) {
-            ErrorLogger() << "Couldn't find predefined ship design with name " << design_name << " to add to empire";
-            continue;
-        }
-
-        // only add producible designs to empires
-        const ShipDesign* d = design_it->second;
-        if (!d->Producible())
-            continue;
-
-        // safety / santiy check
-        if (design_it->first != d->Name(false))
-            ErrorLogger() << "Predefined ship design name in map (" << design_it->first << ") doesn't match name in ShipDesign::m_name (" << d->Name(false) << ")";
-
-        int design_id = this->GetDesignID(design_name);
-
-        if (design_id == ShipDesign::INVALID_DESIGN_ID) {
-            ErrorLogger() << "PredefinedShipDesignManager::AddShipDesignsToEmpire couldn't add a design to an empire";
-            continue;
-        } else {
-            universe.SetEmpireKnowledgeOfShipDesign(design_id, empire_id);
-            empire->AddShipDesign(design_id);
-        }
-    }
 }
 
 namespace {
-    void AddDesignToUniverse(std::map<std::string, int>& design_generic_ids,
-                             ShipDesign* design, bool monster)
+    void AddDesignToUniverse(std::unordered_map<std::string, int>& design_generic_ids,
+                             const std::unique_ptr<ShipDesign>& design, bool monster)
     {
         if (!design)
             return;
 
         Universe& universe = GetUniverse();
         /* check if there already exists this same design in the universe. */
-        for (Universe::ship_design_iterator it = universe.beginShipDesigns();
+        for (auto it = universe.beginShipDesigns();
              it != universe.endShipDesigns(); ++it)
         {
             const ShipDesign* existing_design = it->second;
@@ -1149,56 +1456,39 @@ namespace {
             }
 
             if (DesignsTheSame(*existing_design, *design)) {
-                DebugLogger() << "PredefinedShipDesignManager::AddShipDesignsToUniverse found there already is an exact duplicate of a design to be added, so is not re-adding it";
+                WarnLogger() << "AddShipDesignsToUniverse found an exact duplicate of ship design "
+                             << design->Name() << "to be added, so is not re-adding it";
                 design_generic_ids[design->Name(false)] = existing_design->ID();
                 return; // design already added; don't need to do so again
             }
         }
 
-
-        // generate id for new design
-        int new_design_id = GetNewDesignID();
-        if (new_design_id == ShipDesign::INVALID_DESIGN_ID) {
-            ErrorLogger() << "PredefinedShipDesignManager::AddShipDesignsToUniverse Unable to get new design id";
-            return;
-        }
-
-
         // duplicate design to add to Universe
-        ShipDesign* copy = new ShipDesign(design->Name(false), design->Description(false),
-                                          design->DesignedOnTurn(), design->DesignedByEmpire(),
-                                          design->Hull(), design->Parts(), design->Icon(),
-                                          design->Model(), design->LookupInStringtable(), monster);
-        if (!copy) {
-            ErrorLogger() << "PredefinedShipDesignManager::AddShipDesignsToUniverse() couldn't duplicate the design with name " << design->Name();
-            return;
-        }
+        ShipDesign* copy = new ShipDesign(*design);
 
-        bool success = universe.InsertShipDesignID(copy, new_design_id);
+        bool success = universe.InsertShipDesign(copy);
         if (!success) {
             ErrorLogger() << "Empire::AddShipDesign Unable to add new design to universe";
             delete copy;
             return;
         }
 
+        auto new_design_id = copy->ID();
         design_generic_ids[design->Name(false)] = new_design_id;
+        TraceLogger() << "AddShipDesignsToUniverse added ship design "
+                      << design->Name() << " to universe.";
     };
 }
 
-const std::map<std::string, int>& PredefinedShipDesignManager::AddShipDesignsToUniverse() const {
-    m_design_generic_ids.clear();   // std::map<std::string, int>
+void PredefinedShipDesignManager::AddShipDesignsToUniverse() const {
+    CheckPendingDesignsTypes();
+    m_design_generic_ids.clear();
 
-    for (const std::map<std::string, ShipDesign*>::value_type& entry : m_ship_designs) {
-        ShipDesign* d = entry.second;
-        AddDesignToUniverse(m_design_generic_ids, d, false);
-    }
+    for (const auto& uuid : m_ship_ordering)
+        AddDesignToUniverse(m_design_generic_ids, m_designs.at(uuid), false);
 
-    for (const std::map<std::string, ShipDesign*>::value_type& entry : m_monster_designs) {
-        ShipDesign* d = entry.second;
-        AddDesignToUniverse(m_design_generic_ids, d, true);
-    }
-
-    return m_design_generic_ids;
+    for (const auto& uuid : m_monster_ordering)
+        AddDesignToUniverse(m_design_generic_ids, m_designs.at(uuid), true);
 }
 
 PredefinedShipDesignManager& PredefinedShipDesignManager::GetPredefinedShipDesignManager() {
@@ -1206,37 +1496,235 @@ PredefinedShipDesignManager& PredefinedShipDesignManager::GetPredefinedShipDesig
     return manager;
 }
 
-PredefinedShipDesignManager::iterator PredefinedShipDesignManager::begin() const
-{ return m_ship_designs.begin(); }
 
-PredefinedShipDesignManager::iterator PredefinedShipDesignManager::end() const
-{ return m_ship_designs.end(); }
+std::vector<const ShipDesign*> PredefinedShipDesignManager::GetOrderedShipDesigns() const {
+    CheckPendingDesignsTypes();
+    std::vector<const ShipDesign*> retval;
+    for (const auto& uuid : m_ship_ordering)
+        retval.push_back(m_designs.at(uuid).get());
+    return retval;
+}
 
-PredefinedShipDesignManager::iterator PredefinedShipDesignManager::begin_monsters() const
-{ return m_monster_designs.begin(); }
-
-PredefinedShipDesignManager::iterator PredefinedShipDesignManager::end_monsters() const
-{ return m_monster_designs.end(); }
-
-PredefinedShipDesignManager::generic_iterator PredefinedShipDesignManager::begin_generic() const
-{ return m_design_generic_ids.begin(); }
-
-PredefinedShipDesignManager::generic_iterator PredefinedShipDesignManager::end_generic() const
-{ return m_design_generic_ids.end(); }
+std::vector<const ShipDesign*> PredefinedShipDesignManager::GetOrderedMonsterDesigns() const {
+    CheckPendingDesignsTypes();
+    std::vector<const ShipDesign*> retval;
+    for (const auto& uuid : m_monster_ordering)
+        retval.push_back(m_designs.at(uuid).get());
+    return retval;
+}
 
 int PredefinedShipDesignManager::GetDesignID(const std::string& name) const {
-    std::map<std::string, int>::const_iterator it = m_design_generic_ids.find(name);
+    CheckPendingDesignsTypes();
+    const auto& it = m_design_generic_ids.find(name);
     if (it == m_design_generic_ids.end())
-        return ShipDesign::INVALID_DESIGN_ID;
+        return INVALID_DESIGN_ID;
     return it->second;
 }
 
+unsigned int PredefinedShipDesignManager::GetCheckSum() const {
+    CheckPendingDesignsTypes();
+    unsigned int retval{0};
+
+    auto build_checksum = [&retval, this](const std::vector<boost::uuids::uuid>& ordering){
+        for (auto const& uuid : ordering) {
+            auto it = m_designs.find(uuid);
+            if (it != m_designs.end())
+                CheckSums::CheckSumCombine(retval, std::make_pair(it->second->Name(), *it->second));
+        }
+        CheckSums::CheckSumCombine(retval, ordering.size());
+    };
+
+    build_checksum(m_ship_ordering);
+    build_checksum(m_monster_ordering);
+
+    DebugLogger() << "PredefinedShipDesignManager checksum: " << retval;
+    return retval;
+}
+
+
+void PredefinedShipDesignManager::SetShipDesignTypes(
+    Pending::Pending<ParsedShipDesignsType>&& pending_designs)
+{ m_pending_designs = std::move(pending_designs); }
+
+void PredefinedShipDesignManager::SetMonsterDesignTypes(
+    Pending::Pending<ParsedShipDesignsType>&& pending_designs)
+{ m_pending_monsters = std::move(pending_designs); }
+
+namespace {
+    template <typename Map1, typename Map2, typename Ordering>
+    void FillDesignsOrderingAndNameTables(
+        PredefinedShipDesignManager::ParsedShipDesignsType& parsed_designs,
+        Map1& designs, Ordering& ordering, Map2& name_to_uuid)
+    {
+        // Remove the old designs
+        for (const auto& name_and_uuid: name_to_uuid)
+            designs.erase(name_and_uuid.second);
+        name_to_uuid.clear();
+
+        auto inconsistent_and_map_and_order_ships =
+            LoadShipDesignsAndManifestOrderFromParseResults(parsed_designs);
+
+        ordering = std::get<2>(inconsistent_and_map_and_order_ships);
+
+        auto& disk_designs = std::get<1>(inconsistent_and_map_and_order_ships);
+
+        for (auto& uuid_and_design : disk_designs) {
+            auto& design = uuid_and_design.second.first;
+
+            if (designs.count(design->UUID())) {
+                ErrorLogger() << design->Name() << " ship design does not have a unique UUID for "
+                              << "its type monster or pre-defined. "
+                              << designs[design->UUID()]->Name() << " has the same UUID.";
+                continue;
+            }
+
+            if (name_to_uuid.count(design->Name())) {
+                ErrorLogger() << design->Name() << " ship design does not have a unique name for "
+                              << "its type monster or pre-defined.";
+                continue;
+            }
+
+            name_to_uuid.insert({design->Name(), design->UUID()});
+            designs[design->UUID()] = std::move(design);
+        }
+    }
+
+    template <typename PendingShips, typename Map1, typename Map2, typename Ordering>
+    void CheckPendingAndFillDesignsOrderingAndNameTables(
+        PendingShips& pending, Map1& designs, Ordering& ordering, Map2& name_to_uuid, bool are_monsters)
+    {
+        if (!pending)
+            return;
+
+        auto parsed = Pending::WaitForPending(pending);
+        if (!parsed)
+            return;
+
+        DebugLogger() << "Populating pre-defined ships with "
+                      << std::string(are_monsters ? "monster" : "ship") << " designs.";
+
+        FillDesignsOrderingAndNameTables(
+            *parsed, designs, ordering, name_to_uuid);
+
+        // Make the monsters monstrous
+        if (are_monsters)
+            for (const auto& uuid : ordering)
+                designs[uuid]->SetMonster(true);
+
+        TraceLogger() << [&designs, name_to_uuid]() {
+            std::stringstream ss;
+            ss << "Predefined Ship Designs:";
+            for (const auto& entry : name_to_uuid)
+                ss << " ... " << designs[entry.second]->Name();
+            return ss.str();
+        }();
+    }
+}
+
+void PredefinedShipDesignManager::CheckPendingDesignsTypes() const {
+
+    CheckPendingAndFillDesignsOrderingAndNameTables(
+        m_pending_designs, m_designs, m_ship_ordering, m_name_to_ship_design, false);
+
+    CheckPendingAndFillDesignsOrderingAndNameTables(
+        m_pending_monsters, m_designs, m_monster_ordering, m_name_to_monster_design, true);
+ }
 
 ///////////////////////////////////////////////////////////
 // Free Functions                                        //
 ///////////////////////////////////////////////////////////
-const PredefinedShipDesignManager& GetPredefinedShipDesignManager()
+PredefinedShipDesignManager& GetPredefinedShipDesignManager()
 { return PredefinedShipDesignManager::GetPredefinedShipDesignManager(); }
 
 const ShipDesign* GetPredefinedShipDesign(const std::string& name)
 { return GetUniverse().GetGenericShipDesign(name); }
+
+std::tuple<
+    bool,
+    std::unordered_map<boost::uuids::uuid,
+                       std::pair<std::unique_ptr<ShipDesign>, boost::filesystem::path>,
+                       boost::hash<boost::uuids::uuid>>,
+    std::vector<boost::uuids::uuid>>
+LoadShipDesignsAndManifestOrderFromParseResults(
+    PredefinedShipDesignManager::ParsedShipDesignsType& designs_paths_and_ordering)
+{
+    std::unordered_map<boost::uuids::uuid,
+                       std::pair<std::unique_ptr<ShipDesign>,
+                                 boost::filesystem::path>,
+                       boost::hash<boost::uuids::uuid>>  saved_designs;
+
+    auto& designs_and_paths = designs_paths_and_ordering.first;
+    auto& disk_ordering = designs_paths_and_ordering.second;
+
+    for (auto&& design_and_path : designs_and_paths) {
+        auto design = boost::make_unique<ShipDesign>(*design_and_path.first);
+
+        // If the UUID is nil this is a legacy design that needs a new UUID
+        if(design->UUID() == boost::uuids::uuid{{0}}) {
+            design->SetUUID(boost::uuids::random_generator()());
+            DebugLogger() << "Converted legacy ship design file by adding  UUID " << design->UUID()
+                          << " for name " << design->Name();
+        }
+
+        // Make sure the design is an out of universe object
+        // This should not be needed.
+        if(design->ID() != INVALID_OBJECT_ID) {
+            design->SetID(INVALID_OBJECT_ID);
+            ErrorLogger() << "Loaded ship design has an id implying it is in an ObjectMap for UUID "
+                          << design->UUID() << " for name " << design->Name();
+        }
+
+        if (!saved_designs.count(design->UUID())) {
+            TraceLogger() << "Added saved design UUID " << design->UUID()
+                          << " with name " << design->Name();
+            auto uuid = design->UUID();
+            saved_designs[uuid] = std::make_pair(std::move(design), design_and_path.second);
+        } else {
+            WarnLogger() << "Duplicate ship design UUID " << design->UUID()
+                         << " found for ship design " << design->Name()
+                         << " and " << saved_designs[design->UUID()].first->Name();
+        }
+    }
+
+    // Verify that all UUIDs in ordering exist
+    std::vector<boost::uuids::uuid> ordering;
+    bool ship_manifest_inconsistent = false;
+    for (auto& uuid: disk_ordering) {
+        // Skip the nil UUID.
+        if(uuid == boost::uuids::uuid{{0}})
+            continue;
+
+        if (!saved_designs.count(uuid)) {
+            WarnLogger() << "UUID " << uuid << " is in ship design manifest for "
+                         << "a ship design that does not exist.";
+            ship_manifest_inconsistent = true;
+            continue;
+        }
+        ordering.push_back(uuid);
+    }
+
+    // Verify that every design in saved_designs is in ordering.
+    if (ordering.size() != saved_designs.size()) {
+        // Add any missing designs in alphabetical order to the end of the list
+        std::unordered_set<boost::uuids::uuid, boost::hash<boost::uuids::uuid>>
+            uuids_in_ordering{ordering.begin(), ordering.end()};
+        std::map<std::string, boost::uuids::uuid> missing_uuids_sorted_by_name;
+        for (auto& uuid_to_design_and_filename: saved_designs) {
+            if (uuids_in_ordering.count(uuid_to_design_and_filename.first))
+                continue;
+            ship_manifest_inconsistent = true;
+            missing_uuids_sorted_by_name.insert(
+                std::make_pair(uuid_to_design_and_filename.second.first->Name(),
+                               uuid_to_design_and_filename.first));
+        }
+
+        for (auto& name_and_uuid: missing_uuids_sorted_by_name) {
+            WarnLogger() << "Missing ship design " << name_and_uuid.second
+                         << " called " << name_and_uuid.first
+                         << " added to the manifest.";
+            ordering.push_back(name_and_uuid.second);
+        }
+    }
+
+    return std::make_tuple(ship_manifest_inconsistent, std::move(saved_designs), ordering);
+}

@@ -4,7 +4,6 @@
 #include <vector>
 #include <boost/signals2/signal.hpp>
 #include <GG/GGFwd.h>
-#include <GG/DropDownList.h>
 
 #include "CUIWnd.h"
 #include "../universe/EnumsFwd.h"
@@ -14,6 +13,7 @@ class ModeratorActionsWnd : public CUIWnd {
 public:
     //! \name Structors //!@{
     ModeratorActionsWnd(const std::string& config_name = "");
+    void CompleteConstruction() override;
 
     virtual ~ModeratorActionsWnd();
     //!@}
@@ -46,15 +46,11 @@ private:
 
     void            DoLayout();
 
-    void            NoActionClicked();
-    void            CreateSystemClicked();
-    void            StarTypeSelected(GG::DropDownList::iterator it);
-    void            CreatePlanetClicked();
-    void            PlanetTypeSelected(GG::DropDownList::iterator it);
-    void            PlanetSizeSelected(GG::DropDownList::iterator it);
-    void            DeleteObjectClicked();
-    void            SetOwnerClicked();
-    void            EmpireSelected(GG::DropDownList::iterator it);
+    void            NoAction();
+    void            CreateSystem();
+    void            CreatePlanet();
+    void            DeleteObject();
+    void            SetOwner();
     void            AddStarlane();
     void            RemoveStarlane();
 
@@ -65,17 +61,17 @@ private:
 
     bool                    m_actions_enabled;
     ModeratorActionSetting  m_selected_action;
-    GG::Button*             m_no_action_button;
-    GG::Button*             m_create_system_button;
-    GG::DropDownList*       m_star_type_drop;
-    GG::Button*             m_create_planet_button;
-    GG::DropDownList*       m_planet_type_drop;
-    GG::DropDownList*       m_planet_size_drop;
-    GG::Button*             m_delete_object_button;
-    GG::Button*             m_set_owner_button;
-    GG::DropDownList*       m_empire_drop;
-    GG::Button*             m_add_starlane_button;
-    GG::Button*             m_remove_starlane_button;
+    std::shared_ptr<GG::Button>             m_no_action_button;
+    std::shared_ptr<GG::Button>             m_create_system_button;
+    std::shared_ptr<GG::DropDownList>       m_star_type_drop;
+    std::shared_ptr<GG::Button>             m_create_planet_button;
+    std::shared_ptr<GG::DropDownList>       m_planet_type_drop;
+    std::shared_ptr<GG::DropDownList>       m_planet_size_drop;
+    std::shared_ptr<GG::Button>             m_delete_object_button;
+    std::shared_ptr<GG::Button>             m_set_owner_button;
+    std::shared_ptr<GG::DropDownList>       m_empire_drop;
+    std::shared_ptr<GG::Button>             m_add_starlane_button;
+    std::shared_ptr<GG::Button>             m_remove_starlane_button;
 };
 
 #endif // _ModeratorActionsWnd_h_

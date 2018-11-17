@@ -1,6 +1,8 @@
 #ifndef _ClientNetworking_h_
 #define _ClientNetworking_h_
 
+#include <boost/optional/optional_fwd.hpp>
+
 #include <string>
 #include <vector>
 #include <memory>
@@ -10,10 +12,15 @@
 
 class Message;
 
+namespace Networking {
+    class AuthRoles;
+
+    enum RoleType : size_t;
+}
+
 /** Encapsulates the networking facilities of the client.  The client must
     execute its networking code in a separate thread from its main processing
-    thread, for UI and networking responsiveness, and to process synchronous
-    communication with the server.
+    thread, for UI and networking responsiveness.
 
     Because of this, ClientNetworking operates in two threads: the main
     thread, in which the UI processing operates; the networking thread, which
@@ -25,22 +32,10 @@ class Message;
     applies to unintentional disconnects from the server.  The client must
     periodically check IsConnected().
 
-    The ClientNetworking has three modes of operation.  First, it can discover
+    The ClientNetworking has two modes of operation.  First, it can discover
     FreeOrion servers on the local network; this is a blocking operation with
     a timeout.  Second, it can send an asynchronous message to the server
-    (when connected); this is a non-blocking operation.  Third, it can send a
-    synchronous message to the server (when connected) and return the server's
-    response; this is a blocking operation.
-
-    Note that the SendSynchronousMessage() does not interrupt the sending or
-    receiving of asynchronous messages.  When SendSynchronousMessage() is
-    called and the main thread blocks to wait for the response message,
-    regular messages are still being sent and received.  Some of these regular
-    messages may arrive before the response message, but
-    SendSynchronousMessage() will still return the response message first,
-    even if it is not at the front of the queue at the time.  This implies
-    that some response messages may be handled out of order with respect to
-    regular messages, but these are in fact the desired semantics. */
+    (when connected); this is a non-blocking operation.*/
 class ClientNetworking : public std::enable_shared_from_this<ClientNetworking> {
 public:
     /** The type of list returned by a call to DiscoverLANServers(). */
@@ -61,9 +56,6 @@ public:
     /** Returns true iff the client is connected to send to the server. */
     bool IsTxConnected() const;
 
-    /** Returns true iff there is at least one incoming message available. */
-    bool MessageAvailable() const;
-
     /** Returns the ID of the player on this client. */
     int PlayerID() const;
 
@@ -72,6 +64,12 @@ public:
 
     /** Returns whether the indicated player ID is the host. */
     bool PlayerIsHost(int player_id) const;
+
+    /** Checks if the client has some authorization \a role. */
+    bool HasAuthRole(Networking::RoleType role) const;
+
+    /** Returns address of multiplayer server entered by player. */
+    const std::string& Destination() const;
     //@}
 
     /** \name Mutators */ //@{
@@ -86,23 +84,25 @@ public:
 
     /** Connects to the server on the client's host.  On failure, repeated
         attempts will be made until \a timeout seconds has elapsed. */
-    bool ConnectToLocalHostServer(const std::chrono::milliseconds& timeout =
-                                  std::chrono::seconds(10));
+    bool ConnectToLocalHostServer(
+        const std::chrono::milliseconds& timeout = std::chrono::seconds(10));
+
+    /** Return true if the server can be connected to within \p timeout seconds. */
+    bool PingServer(
+        const std::string& ip_address,
+        const std::chrono::milliseconds& timeout = std::chrono::seconds(10));
+
+    /** Return true if the local server can be connected to within \p timeout seconds. */
+    bool PingLocalHostServer(
+        const std::chrono::milliseconds& timeout = std::chrono::seconds(10));
 
     /** Sends \a message to the server.  This function actually just enqueues
         the message for sending and returns immediately. */
     void SendMessage(const Message& message);
 
-    /** Gets the next incoming message from the server, places it into \a
-        message, and removes it from the incoming message queue.  The function
-        assumes that there is at least one message in the incoming queue.
-        Users must call MessageAvailable() first to make sure this is the
-        case. */
-    void GetMessage(Message& message);
-
-    /** Sends \a message to the server, then blocks until it sees the first
-        synchronous response from the server. */
-    void SendSynchronousMessage(const Message& message, Message& response_message);
+    /** Return the next incoming message from the server if available or boost::none.
+        Remove the message from the incoming message queue. */
+    boost::optional<Message> GetMessage();
 
     /** Disconnects the client from the server. First tries to send any pending transmit messages. */
     void DisconnectFromServer();
@@ -112,6 +112,9 @@ public:
 
     /** Sets Host player ID. */
     void SetHostPlayerID(int host_player_id);
+
+    /** Access to client's authorization roles */
+    Networking::AuthRoles& AuthorizationRoles();
     //@}
 
 private:

@@ -15,6 +15,7 @@ public:
     BuildingsPanel(GG::X w, int columns, int planet_id);
     ~BuildingsPanel();
     //@}
+    void CompleteConstruction() override;
 
     /** \name Accessors */ //@{
     int PlanetID() const { return m_planet_id; }
@@ -54,7 +55,7 @@ private:
 
     /** number of columns in which to display building indicators */
     int m_columns;
-    std::vector<BuildingIndicator*> m_building_indicators;
+    std::vector<std::shared_ptr<BuildingIndicator>> m_building_indicators;
 
     /** map indexed by planet ID indicating whether the BuildingsPanel for each object is expanded (true) or collapsed (false) */
     static std::map<int, bool> s_expanded_map;
@@ -70,6 +71,8 @@ public:
       * progress bar. */
     BuildingIndicator(GG::X w, const std::string& building_type,
                       double turns_completed, double total_turns, double total_cost, double turn_spending);
+
+    void CompleteConstruction() override;
 
     /** \name Mutators */ //@{
     void PreRender() override;
@@ -94,11 +97,11 @@ private:
 
     static ScanlineRenderer s_scanline_shader;
 
-    GG::StaticGraphic*          m_graphic;
-    GG::StaticGraphic*          m_scrap_indicator;  ///< shown to indicate building was ordered scrapped
-    MultiTurnProgressBar*       m_progress_bar;
+    std::shared_ptr<GG::StaticGraphic>          m_graphic = nullptr;
+    std::shared_ptr<GG::StaticGraphic>          m_scrap_indicator = nullptr; ///< shown to indicate building was ordered scrapped
+    std::shared_ptr<MultiTurnProgressBar>       m_progress_bar = nullptr;
     int                         m_building_id;
-    bool                        m_order_issuing_enabled;
+    bool                        m_order_issuing_enabled = true;
 };
 
 #endif
